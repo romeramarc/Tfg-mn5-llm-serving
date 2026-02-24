@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────
+# requirements.txt
+# Efficient Serving & Knowledge Distillation — HPC Framework
+# ─────────────────────────────────────────────────────────────
+# Install:  pip install -r requirements.txt
+
+# Core ML stack
+torch>=2.1
+transformers>=4.38
+datasets>=2.16
+peft>=0.8
+accelerate>=0.25
+
+# Serving
+vllm>=0.4
+
+# HTTP / async client
+httpx>=0.25
+uvicorn>=0.24
+fastapi>=0.108
+
+# Configuration & logging
+pyyaml>=6.0
+python-json-logger>=2.0
+
+# Numerical
+numpy>=1.24

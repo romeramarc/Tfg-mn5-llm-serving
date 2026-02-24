@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────
+# routing.yaml — Routing policy configuration
+# ─────────────────────────────────────────────────────────────
+
+endpoints:
+  teacher:
+    base_url: "http://localhost:8000"
+    model: "Qwen/Qwen2.5-72B-Instruct"
+  student:
+    base_url: "http://localhost:8001"
+    model: "Qwen/Qwen2.5-7B-Instruct"
+
+# Active policy: always_teacher | cascading | confidence
+active_policy: "confidence"
+
+policies:
+  always_teacher:
+    description: "Route every request to the teacher model."
+
+  cascading:
+    description: >
+      Try the student first.  If latency exceeds the budget or
+      the student returns an error, escalate to the teacher.
+    student_timeout_ms: 3000
+    max_student_retries: 0
+
+  confidence:
+    description: >
+      Query the student with logprobs.  If the estimated
+      confidence falls below the threshold, re-query
+      the teacher.
+    logprobs_top_k: 5
+    confidence_threshold: 0.70
+    fallback_method: "entropy"   # entropy | max_logprob
+
+experiment:
+  prompts_file: "configs/prompts.jsonl"
+  num_requests: 200
+  max_tokens: 256
+  temperature: 0.0
+  seed: 42
+  results_dir: "results/routing"

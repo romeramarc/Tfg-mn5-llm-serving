@@ -1,0 +1,20 @@
+{"prompt": "Explain the concept of knowledge distillation in deep learning."}
+{"prompt": "What are the main differences between supervised and unsupervised learning?"}
+{"prompt": "Describe the transformer architecture and its key innovations."}
+{"prompt": "How does gradient descent work and what are its variants?"}
+{"prompt": "What is the role of attention mechanisms in modern NLP models?"}
+{"prompt": "Explain the difference between precision and recall in classification tasks."}
+{"prompt": "What is transfer learning and why is it effective?"}
+{"prompt": "Describe the architecture of a convolutional neural network."}
+{"prompt": "What are the trade-offs between model size and inference latency?"}
+{"prompt": "Explain how LoRA enables parameter-efficient fine-tuning."}
+{"prompt": "What is the purpose of batch normalization in neural networks?"}
+{"prompt": "Describe how beam search works in text generation."}
+{"prompt": "What are the advantages of mixed-precision training?"}
+{"prompt": "Explain the concept of model parallelism versus data parallelism."}
+{"prompt": "What is the vanishing gradient problem and how is it mitigated?"}
+{"prompt": "Describe the key components of a recommendation system."}
+{"prompt": "How does dropout regularization prevent overfitting?"}
+{"prompt": "What are the differences between GPT and BERT architectures?"}
+{"prompt": "Explain the concept of tokenization in large language models."}
+{"prompt": "What is reinforcement learning from human feedback (RLHF)?"}

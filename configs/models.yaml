@@ -1,0 +1,26 @@
+# ─────────────────────────────────────────────────────────────
+# models.yaml — Model registry
+# ─────────────────────────────────────────────────────────────
+# All model identifiers used across serving, distillation,
+# and routing modules are declared here.  No other file may
+# hard-code model names or paths.
+# ─────────────────────────────────────────────────────────────
+
+teacher:
+  name: "Qwen/Qwen2.5-72B-Instruct"
+  revision: "main"
+  dtype: "auto"                 # auto | float16 | bfloat16
+  trust_remote_code: false
+
+student:
+  name: "Qwen/Qwen2.5-7B-Instruct"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+
+# Optional: smaller model for quick local dev / CI
+dev:
+  name: "Qwen/Qwen2.5-0.5B-Instruct"
+  revision: "main"
+  dtype: "float16"
+  trust_remote_code: false

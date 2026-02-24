@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────────
+# eval.yaml — Quality evaluation configuration
+# ─────────────────────────────────────────────────────────────
+# Phase-1: evaluate the teacher model on math-focused benchmarks.
+# ─────────────────────────────────────────────────────────────
+
+common:
+  base_url: "http://localhost:8000"
+  model: "Qwen/Qwen2.5-72B-Instruct"
+  seed: 42
+  results_base_dir: "results/quality"
+  max_tokens: 1024
+  temperature: 0.0          # greedy decoding for deterministic eval
+
+# ── Benchmarks to run (order matters) ──────────────────────
+# Set enabled: false to skip a benchmark.
+benchmarks:
+
+  gsm8k:
+    enabled: true
+    # HuggingFace dataset identifier
+    dataset_name: "openai/gsm8k"
+    dataset_split: "test"
+    subset_size: null          # null = full split; integer = first N
+    # Prompt template: {question} is replaced with the problem text
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+    # Scoring: exact-match on the numeric value after ####
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+
+  math:
+    enabled: true
+    dataset_name: "lighteval/MATH"
+    dataset_split: "test"
+    subset_size: 500           # MATH is large; use subset for dev
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+    # Scoring: normalised exact-match on \\boxed{...} content
+    answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+
+  routerbench:
+    enabled: true
+    # RouterBench must be placed manually under data/routerbench/
+    dataset_path: "data/routerbench/routerbench.jsonl"
+    subset_size: null
+    prompt_template: null      # uses the prompt field from the dataset
+    # Scoring: accuracy if labels exist; otherwise raw output + placeholder
+    has_labels: false           # set to true once labels are confirmed
+
+# ── Request parameters ─────────────────────────────────────
+request:
+  timeout_seconds: 180
+  batch_size: 16               # concurrent requests to the endpoint
+  retry_count: 2
+  retry_delay_seconds: 5
