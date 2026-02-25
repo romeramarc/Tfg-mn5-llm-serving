@@ -141,10 +141,11 @@ unset PYTHONPATH
 
 > **Why?** Loading `python/3.12.1` via Lmod sets `PYTHONPATH` to the system site-packages (`/apps/GPP/PYTHON/3.12.1/INTEL/lib/python3.12/site-packages`). Python searches `PYTHONPATH` *before* the virtual environment, so the system torch 2.3 silently shadows the correct version installed in the venv. `unset PYTHONPATH` makes the venv take full precedence. This is already handled automatically in `env/setup_env.sh` (sourced by all SLURM scripts), but must be done manually in interactive sessions.
 
-Install all dependencies (vLLM 0.15.1 pulls in the required torch 2.9.1 automatically):
+Install all dependencies. The cu121 PyTorch wheel index only provides torch up to 2.5.1; use the cu124 index to get ≥ 2.6.0 (required by vLLM 0.15.1):
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt \
+    --extra-index-url https://download.pytorch.org/whl/cu124
 ```
 
 Verify the installation:
@@ -409,19 +410,26 @@ nm -D ~/.venvs/tfg/lib/python3.12/site-packages/torch/lib/libc10.so | grep Const
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
 ```
 
-Fix — force-reinstall both packages together from the login node (has internet):
+Fix — upgrade torch from the login node (has internet). The cu121 index only goes to 2.5.1; use cu124 to reach ≥ 2.6.0:
 
 ```bash
+cd <path-to-repo>   # must be in the repo, not ~
 source env/setup_env.sh
-pip install --force-reinstall \
-    "vllm==0.15.1" \
-    "torch==2.9.1" \
-    --extra-index-url https://download.pytorch.org/whl/cu121
-# If cu121 is unavailable for this vllm version, try cu124 instead:
-# --extra-index-url https://download.pytorch.org/whl/cu124
+pip install --upgrade "torch>=2.6.0" \
+    --extra-index-url https://download.pytorch.org/whl/cu124
+pip install --upgrade -r requirements.txt \
+    --extra-index-url https://download.pytorch.org/whl/cu124
 ```
 
-Note: `LD_LIBRARY_PATH` and `LD_PRELOAD` do not fix this — the symbol is simply absent from the installed libc10.so binary, not shadowed by a wrong path.
+Verify after upgrading:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.version.cuda)"
+nm -D ~/.venvs/tfg/lib/python3.12/site-packages/torch/lib/libc10.so | grep ConstantString
+python -c "import vllm._C; print('_C OK')"
+```
+
+Note: `LD_LIBRARY_PATH` and `LD_PRELOAD` do not fix this — the symbol is absent from the installed libc10.so binary, not shadowed by a wrong path.
 
 ## 16. License and Attribution
 

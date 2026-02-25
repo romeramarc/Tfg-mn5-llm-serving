@@ -17,10 +17,10 @@
 #       --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Core ML stack
-# torch version must match vllm's exact requirement.
-# vllm 0.15.1 requires torch==2.9.1. If torch is installed from PyPI without
-# a CUDA wheel index the binary may lack GPU support; see README §5.2.
-torch>=2.9.1
+# torch must be installed via the PyTorch CUDA wheel index (see header above).
+# The cu121 index tops out at 2.5.1; use the cu124 index to get >=2.6.0.
+# vllm 0.15.1 requires torch>=2.6.0 (libc10.so ABI incompatibility with 2.5.x).
+torch>=2.6.0
 transformers>=4.38
 datasets>=2.16
 peft>=0.8
