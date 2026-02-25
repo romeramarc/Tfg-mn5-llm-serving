@@ -12,7 +12,6 @@
 #SBATCH --gres=gpu:1                     # 14B fits in 1 H100-80G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --mem=128G
 #SBATCH --time=08:00:00
 #SBATCH --exclusive
 # #SBATCH --qos=acc_bsccs                # uncomment for production QoS

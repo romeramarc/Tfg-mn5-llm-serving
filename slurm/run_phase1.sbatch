@@ -22,7 +22,6 @@
 #SBATCH --gres=gpu:1                     # 1× H100 — 14B fits in single GPU
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --mem=128G
 #SBATCH --time=08:00:00
 #SBATCH --exclusive
 # ─────────────────────────────────────────────────────────────
