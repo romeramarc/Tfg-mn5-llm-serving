@@ -36,6 +36,16 @@ if [[ ! -d "${VENV_PATH}" ]]; then
 fi
 source "${VENV_PATH}/bin/activate"
 
+# ── Torch shared libraries ─────────────────────────────────
+# The Intel/MKL modules inject system paths into LD_LIBRARY_PATH that can
+# shadow the venv's libtorch_cpu.so / libc10.so, causing undefined symbol
+# errors when loading vllm/_C.abi3.so.  Prepend the venv's torch lib dir
+# so the correct libtorch is always found first.
+TORCH_LIB="${VENV_PATH}/lib/python3.12/site-packages/torch/lib"
+if [[ -d "${TORCH_LIB}" ]]; then
+    export LD_LIBRARY_PATH="${TORCH_LIB}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
+
 # ── HuggingFace cache on PROJECTS ──────────────────────────
 # /gpfs/projects/bsc98/tbsc381408/ is the TFG project allocation on MN5.
 # The SCRATCH filesystem (/gpfs/scratch/bsc98/bsc381408/) exists but is
