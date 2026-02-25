@@ -17,6 +17,7 @@ student:
   revision: "main"
   dtype: "auto"
   trust_remote_code: false
+  tensor_parallel_size: 1      # 7B fits in a single A100-80G
 
 # Optional: smaller model for quick local dev / CI
 dev:
@@ -24,3 +25,4 @@ dev:
   revision: "main"
   dtype: "float16"
   trust_remote_code: false
+  tensor_parallel_size: 1      # 0.5B needs only 1 GPU

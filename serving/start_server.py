@@ -38,11 +38,10 @@ def _resolve_model(serving_cfg: dict, models_cfg: dict, role: str) -> dict:
     model_name = role_entry.get("name")
     if model_name:
         serving_cfg.setdefault("vllm", {})["model"] = model_name
-        # Also propagate dtype and trust_remote_code if set
-        if role_entry.get("dtype"):
-            serving_cfg["vllm"]["dtype"] = role_entry["dtype"]
-        if role_entry.get("trust_remote_code"):
-            serving_cfg["vllm"]["trust_remote_code"] = role_entry["trust_remote_code"]
+        # Propagate all vllm-relevant fields from the model registry entry
+        for key in ("dtype", "trust_remote_code", "tensor_parallel_size"):
+            if role_entry.get(key) is not None:
+                serving_cfg["vllm"][key] = role_entry[key]
     return serving_cfg
 
 
