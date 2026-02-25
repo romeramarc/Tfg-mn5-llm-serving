@@ -13,8 +13,13 @@
 set -euo pipefail
 
 # ── Modules ─────────────────────────────────────────────────
+# MN5 requires this exact chain (Lmod enforces prerequisites):
 module purge
-module load python/3.12.1 CUDA/12.1.1
+module load intel
+module load impi
+module load mkl
+module load hdf5
+module load python/3.12.1
 
 # ── Virtual environment ────────────────────────────────────
 VENV_PATH="${VENV_PATH:-${HOME}/.venvs/tfg}"

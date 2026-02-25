@@ -98,12 +98,30 @@ Each module is importable as a Python package and executable as a script via `py
 
 ## 5. Installation on HPC
 
-### 5.1 Create a Virtual Environment
+### 5.1 MN5 Module Prerequisites
+
+MareNostrum 5 uses Lmod with a strict prerequisite chain. Load these modules in order before any Python or SLURM operation:
 
 ```bash
 module purge
-module load python/3.12.1 CUDA/12.1.1
+module load intel
+module load impi
+module load mkl
+module load hdf5
+module load python/3.12.1
+```
 
+Sanity check (all three should return sensible output):
+
+```bash
+module list
+which python
+python --version
+```
+
+### 5.2 Create a Virtual Environment
+
+```bash
 python -m venv "${HOME}/.venvs/tfg"
 source "${HOME}/.venvs/tfg/bin/activate"
 pip install --upgrade pip
@@ -112,7 +130,7 @@ pip install -r requirements.txt
 
 > **Version note:** The offline throughput benchmark (`bench/run_throughput.py`) invokes `vllm bench throughput` as a subprocess. This CLI sub-command requires vLLM ≥ 0.6. Verify the installed version with `vllm --version` after installation.
 
-### 5.2 Model Access
+### 5.3 Model Access
 
 Models are downloaded from the HuggingFace Hub. MareNostrum 5 compute nodes do not have outbound internet access, so model weights must be pre-downloaded on a login or transfer node. Set the `HF_HOME` environment variable to a directory on the high-capacity SCRATCH filesystem (`HF_HOME` supersedes the deprecated `TRANSFORMERS_CACHE`):
 
