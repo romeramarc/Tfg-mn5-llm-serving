@@ -39,7 +39,9 @@ source "${VENV_PATH}/bin/activate"
 # ── HuggingFace cache on SCRATCH ───────────────────────────
 # SCRATCH is a high-capacity parallel filesystem available on MN5.
 # Storing model weights and datasets here avoids filling the HOME quota.
-HF_SCRATCH="${SCRATCH:-/gpfs/scratch}/${USER}/hf_cache"
+# MN5 does not export $SCRATCH automatically; derive the path from the
+# known structure /gpfs/scratch/<group>/<user>.  Group bsc98 is used here.
+HF_SCRATCH="/gpfs/scratch/bsc98/${USER}/hf_cache"
 export HF_HOME="${HF_SCRATCH}"
 export TRANSFORMERS_CACHE="${HF_SCRATCH}/transformers"
 export HF_DATASETS_CACHE="${HF_SCRATCH}/datasets"

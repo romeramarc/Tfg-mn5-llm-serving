@@ -162,7 +162,8 @@ python -c "import vllm; print('vLLM', vllm.__version__)"
 Models are downloaded from the HuggingFace Hub. MareNostrum 5 compute nodes do not have outbound internet access, so model weights must be pre-downloaded on a login or transfer node. Set the `HF_HOME` environment variable to a directory on the high-capacity SCRATCH filesystem (`HF_HOME` supersedes the deprecated `TRANSFORMERS_CACHE`):
 
 ```bash
-export HF_HOME="/gpfs/scratch/your_group/hf_cache"
+export HF_HOME="/gpfs/scratch/bsc98/${USER}/hf_cache"
+mkdir -p "${HF_HOME}"
 huggingface-cli download Qwen/Qwen2.5-72B-Instruct
 ```
 
