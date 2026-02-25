@@ -18,7 +18,7 @@ set -euo pipefail
 
 # ── Environment ─────────────────────────────────────────────
 module purge
-module load python/3.11 cuda/12.1 nccl/2.18
+module load python/3.12.1 CUDA/12.1.1
 
 # Activate project virtual-env (created during installation)
 source "${HOME}/.venvs/tfg/bin/activate"

@@ -14,7 +14,7 @@ set -euo pipefail
 
 # ── Modules ─────────────────────────────────────────────────
 module purge
-module load python/3.11 cuda/12.1 nccl/2.18
+module load python/3.12.1 CUDA/12.1.1
 
 # ── Virtual environment ────────────────────────────────────
 VENV_PATH="${VENV_PATH:-${HOME}/.venvs/tfg}"

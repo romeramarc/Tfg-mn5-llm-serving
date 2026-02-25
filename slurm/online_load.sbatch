@@ -16,7 +16,7 @@
 set -euo pipefail
 
 module purge
-module load python/3.11 cuda/12.1
+module load python/3.12.1 CUDA/12.1.1
 
 source "${HOME}/.venvs/tfg/bin/activate"
 mkdir -p logs

@@ -102,7 +102,7 @@ Each module is importable as a Python package and executable as a script via `py
 
 ```bash
 module purge
-module load python/3.11 cuda/12.1 nccl/2.18
+module load python/3.12.1 CUDA/12.1.1
 
 python -m venv "${HOME}/.venvs/tfg"
 source "${HOME}/.venvs/tfg/bin/activate"
