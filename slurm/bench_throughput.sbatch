@@ -12,6 +12,7 @@
 # For a self-contained run, use slurm/run_phase1.sbatch instead.
 #SBATCH --partition=acc
 #SBATCH --account=bsc98
+#SBATCH --qos=acc_bsccs
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G

@@ -8,6 +8,7 @@
 #SBATCH --error=logs/vllm-teacher-%j.err
 #SBATCH --partition=acc                  # GPU accelerated partition
 #SBATCH --account=bsc98
+#SBATCH --qos=acc_bsccs
 #SBATCH --gres=gpu:1                     # 14B fits in 1 H100-80G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20

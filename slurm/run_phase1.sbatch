@@ -18,6 +18,7 @@
 #SBATCH --error=logs/phase1-%j.err
 #SBATCH --partition=acc
 #SBATCH --account=bsc98
+#SBATCH --qos=acc_bsccs
 #SBATCH --gres=gpu:1                     # 1× H100 — 14B fits in single GPU
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
@@ -25,9 +26,9 @@
 #SBATCH --time=08:00:00
 #SBATCH --exclusive
 # ─────────────────────────────────────────────────────────────
-# QoS note:
-#   acc_debug → max 30 min, 1 GPU (dev/testing only)
-#   For 4 GPUs and 8 h use the allocation's production QoS.
+# QoS options for this account (bsc98):
+#   acc_bsccs → production GPU QoS (used here)
+#   acc_debug+ → short debug queue (≤2h, for quick tests)
 #   Uncomment and set the appropriate value:
 # #SBATCH --qos=acc_bsccs
 # ─────────────────────────────────────────────────────────────
