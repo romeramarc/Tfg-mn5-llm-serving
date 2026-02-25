@@ -162,10 +162,13 @@ python -c "import vllm; print('vLLM', vllm.__version__)"
 Models are downloaded from the HuggingFace Hub. MareNostrum 5 compute nodes do not have outbound internet access, so model weights must be pre-downloaded on a login or transfer node. Set the `HF_HOME` environment variable to a directory on the high-capacity SCRATCH filesystem (`HF_HOME` supersedes the deprecated `TRANSFORMERS_CACHE`):
 
 ```bash
-export HF_HOME="/gpfs/scratch/bsc98/${USER}/hf_cache"
+export HF_HOME="/gpfs/projects/bsc98/tbsc381408/hf_cache"
 mkdir -p "${HF_HOME}"
+huggingface-cli login
 huggingface-cli download Qwen/Qwen2.5-72B-Instruct
 ```
+
+> **Path note:** MN5 SCRATCH (`/gpfs/scratch/bsc98/bsc381408/`) is not writable for this account. The TFG project allocation at `/gpfs/projects/bsc98/tbsc381408/` is the correct writable location for large files.
 
 > **Storage note:** Qwen2.5-72B-Instruct requires approximately 145 GB of disk space for full-precision weights. For an initial setup validation, download the dev model first (`Qwen/Qwen2.5-0.5B-Instruct`, ~1 GB) and serve it with `--role dev` before committing to the full teacher download.
 

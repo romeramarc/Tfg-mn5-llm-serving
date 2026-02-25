@@ -36,12 +36,12 @@ if [[ ! -d "${VENV_PATH}" ]]; then
 fi
 source "${VENV_PATH}/bin/activate"
 
-# ── HuggingFace cache on SCRATCH ───────────────────────────
-# SCRATCH is a high-capacity parallel filesystem available on MN5.
-# Storing model weights and datasets here avoids filling the HOME quota.
-# MN5 does not export $SCRATCH automatically; derive the path from the
-# known structure /gpfs/scratch/<group>/<user>.  Group bsc98 is used here.
-HF_SCRATCH="/gpfs/scratch/bsc98/${USER}/hf_cache"
+# ── HuggingFace cache on PROJECTS ──────────────────────────
+# /gpfs/projects/bsc98/tbsc381408/ is the TFG project allocation on MN5.
+# The SCRATCH filesystem (/gpfs/scratch/bsc98/bsc381408/) exists but is
+# not writable by this user; PROJECTS is the correct writable location.
+# Storing model weights here avoids filling the HOME quota (limited).
+HF_SCRATCH="/gpfs/projects/bsc98/tbsc381408/hf_cache"
 export HF_HOME="${HF_SCRATCH}"
 export TRANSFORMERS_CACHE="${HF_SCRATCH}/transformers"
 export HF_DATASETS_CACHE="${HF_SCRATCH}/datasets"
