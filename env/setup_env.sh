@@ -2,15 +2,19 @@
 # ─────────────────────────────────────────────────────────────
 # env/setup_env.sh — Environment bootstrap for MareNostrum 5
 # ─────────────────────────────────────────────────────────────
-# Source this file at the top of every SLURM script:
+# Source this file at the top of every SLURM script AND in interactive sessions:
 #
 #     source env/setup_env.sh
 #
 # It loads the required modules, activates the virtual environment,
 # and sets HuggingFace cache paths to SCRATCH so that large model
 # weights are stored on the high-capacity parallel filesystem.
+#
+# NOTE: set -euo pipefail is intentionally NOT used here because this file
+# is sourced into interactive shells. Using set -e in a sourced script
+# propagates the flag to the parent shell and any subsequent command failure
+# would terminate the SSH session.
 # ─────────────────────────────────────────────────────────────
-set -euo pipefail
 
 # ── Modules ─────────────────────────────────────────────────
 # MN5 requires this exact chain (Lmod enforces prerequisites):
@@ -32,7 +36,7 @@ VENV_PATH="${VENV_PATH:-${HOME}/.venvs/tfg}"
 if [[ ! -d "${VENV_PATH}" ]]; then
     echo "ERROR: Virtual environment not found at ${VENV_PATH}"
     echo "Create it with:  python -m venv ${VENV_PATH} && pip install -r requirements.txt"
-    exit 1
+    return 1 2>/dev/null || exit 1   # return for sourced, exit for executed
 fi
 source "${VENV_PATH}/bin/activate"
 
