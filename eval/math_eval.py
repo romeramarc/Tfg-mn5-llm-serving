@@ -41,17 +41,41 @@ logger = get_logger(__name__)
 
 # ── Dataset loading ─────────────────────────────────────────
 
+# All subject configs in hendrycks/competition_math
+_MATH_SUBJECTS = [
+    "algebra",
+    "counting_and_probability",
+    "geometry",
+    "intermediate_algebra",
+    "number_theory",
+    "prealgebra",
+    "precalculus",
+]
+
+
 def load_math(
-    dataset_name: str = "lighteval/MATH",
+    dataset_name: str = "hendrycks/competition_math",
     split: str = "test",
     subset_size: Optional[int] = None,
 ) -> List[Dict[str, str]]:
-    """Load MATH from HuggingFace and return structured examples."""
+    """Load MATH from HuggingFace (all subjects) and return structured examples.
+
+    ``hendrycks/competition_math`` is split by subject rather than having a
+    single ``all`` config.  This function loads each subject and concatenates.
+    """
     from datasets import load_dataset
 
-    ds = load_dataset(dataset_name, "all", split=split)
+    all_rows: list[Any] = []
+    for subject in _MATH_SUBJECTS:
+        subject_ds = load_dataset(dataset_name, name=subject, split=split)
+        all_rows.extend(subject_ds)
+        logger.info(
+            "Loaded MATH subject",
+            extra={"subject": subject, "rows": len(subject_ds)},
+        )
+
     examples: list[dict] = []
-    for row in ds:
+    for row in all_rows:
         # The reference answer is in the 'solution' field;
         # extract the boxed answer for scoring.
         solution = row.get("solution", "")

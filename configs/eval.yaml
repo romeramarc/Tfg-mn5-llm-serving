@@ -35,9 +35,9 @@ benchmarks:
 
   math:
     enabled: true
-    dataset_name: "lighteval/MATH"
+    dataset_name: "hendrycks/competition_math"
     dataset_split: "test"
-    subset_size: 500           # MATH is large; use subset for dev
+    subset_size: 500           # full test set is 5000; 500 for dev
     prompt_template: |
       Solve the following mathematics problem.
       Put your final answer inside \\boxed{{}}.
