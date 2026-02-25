@@ -167,12 +167,14 @@ Models are downloaded from the HuggingFace Hub. MareNostrum 5 compute nodes do n
 export HF_HOME="/gpfs/projects/bsc98/tbsc381408/hf_cache"
 mkdir -p "${HF_HOME}"
 huggingface-cli login
-huggingface-cli download Qwen/Qwen2.5-72B-Instruct
+hf download Qwen/Qwen2.5-14B-Instruct
+hf download Qwen/Qwen2.5-7B-Instruct
+hf download Qwen/Qwen2.5-1.5B-Instruct
 ```
 
 > **Path note:** MN5 SCRATCH (`/gpfs/scratch/bsc98/bsc381408/`) is not writable for this account. The TFG project allocation at `/gpfs/projects/bsc98/tbsc381408/` is the correct writable location for large files.
 
-> **Storage note:** Qwen2.5-72B-Instruct requires approximately 145 GB of disk space for full-precision weights. For an initial setup validation, download the dev model first (`Qwen/Qwen2.5-0.5B-Instruct`, ~1 GB) and serve it with `--role dev` before committing to the full teacher download.
+> **Storage note:** Qwen2.5-14B-Instruct requires approximately 28 GB of disk space. For an initial setup validation, download the dev model first (`Qwen/Qwen2.5-0.5B-Instruct`, ~1 GB) and serve it with `--role dev` before committing to larger downloads.
 
 ## 6. MN5 Quickstart (Phase-1)
 
@@ -184,7 +186,7 @@ Phase-1 covers teacher serving, efficiency benchmarks, and quality evaluation.  
 sbatch slurm/server_teacher.sbatch
 ```
 
-This launches a vLLM instance serving `Qwen/Qwen2.5-72B-Instruct` on 4 GPUs with tensor parallelism.  The server writes logs to `logs/vllm-teacher-<JOBID>.out`.
+This launches a vLLM instance serving `Qwen/Qwen2.5-14B-Instruct` on 1 GPU (H100-80G).  The server writes logs to `logs/vllm-teacher-<JOBID>.out`.
 
 > **GPU memory:** Serving Qwen2.5-14B-Instruct under bf16 precision with `gpu_memory_utilization: 0.90` requires 1× 80 GB GPU (H100). The 7B and 1.5B student models also fit in a single GPU.
 
