@@ -2,17 +2,23 @@
 # requirements.txt
 # Efficient Serving & Knowledge Distillation — HPC Framework
 # ─────────────────────────────────────────────────────────────
-# Install:  pip install -r requirements.txt
+# NOTE: torch must be installed FIRST with the CUDA wheel index:
+#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+# Then install the rest:
+#   pip install -r requirements.txt
 
 # Core ML stack
-torch>=2.1
+# torch is intentionally omitted here — install it via the CUDA wheel index
+# (see note above) before running this file. The lower bound is listed for
+# documentation purposes: vllm>=0.6 requires torch>=2.4.
+torch>=2.4
 transformers>=4.38
 datasets>=2.16
 peft>=0.8
 accelerate>=0.25
 
 # Serving
-vllm>=0.4
+vllm>=0.6
 
 # HTTP / async client
 httpx>=0.25

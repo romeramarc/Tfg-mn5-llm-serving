@@ -125,8 +125,28 @@ python --version
 python -m venv "${HOME}/.venvs/tfg"
 source "${HOME}/.venvs/tfg/bin/activate"
 pip install --upgrade pip
+```
+
+**Install PyTorch first** using the CUDA 12.1 wheel index (the default PyPI index does not ship CUDA-enabled wheels):
+
+```bash
+pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+```
+
+Verify before continuing:
+
+```bash
+python -c "import torch; print(torch.__version__)"          # expect 2.5.1+cu121
+python -c "from torch.library import infer_schema; print('OK')"
+```
+
+Then install the remaining dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
+
+> **Why two steps?** vLLM ≥ 0.6 requires `torch ≥ 2.4` for `torch.library.infer_schema`. MN5's system Python ships torch 2.3, which `pip install -r requirements.txt` would silently reuse if torch is not already present in the venv. Installing torch explicitly with `--index-url` first ensures the correct version is in the venv before vLLM resolves its dependency.
 
 > **Version note:** The offline throughput benchmark (`bench/run_throughput.py`) invokes `vllm bench throughput` as a subprocess. This CLI sub-command requires vLLM ≥ 0.6. Verify the installed version with `vllm --version` after installation.
 
