@@ -9,13 +9,15 @@ common:
   results_base_dir: "results"
 
 throughput:
-  # Offline throughput benchmark via `vllm bench serve`
-  dataset_name: "sharegpt"            # sharegpt | sonnet | random
-  dataset_path: "data/ShareGPT_V3_unfiltered_cleaned_split.json"
+  # Offline throughput benchmark via `vllm bench serve`.
+  # Using 'random' dataset avoids needing to download ShareGPT on login node.
+  # Fixed input/output lengths ensure reproducible, comparable runs.
+  dataset_name: "random"              # sharegpt | sonnet | random
+  dataset_path: null                  # not used for random dataset
   num_prompts: 1000
   request_rate: "inf"                 # inf = closed-loop (max throughput)
-  input_len: null                     # only for random dataset
-  output_len: null                    # only for random dataset
+  input_len: 512                      # prompt length in tokens
+  output_len: 256                     # generation length in tokens
   max_concurrency: null               # null = unlimited
 
 online:

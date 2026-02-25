@@ -6,11 +6,15 @@
 #SBATCH --job-name=bench-online
 #SBATCH --output=logs/bench-online-%j.out
 #SBATCH --error=logs/bench-online-%j.err
+# NOTE: This script is designed for use with `srun --overlap` inside the
+# server job, or submitted with --nodelist=<server-node> so that
+# localhost:8000 resolves to the running vLLM server.
+# For a self-contained run, use slurm/run_phase1.sbatch instead.
 #SBATCH --partition=acc
-#SBATCH --gres=gpu:1
+#SBATCH --account=bsc98
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --time=04:00:00
 
 set -euo pipefail
