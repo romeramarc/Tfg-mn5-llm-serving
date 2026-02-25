@@ -7,17 +7,25 @@
 # ─────────────────────────────────────────────────────────────
 
 teacher:
-  name: "Qwen/Qwen2.5-72B-Instruct"
+  name: "Qwen/Qwen2.5-14B-Instruct"
   revision: "main"
   dtype: "auto"                 # auto | float16 | bfloat16
   trust_remote_code: false
+  tensor_parallel_size: 1      # 14B fits in a single H100-80G
 
-student:
+student_mid:
   name: "Qwen/Qwen2.5-7B-Instruct"
   revision: "main"
   dtype: "auto"
   trust_remote_code: false
-  tensor_parallel_size: 1      # 7B fits in a single A100-80G
+  tensor_parallel_size: 1
+
+student_small:
+  name: "Qwen/Qwen2.5-1.5B-Instruct"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
 
 # Optional: smaller model for quick local dev / CI
 dev:
@@ -25,4 +33,4 @@ dev:
   revision: "main"
   dtype: "float16"
   trust_remote_code: false
-  tensor_parallel_size: 1      # 0.5B needs only 1 GPU
+  tensor_parallel_size: 1

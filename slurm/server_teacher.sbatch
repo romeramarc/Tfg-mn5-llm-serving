@@ -8,10 +8,10 @@
 #SBATCH --error=logs/vllm-teacher-%j.err
 #SBATCH --partition=acc                  # GPU accelerated partition
 #SBATCH --account=bsc98
-#SBATCH --gres=gpu:4                     # request 4 GPUs (tensor-parallel)
+#SBATCH --gres=gpu:1                     # 14B fits in 1 H100-80G
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=80               # 4 GPUs × 20 CPUs/GPU on MN5
-#SBATCH --mem=512G
+#SBATCH --cpus-per-task=20
+#SBATCH --mem=128G
 #SBATCH --time=08:00:00
 #SBATCH --exclusive
 # #SBATCH --qos=acc_bsccs                # uncomment for production QoS

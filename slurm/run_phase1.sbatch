@@ -18,10 +18,10 @@
 #SBATCH --error=logs/phase1-%j.err
 #SBATCH --partition=acc
 #SBATCH --account=bsc98
-#SBATCH --gres=gpu:4                     # 4× H100 for tensor_parallel_size=4
+#SBATCH --gres=gpu:1                     # 1× H100 — 14B fits in single GPU
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=80               # 4 GPUs × 20 CPUs/GPU on MN5
-#SBATCH --mem=512G
+#SBATCH --cpus-per-task=20
+#SBATCH --mem=128G
 #SBATCH --time=08:00:00
 #SBATCH --exclusive
 # ─────────────────────────────────────────────────────────────

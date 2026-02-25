@@ -4,7 +4,7 @@
 
 common:
   base_url: "http://localhost:8000"
-  model: "Qwen/Qwen2.5-72B-Instruct"
+  model: "Qwen/Qwen2.5-14B-Instruct"
   seed: 42
   results_base_dir: "results"
 

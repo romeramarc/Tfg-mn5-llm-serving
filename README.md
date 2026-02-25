@@ -186,7 +186,7 @@ sbatch slurm/server_teacher.sbatch
 
 This launches a vLLM instance serving `Qwen/Qwen2.5-72B-Instruct` on 4 GPUs with tensor parallelism.  The server writes logs to `logs/vllm-teacher-<JOBID>.out`.
 
-> **GPU memory:** Serving Qwen2.5-72B-Instruct under bf16 precision with `gpu_memory_utilization: 0.90` typically requires 4× 80 GB GPUs (e.g. A100-80G or H100); exact requirements depend on `max_model_len`, KV cache allocation, and the chosen `dtype`. If fewer GPUs or smaller VRAM is available, use a smaller model (e.g. `Qwen/Qwen2.5-7B-Instruct` with 1 GPU) by editing `configs/models.yaml` and adjusting `--gres` and `tensor_parallel_size` in the SLURM script and `configs/serving.yaml` respectively.
+> **GPU memory:** Serving Qwen2.5-14B-Instruct under bf16 precision with `gpu_memory_utilization: 0.90` requires 1× 80 GB GPU (H100). The 7B and 1.5B student models also fit in a single GPU.
 
 ### Step 2 — Run benchmarks on the server node
 

@@ -9,8 +9,8 @@ server:
 # Model is resolved from configs/models.yaml → teacher.name
 # Override here only for one-off experiments.
 vllm:
-  model: "Qwen/Qwen2.5-72B-Instruct"
-  tensor_parallel_size: 4
+  model: "Qwen/Qwen2.5-14B-Instruct"
+  tensor_parallel_size: 1
   max_model_len: 4096
   gpu_memory_utilization: 0.90
   dtype: "auto"
