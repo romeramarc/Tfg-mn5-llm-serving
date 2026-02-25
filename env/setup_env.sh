@@ -37,13 +37,34 @@ fi
 source "${VENV_PATH}/bin/activate"
 
 # ── Torch shared libraries ─────────────────────────────────
-# The Intel/MKL modules inject system paths into LD_LIBRARY_PATH that can
-# shadow the venv's libtorch_cpu.so / libc10.so, causing undefined symbol
-# errors when loading vllm/_C.abi3.so.  Prepend the venv's torch lib dir
-# so the correct libtorch is always found first.
+# MN5 compute nodes load mkl/2025.2 which injects system paths into
+# LD_LIBRARY_PATH that can contain a conflicting libc10.so / libtorch build.
+# Additionally, vllm/_C.abi3.so may carry an embedded RPATH from its build
+# environment that overrides LD_LIBRARY_PATH entirely.
+#
+# Two-pronged fix:
+#   1. Prepend the venv's torch/lib to LD_LIBRARY_PATH (handles the common
+#      shadowing case where no RPATH is embedded).
+#   2. LD_PRELOAD the critical torch .so files explicitly — LD_PRELOAD is
+#      resolved before DT_RPATH/DT_RUNPATH entries in any .so, so this
+#      ensures the venv's libc10 / libtorch are found regardless of how the
+#      wheel was built.
 TORCH_LIB="${VENV_PATH}/lib/python3.12/site-packages/torch/lib"
 if [[ -d "${TORCH_LIB}" ]]; then
+    # 1: LD_LIBRARY_PATH prepend
     export LD_LIBRARY_PATH="${TORCH_LIB}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
+    # 2: LD_PRELOAD — only set the libs that actually exist in the venv
+    _PRELOAD_LIBS=""
+    for _lib in libc10.so libtorch.so libtorch_cpu.so; do
+        if [[ -f "${TORCH_LIB}/${_lib}" ]]; then
+            _PRELOAD_LIBS="${TORCH_LIB}/${_lib}${_PRELOAD_LIBS:+ ${_PRELOAD_LIBS}}"
+        fi
+    done
+    if [[ -n "${_PRELOAD_LIBS}" ]]; then
+        export LD_PRELOAD="${_PRELOAD_LIBS}${LD_PRELOAD:+ ${LD_PRELOAD}}"
+    fi
+    unset _PRELOAD_LIBS _lib
 fi
 
 # ── HuggingFace cache on PROJECTS ──────────────────────────

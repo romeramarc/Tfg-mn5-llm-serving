@@ -402,6 +402,27 @@ All extensions must follow the rules codified in `RULES.md`.
 
 **vLLM installation issues.** vLLM requires a recent GCC toolchain and CUDA-compatible system libraries. If `pip install vllm` fails, build from source following the upstream instructions and ensure the cluster's system modules expose the correct `libcudart` and `libnccl`.
 
+**`vllm/_C.abi3.so: undefined symbol` on compute nodes.** This occurs when the prebuilt vLLM wheel on PyPI was compiled against a different version of torch/libc10 than what `pip` actually installed (e.g., a CUDA 12.1 torch wheel was installed but vLLM's binary was linked against a CUDA 12.4 torch that has a different `libc10.so` ABI). Symptoms: `import vllm` appears to succeed, but `import vllm._C` raises `undefined symbol: _ZN3c106ivalue14ConstantString...`. Confirm with:
+
+```bash
+nm -D ~/.venvs/tfg/lib/python3.12/site-packages/torch/lib/libc10.so | grep ConstantString
+python -c "import torch; print(torch.__version__, torch.version.cuda)"
+```
+
+Fix — force-reinstall both packages together from the login node (has internet):
+
+```bash
+source env/setup_env.sh
+pip install --force-reinstall \
+    "vllm==0.15.1" \
+    "torch==2.9.1" \
+    --extra-index-url https://download.pytorch.org/whl/cu121
+# If cu121 is unavailable for this vllm version, try cu124 instead:
+# --extra-index-url https://download.pytorch.org/whl/cu124
+```
+
+Note: `LD_LIBRARY_PATH` and `LD_PRELOAD` do not fix this — the symbol is simply absent from the installed libc10.so binary, not shadowed by a wrong path.
+
 ## 16. License and Attribution
 
 This repository supports a Bachelor Thesis project. Please cite the associated thesis document when using results produced by this framework.

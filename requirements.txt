@@ -2,10 +2,19 @@
 # requirements.txt
 # Efficient Serving & Knowledge Distillation — HPC Framework
 # ─────────────────────────────────────────────────────────────
-# NOTE: torch must be installed FIRST with the CUDA wheel index:
-#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-# Then install the rest:
-#   pip install -r requirements.txt
+# IMPORTANT: Install with the PyTorch CUDA wheel index so that torch>=2.9.1
+# resolves to a GPU-enabled build (PyPI only ships CPU wheels for torch):
+#
+#   pip install -r requirements.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cu121
+#
+# To force-upgrade an existing environment (e.g. if torch 2.5.x was
+# previously installed by a stale manual command):
+#
+#   pip install --upgrade "torch>=2.9.1" \
+#       --extra-index-url https://download.pytorch.org/whl/cu121
+#   pip install --upgrade -r requirements.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Core ML stack
 # torch version must match vllm's exact requirement.
