@@ -22,6 +22,7 @@ module purge
 module load intel
 module load impi
 module load mkl
+module load sqlite3   # required on compute nodes: _sqlite3.so needs sqlite3_deserialize (>=3.23)
 module load hdf5
 module load python/3.12.1
 
