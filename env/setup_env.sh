@@ -83,6 +83,11 @@ export TRANSFORMERS_CACHE="${HF_SCRATCH}/transformers"
 export HF_DATASETS_CACHE="${HF_SCRATCH}/datasets"
 mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HF_DATASETS_CACHE}"
 
+# Compute nodes have no outbound internet — tell HF libraries to use the
+# local cache only and skip all network checks (avoids 5x retry delays).
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+
 # ── Miscellaneous ──────────────────────────────────────────
 # Ensure logs/ and results/ directories exist
 mkdir -p logs results
