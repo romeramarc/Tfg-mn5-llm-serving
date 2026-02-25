@@ -83,13 +83,14 @@ export TRANSFORMERS_CACHE="${HF_SCRATCH}/transformers"
 export HF_DATASETS_CACHE="${HF_SCRATCH}/datasets"
 mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HF_DATASETS_CACHE}"
 
-# Compute nodes have no outbound internet. HF_HUB_OFFLINE is set
-# automatically if we detect we are NOT on a login node (login nodes have
-# hostnames starting with "glogin"; compute node names differ).
-# This allows huggingface-cli download to work on login nodes while
-# preventing the 5-retry delay on compute nodes.
+# Compute nodes have no outbound internet — skip all network checks there.
+# On login nodes (glogin*) we MUST unset these in case a previous source
+# of this script (or a stale shell) left them exported.
 _hostname=$(hostname -s)
-if [[ "${_hostname}" != glogin* ]]; then
+if [[ "${_hostname}" == glogin* ]]; then
+    unset HF_HUB_OFFLINE
+    unset TRANSFORMERS_OFFLINE
+else
     export HF_HUB_OFFLINE=1
     export TRANSFORMERS_OFFLINE=1
 fi
