@@ -8,17 +8,17 @@
 #   pip install -r requirements.txt
 
 # Core ML stack
-# torch is intentionally omitted here — install it via the CUDA wheel index
-# (see note above) before running this file. The lower bound is listed for
-# documentation purposes: vllm>=0.6 requires torch>=2.4.
-torch>=2.4
+# torch version must match vllm's exact requirement.
+# vllm 0.15.1 requires torch==2.9.1. If torch is installed from PyPI without
+# a CUDA wheel index the binary may lack GPU support; see README §5.2.
+torch>=2.9.1
 transformers>=4.38
 datasets>=2.16
 peft>=0.8
 accelerate>=0.25
 
 # Serving
-vllm>=0.6
+vllm>=0.15.1
 
 # HTTP / async client
 httpx>=0.25

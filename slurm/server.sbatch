@@ -23,6 +23,7 @@ module load impi
 module load mkl
 module load hdf5
 module load python/3.12.1
+unset PYTHONPATH   # prevent system torch from shadowing the venv
 
 # Activate project virtual-env (created during installation)
 source "${HOME}/.venvs/tfg/bin/activate"

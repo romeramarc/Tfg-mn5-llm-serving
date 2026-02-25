@@ -111,6 +111,12 @@ module load hdf5
 module load python/3.12.1
 ```
 
+Then clear the `PYTHONPATH` that the module injects (see §5.2 for why this matters):
+
+```bash
+unset PYTHONPATH
+```
+
 Sanity check (all three should return sensible output):
 
 ```bash
@@ -127,26 +133,27 @@ source "${HOME}/.venvs/tfg/bin/activate"
 pip install --upgrade pip
 ```
 
-**Install PyTorch first** using the CUDA 12.1 wheel index (the default PyPI index does not ship CUDA-enabled wheels):
+**CRITICAL — unset `PYTHONPATH` before installing or importing anything:**
 
 ```bash
-pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+unset PYTHONPATH
 ```
 
-Verify before continuing:
+> **Why?** Loading `python/3.12.1` via Lmod sets `PYTHONPATH` to the system site-packages (`/apps/GPP/PYTHON/3.12.1/INTEL/lib/python3.12/site-packages`). Python searches `PYTHONPATH` *before* the virtual environment, so the system torch 2.3 silently shadows the correct version installed in the venv. `unset PYTHONPATH` makes the venv take full precedence. This is already handled automatically in `env/setup_env.sh` (sourced by all SLURM scripts), but must be done manually in interactive sessions.
 
-```bash
-python -c "import torch; print(torch.__version__)"          # expect 2.5.1+cu121
-python -c "from torch.library import infer_schema; print('OK')"
-```
-
-Then install the remaining dependencies:
+Install all dependencies (vLLM 0.15.1 pulls in the required torch 2.9.1 automatically):
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> **Why two steps?** vLLM ≥ 0.6 requires `torch ≥ 2.4` for `torch.library.infer_schema`. MN5's system Python ships torch 2.3, which `pip install -r requirements.txt` would silently reuse if torch is not already present in the venv. Installing torch explicitly with `--index-url` first ensures the correct version is in the venv before vLLM resolves its dependency.
+Verify the installation:
+
+```bash
+python -c "import torch; print(torch.__file__)"             # must show ~/.venvs/tfg/...
+python -c "from torch.library import infer_schema; print('torch OK')"
+python -c "import vllm; print('vLLM', vllm.__version__)"
+```
 
 > **Version note:** The offline throughput benchmark (`bench/run_throughput.py`) invokes `vllm bench throughput` as a subprocess. This CLI sub-command requires vLLM ≥ 0.6. Verify the installed version with `vllm --version` after installation.
 

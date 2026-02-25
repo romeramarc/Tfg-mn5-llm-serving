@@ -21,6 +21,12 @@ module load mkl
 module load hdf5
 module load python/3.12.1
 
+# CRITICAL: the python/3.12.1 module injects PYTHONPATH pointing at the
+# system site-packages (/apps/GPP/PYTHON/3.12.1/INTEL/lib/python3.12/
+# site-packages).  PYTHONPATH is searched BEFORE the venv, so the system
+# torch 2.3 would shadow the venv's torch 2.9 without this line.
+unset PYTHONPATH
+
 # ── Virtual environment ────────────────────────────────────
 VENV_PATH="${VENV_PATH:-${HOME}/.venvs/tfg}"
 if [[ ! -d "${VENV_PATH}" ]]; then
