@@ -86,13 +86,19 @@ echo "Server is healthy at ${SERVER_URL}"
 # ── Stage 3: Throughput benchmark ─────────────────────────
 echo ""
 echo "--- [3/4] Throughput benchmark ---"
-python -m bench.run_throughput --config configs/benchmark.yaml
+python -m bench.run_throughput \
+    --config configs/benchmark.yaml \
+    --model  "Qwen/Qwen2.5-14B-Instruct" \
+    --role   teacher
 echo "Throughput benchmark complete."
 
-# ── Stage 4: Online load benchmark ────────────────────────
+# ── Stage 4: Online load benchmark ──────────────────────
 echo ""
 echo "--- [4/4] Online load benchmark ---"
-python -m bench.run_online_load --config configs/benchmark.yaml
+python -m bench.run_online_load \
+    --config configs/benchmark.yaml \
+    --model  "Qwen/Qwen2.5-14B-Instruct" \
+    --role   teacher
 echo "Online load benchmark complete."
 
 # ── Stage 5: Quality evaluation (optional) ────────────────

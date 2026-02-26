@@ -59,7 +59,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--role", default="teacher",
-        choices=["teacher", "student", "dev"],
+        choices=["teacher", "student_mid", "student_small", "dev"],
         help="Which model role to serve (resolved from models.yaml).",
     )
     args = parser.parse_args()

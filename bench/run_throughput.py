@@ -66,9 +66,24 @@ def _build_bench_cmd(cfg: dict, result_file: Path) -> list[str]:
     return cmd
 
 
-def run(config_path: str = "configs/benchmark.yaml") -> Path:
-    """Execute the throughput benchmark and return the run directory."""
+def run(
+    config_path: str = "configs/benchmark.yaml",
+    model_override: str | None = None,
+    role: str | None = None,
+) -> Path:
+    """Execute the throughput benchmark and return the run directory.
+
+    Parameters
+    ----------
+    model_override:
+        If given, overrides the ``common.model`` in the config.
+    role:
+        Short label (e.g. ``teacher``, ``student_mid``, ``student_small``) used
+        to name the run directory, making results easy to identify and compare.
+    """
     cfg = load_yaml(config_path)
+    if model_override:
+        cfg.setdefault("common", {})["model"] = model_override
     common = cfg.get("common", {})
     seed = common.get("seed", 42)
     set_seed(seed)
@@ -77,9 +92,12 @@ def run(config_path: str = "configs/benchmark.yaml") -> Path:
     setup_logging(level=log_cfg.get("level", "INFO"))
 
     # ── Run directory ───────────────────────────────────────
+    # Tag format: throughput-<role>  so results/throughput/throughput-teacher-<ts>/
+    # makes it immediately obvious which model produced each result.
+    tag = f"throughput-{role}" if role else "throughput"
     run_dir = make_run_dir(
         common.get("results_base_dir", "results") + "/throughput",
-        tag="throughput",
+        tag=tag,
     )
     snapshot_configs([config_path, "configs/serving.yaml"], run_dir)
 
@@ -122,8 +140,12 @@ def run(config_path: str = "configs/benchmark.yaml") -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Offline throughput benchmark")
     parser.add_argument("--config", default="configs/benchmark.yaml")
+    parser.add_argument("--model", default=None,
+                        help="Override the model name in the config.")
+    parser.add_argument("--role", default=None,
+                        help="Role label for the run directory (e.g. teacher, student_mid).")
     args = parser.parse_args()
-    run(args.config)
+    run(args.config, model_override=args.model, role=args.role)
 
 
 if __name__ == "__main__":
