@@ -79,9 +79,10 @@ fi
 # Storing model weights here avoids filling the HOME quota (limited).
 HF_SCRATCH="/gpfs/projects/bsc98/tbsc381408/hf_cache"
 export HF_HOME="${HF_SCRATCH}"
-export TRANSFORMERS_CACHE="${HF_SCRATCH}/transformers"
+unset TRANSFORMERS_CACHE          # deprecated; HF_HOME supersedes it — setting both
+                                  # causes transformers to cache-miss on compute nodes
 export HF_DATASETS_CACHE="${HF_SCRATCH}/datasets"
-mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HF_DATASETS_CACHE}"
+mkdir -p "${HF_HOME}" "${HF_DATASETS_CACHE}"
 
 # Compute nodes have no outbound internet — skip all network checks there.
 # On login nodes (glogin*) we MUST unset these in case a previous source
