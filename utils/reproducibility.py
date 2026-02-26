@@ -121,7 +121,7 @@ def collect_metadata(seed: int, config: Dict[str, Any]) -> Dict[str, Any]:
             gpu_info.append({
                 "index": i,
                 "name": props.name,
-                "total_memory_mb": round(props.total_mem / (1024 ** 2)),
+                "total_memory_mb": round(props.total_memory / (1024 ** 2)),
             })
         meta["gpus"] = gpu_info
         meta["gpu_names"] = [g["name"] for g in gpu_info]
