@@ -37,18 +37,26 @@ from utils.reproducibility import (
 logger = get_logger(__name__)
 
 
-def run(config_path: str = "configs/eval.yaml") -> Path:
+def run(
+    config_path: str = "configs/eval.yaml",
+    model_override: str | None = None,
+    role: str | None = None,
+) -> Path:
     """Execute all enabled quality benchmarks and return the run directory."""
     cfg = load_yaml(config_path)
+    if model_override:
+        cfg.setdefault("common", {})["model"] = model_override
     common = cfg.get("common", {})
     seed = common.get("seed", 42)
     set_seed(seed)
     setup_logging()
 
     # ── Run directory ───────────────────────────────────────
+    # Tag format: quality-<role>  so results/quality/quality-teacher-<ts>/
+    tag = f"quality-{role}" if role else "quality"
     run_dir = make_run_dir(
         common.get("results_base_dir", "results/quality"),
-        tag="quality",
+        tag=tag,
     )
     snapshot_configs(
         [config_path, "configs/serving.yaml", "configs/models.yaml"],
@@ -138,8 +146,12 @@ def main() -> None:
     )
     parser.add_argument("--config", default="configs/eval.yaml",
                         help="Path to the evaluation YAML configuration file.")
+    parser.add_argument("--model", default=None,
+                        help="Override common.model in the config (e.g. Qwen/Qwen2.5-7B-Instruct).")
+    parser.add_argument("--role", default=None,
+                        help="Label for this run: teacher | student_mid | student_small.")
     args = parser.parse_args()
-    run(args.config)
+    run(args.config, model_override=args.model, role=args.role)
 
 
 if __name__ == "__main__":

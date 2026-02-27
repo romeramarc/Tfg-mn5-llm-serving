@@ -1,11 +1,11 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────
-# SLURM job — Quality evaluation: Qwen2.5-14B-Instruct (teacher)
+# SLURM job — Quality evaluation: Qwen2.5-7B-Instruct (student_mid)
 # Runs GSM8K + MATH-500. Self-contained: starts its own vLLM server.
 # ─────────────────────────────────────────────────────────────
-#SBATCH --job-name=eval-teacher
-#SBATCH --output=logs/eval-teacher-%j.out
-#SBATCH --error=logs/eval-teacher-%j.err
+#SBATCH --job-name=eval-student-mid
+#SBATCH --output=logs/eval-student-mid-%j.out
+#SBATCH --error=logs/eval-student-mid-%j.err
 #SBATCH --partition=acc
 #SBATCH --account=bsc98
 #SBATCH --qos=acc_bsccs
@@ -14,17 +14,17 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --exclusive
-#SBATCH --time=05:00:00
+#SBATCH --time=03:00:00
 
 set -euo pipefail
 
-# ── Environment ───────────────────────────────────────────
+# ── Environment ─────────────────────────────────────────────
 cd /gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving
 source env/setup_env.sh
 mkdir -p logs
 
-MODEL="Qwen/Qwen2.5-14B-Instruct"
-ROLE="teacher"
+MODEL="Qwen/Qwen2.5-7B-Instruct"
+ROLE="student_mid"
 SERVER_URL="http://localhost:8000"
 
 echo "========================================="
@@ -53,7 +53,7 @@ python -m serving.healthcheck \
     --retries 120 --interval 5
 echo "Server is healthy."
 
-# ── [3/3] Quality evaluation ─────────────────────────────────
+# ── [3/3] Quality evaluation ────────────────────────────────
 echo ""
 echo "--- [3/3] Quality evaluation (GSM8K + MATH) ---"
 python -m eval.run_quality \
