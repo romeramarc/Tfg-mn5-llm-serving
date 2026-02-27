@@ -47,21 +47,20 @@ logger = get_logger(__name__)
 
 
 def load_math(
-    dataset_name: str = "lighteval/MATH",
+    dataset_name: str = "HuggingFaceH4/MATH-500",
     split: str = "test",
     subset_size: Optional[int] = None,
 ) -> List[Dict[str, str]]:
-    """Load MATH from HuggingFace and return structured examples.
+    """Load MATH-500 from HuggingFace and return structured examples.
 
-    Uses ``lighteval/MATH`` — the maintained replacement for the deprecated
-    ``hendrycks/competition_math``.  It is a flat dataset with all subjects
-    combined, so no per-subject loop is needed.
+    Uses ``HuggingFaceH4/MATH-500`` — a flat, curated 500-problem subset
+    with columns: problem, solution, level, type, subject.
     """
     from datasets import load_dataset
 
     ds = load_dataset(dataset_name, split=split)
     all_rows: list[Any] = list(ds)
-    logger.info("Loaded MATH", extra={"split": split, "rows": len(all_rows)})
+    logger.info("Loaded MATH-500", extra={"split": split, "rows": len(all_rows)})
 
     examples: list[dict] = []
     for row in all_rows:
