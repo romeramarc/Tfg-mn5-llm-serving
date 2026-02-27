@@ -67,7 +67,9 @@ def load_math(
 
     all_rows: list[Any] = []
     for subject in _MATH_SUBJECTS:
-        subject_ds = load_dataset(dataset_name, name=subject, split=split)
+        subject_ds = load_dataset(
+            dataset_name, name=subject, split=split, trust_remote_code=True
+        )
         all_rows.extend(subject_ds)
         logger.info(
             "Loaded MATH subject",
