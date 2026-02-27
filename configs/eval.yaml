@@ -49,7 +49,7 @@ benchmarks:
     answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
 
   routerbench:
-    enabled: true
+    enabled: false             # no data yet — enable once routerbench.jsonl is placed under data/routerbench/
     # RouterBench must be placed manually under data/routerbench/
     dataset_path: "data/routerbench/routerbench.jsonl"
     subset_size: null
