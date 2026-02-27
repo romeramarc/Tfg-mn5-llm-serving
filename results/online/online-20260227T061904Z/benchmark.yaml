@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────
+# benchmark.yaml — Benchmarking configuration
+# ─────────────────────────────────────────────────────────────
+
+common:
+  base_url: "http://localhost:8000"
+  model: "Qwen/Qwen2.5-14B-Instruct"
+  seed: 42
+  results_base_dir: "results"
+
+throughput:
+  # Offline throughput benchmark via `vllm bench serve`.
+  # Using 'random' dataset avoids needing to download ShareGPT on login node.
+  # Fixed input/output lengths ensure reproducible, comparable runs.
+  dataset_name: "random"              # sharegpt | sonnet | random
+  dataset_path: null                  # not used for random dataset
+  num_prompts: 1000
+  request_rate: "inf"                 # inf = closed-loop (max throughput)
+  input_len: 512                      # prompt length in tokens
+  output_len: 256                     # generation length in tokens
+  max_concurrency: null               # null = unlimited
+
+online:
+  # Online load benchmark — async HTTP client
+  prompts_file: "configs/prompts.jsonl"
+  num_requests: 500
+  request_rates: [1, 5, 10, 20, 50]  # requests per second
+  max_tokens: 256
+  temperature: 0.0
+  timeout_seconds: 120
+  concurrency: 64

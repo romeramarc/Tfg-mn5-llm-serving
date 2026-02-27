@@ -1,0 +1,39 @@
+unload PYTHON/3.12.1 (PATH, MANPATH, LD_LIBRARY_PATH, LIBRARY_PATH,
+PKG_CONFIG_PATH, C_INCLUDE_PATH, CPLUS_INCLUDE_PATH, PYTHONHOME, PYTHONPATH) 
+unload SQLITE3/3.45.2 (PATH)
+unload HDF5/1.14.1-2 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH, HDF5_DIR, HDF5_ROOT,CFLAGS, CPPFLAGS, LDFLAGS) 
+remove mkl/2023.2.0 (LD_LIBRARY_PATH)
+remove impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+Set INTEL compilers as MPI wrappers backend
+load impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+load mkl/2023.2.0 (LD_LIBRARY_PATH)
+load SQLITE3/3.45.2 (PATH)
+load HDF5/1.14.1-2 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH, HDF5_DIR, HDF5_ROOT,CFLAGS, CPPFLAGS, LDFLAGS) 
+load PYTHON/3.12.1 (PATH, MANPATH, LD_LIBRARY_PATH, LIBRARY_PATH,
+PKG_CONFIG_PATH, C_INCLUDE_PATH, CPLUS_INCLUDE_PATH, PYTHONHOME, PYTHONPATH) 
+unload SQLITE3/3.45.2 (PATH)
+load SQLITE3/3.45.2 (PATH)
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m /home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/vllm/v1/executor/uniproc_executor.py:52: UserWarning: Failed to get the IP address, using 0.0.0.0 by default.The value can be set by the environment variable VLLM_HOST_IP or HOST_IP.
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m   distributed_init_method = get_distributed_init_method(get_ip(), get_open_port())
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/8 [00:00<?, ?it/s]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:  12% Completed | 1/8 [00:03<00:24,  3.55s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:  25% Completed | 2/8 [00:07<00:21,  3.54s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:  38% Completed | 3/8 [00:08<00:13,  2.63s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:  50% Completed | 4/8 [00:12<00:11,  2.92s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:  62% Completed | 5/8 [00:15<00:09,  3.14s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:  75% Completed | 6/8 [00:19<00:06,  3.26s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards:  88% Completed | 7/8 [00:22<00:03,  3.33s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:25<00:00,  3.38s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:25<00:00,  3.25s/it]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m 
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/51 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   4%|▍         | 2/51 [00:00<00:03, 14.17it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   8%|▊         | 4/51 [00:00<00:03, 14.43it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  12%|█▏        | 6/51 [00:00<00:03, 14.53it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  16%|█▌        | 8/51 [00:00<00:03, 14.09it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  20%|█▉        | 10/51 [00:00<00:02, 14.36it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  24%|██▎       | 12/51 [00:00<00:02, 14.52it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  27%|██▋       | 14/51 [00:00<00:02, 14.68it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  31%|███▏      | 16/51 [00:01<00:02, 14.56it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  35%|███▌      | 18/51 [00:01<00:02, 14.65it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  39%|███▉      | 20/51 [00:01<00:02, 14.78it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  43%|████▎     | 22/51 [00:01<00:01, 14.69it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  47%|████▋     | 24/51 [00:01<00:01, 14.72it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  51%|█████     | 26/51 [00:01<00:01, 14.85it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  55%|█████▍    | 28/51 [00:01<00:01, 14.85it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  59%|█████▉    | 30/51 [00:02<00:01, 14.23it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  63%|██████▎   | 32/51 [00:02<00:01, 14.12it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  67%|██████▋   | 34/51 [00:02<00:01, 14.04it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████   | 36/51 [00:02<00:01, 13.84it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  75%|███████▍  | 38/51 [00:02<00:00, 13.67it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  78%|███████▊  | 40/51 [00:02<00:00, 13.57it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  82%|████████▏ | 42/51 [00:02<00:00, 13.64it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▋ | 44/51 [00:03<00:00, 13.68it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  90%|█████████ | 46/51 [00:03<00:00, 13.91it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  94%|█████████▍| 48/51 [00:03<00:00, 14.28it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  98%|█████████▊| 50/51 [00:03<00:00, 14.82it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 51/51 [00:03<00:00, 14.37it/s]
+[0;36m(EngineCore_DP0 pid=2610518)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):   9%|▊         | 3/35 [00:00<00:01, 22.46it/s]Capturing CUDA graphs (decode, FULL):  17%|█▋        | 6/35 [00:00<00:01, 23.27it/s]Capturing CUDA graphs (decode, FULL):  26%|██▌       | 9/35 [00:00<00:01, 23.61it/s]Capturing CUDA graphs (decode, FULL):  34%|███▍      | 12/35 [00:00<00:00, 23.76it/s]Capturing CUDA graphs (decode, FULL):  43%|████▎     | 15/35 [00:00<00:00, 23.80it/s]Capturing CUDA graphs (decode, FULL):  51%|█████▏    | 18/35 [00:00<00:00, 23.98it/s]Capturing CUDA graphs (decode, FULL):  60%|██████    | 21/35 [00:00<00:00, 24.09it/s]Capturing CUDA graphs (decode, FULL):  69%|██████▊   | 24/35 [00:01<00:00, 23.94it/s]Capturing CUDA graphs (decode, FULL):  77%|███████▋  | 27/35 [00:01<00:00, 24.17it/s]Capturing CUDA graphs (decode, FULL):  86%|████████▌ | 30/35 [00:01<00:00, 24.66it/s]Capturing CUDA graphs (decode, FULL):  94%|█████████▍| 33/35 [00:01<00:00, 25.43it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 35/35 [00:01<00:00, 24.48it/s]
+[0;36m(APIServer pid=2610394)[0;0m INFO:     Started server process [2610394]
+[0;36m(APIServer pid=2610394)[0;0m INFO:     Waiting for application startup.
+[0;36m(APIServer pid=2610394)[0;0m INFO:     Application startup complete.
+[rank0]:[W227 07:31:58.649019660 ProcessGroupNCCL.cpp:1524] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[0;36m(APIServer pid=2610394)[0;0m INFO:     Shutting down
+[0;36m(APIServer pid=2610394)[0;0m INFO:     Waiting for application shutdown.
+[0;36m(APIServer pid=2610394)[0;0m INFO:     Application shutdown complete.

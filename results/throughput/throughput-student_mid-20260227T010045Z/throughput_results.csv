@@ -1,0 +1,2 @@
+completed_requests,total_time_s,request_throughput_rps,output_throughput_tps,mean_ttft_ms,p99_ttft_ms,mean_tpot_ms,p99_tpot_ms,mean_itl_ms,p99_itl_ms,wall_time_s,return_code
+1000,40.17,24.89,6372.33,16798.36,33559.21,36.0,38.08,36.0,74.65,50.70961785316467,0
