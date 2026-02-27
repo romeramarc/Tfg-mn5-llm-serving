@@ -35,7 +35,7 @@ benchmarks:
 
   math:
     enabled: true
-    dataset_name: "hendrycks/competition_math"
+    dataset_name: "lighteval/MATH"   # maintained replacement for deprecated hendrycks/competition_math
     dataset_split: "test"
     subset_size: 500           # full test set is 5000; 500 for dev
     prompt_template: |

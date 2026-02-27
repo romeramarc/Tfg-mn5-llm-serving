@@ -41,40 +41,27 @@ logger = get_logger(__name__)
 
 # ── Dataset loading ─────────────────────────────────────────
 
-# All subject configs in hendrycks/competition_math
-_MATH_SUBJECTS = [
-    "algebra",
-    "counting_and_probability",
-    "geometry",
-    "intermediate_algebra",
-    "number_theory",
-    "prealgebra",
-    "precalculus",
-]
+# lighteval/MATH is the maintained replacement for hendrycks/competition_math.
+# It is a flat dataset (all subjects in one split) with the same columns:
+# problem, solution, level, type.
 
 
 def load_math(
-    dataset_name: str = "hendrycks/competition_math",
+    dataset_name: str = "lighteval/MATH",
     split: str = "test",
     subset_size: Optional[int] = None,
 ) -> List[Dict[str, str]]:
-    """Load MATH from HuggingFace (all subjects) and return structured examples.
+    """Load MATH from HuggingFace and return structured examples.
 
-    ``hendrycks/competition_math`` is split by subject rather than having a
-    single ``all`` config.  This function loads each subject and concatenates.
+    Uses ``lighteval/MATH`` — the maintained replacement for the deprecated
+    ``hendrycks/competition_math``.  It is a flat dataset with all subjects
+    combined, so no per-subject loop is needed.
     """
     from datasets import load_dataset
 
-    all_rows: list[Any] = []
-    for subject in _MATH_SUBJECTS:
-        subject_ds = load_dataset(
-            dataset_name, name=subject, split=split, trust_remote_code=True
-        )
-        all_rows.extend(subject_ds)
-        logger.info(
-            "Loaded MATH subject",
-            extra={"subject": subject, "rows": len(subject_ds)},
-        )
+    ds = load_dataset(dataset_name, split=split)
+    all_rows: list[Any] = list(ds)
+    logger.info("Loaded MATH", extra={"split": split, "rows": len(all_rows)})
 
     examples: list[dict] = []
     for row in all_rows:
