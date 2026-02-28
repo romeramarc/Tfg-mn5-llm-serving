@@ -72,7 +72,7 @@ def check_datasets() -> None:
     for repo, cfg_name, split in checks:
         label = repo if cfg_name is None else f"{repo} [{cfg_name}]"
         try:
-            kw = {"split": f"{split}[:5]", "trust_remote_code": True}
+            kw = {"split": f"{split}[:5]"}
             if cfg_name:
                 kw["name"] = cfg_name
             ds = load_dataset(repo, **kw)
