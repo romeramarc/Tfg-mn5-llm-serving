@@ -227,7 +227,7 @@ def run(
         logging_steps=log_cfg.get("logging_steps", 10),
         save_strategy=log_cfg.get("save_strategy", "steps"),
         save_steps=log_cfg.get("save_steps", 200),
-        evaluation_strategy=log_cfg.get("eval_strategy", "no"),
+        eval_strategy=log_cfg.get("eval_strategy", "no"),
         report_to=log_cfg.get("report_to", "none"),
         seed=seed,
         remove_unused_columns=False,
