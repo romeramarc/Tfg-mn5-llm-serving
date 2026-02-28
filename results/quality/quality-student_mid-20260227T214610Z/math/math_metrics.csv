@@ -1,0 +1,2 @@
+total_examples,scorable_examples,unscorable_examples,correct,incorrect,accuracy,accuracy_pct,benchmark,model
+500,453,47,306,147,0.675497,67.55,math,Qwen/Qwen2.5-7B-Instruct

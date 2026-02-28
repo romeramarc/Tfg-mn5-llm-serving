@@ -1,0 +1,50 @@
+{
+  "timestamp_utc": "2026-02-28T10:36:54.416848+00:00",
+  "hostname": "as07r2b18",
+  "seed": 42,
+  "git_commit": "3ff0c4d",
+  "python_version": "3.12.1",
+  "platform": "Linux-5.14.0-284.30.1.el9_2.x86_64-x86_64-with-glibc2.34",
+  "torch_version": "2.9.1+cu128",
+  "cuda_available": true,
+  "config_hash": "183b757ab956",
+  "vllm_version": "0.15.1",
+  "transformers_version": "4.57.6",
+  "datasets_version": "4.6.0",
+  "peft_version": "0.18.1",
+  "accelerate_version": "1.12.0",
+  "slurm_job_id": "37087725",
+  "slurm_job_name": "eval-teacher",
+  "slurm_nodelist": "as07r2b18",
+  "slurm_gpus_on_node": "4",
+  "slurm_ntasks": "1",
+  "gpu_count": 4,
+  "gpus": [
+    {
+      "index": 0,
+      "name": "NVIDIA H100",
+      "total_memory_mb": 64952
+    },
+    {
+      "index": 1,
+      "name": "NVIDIA H100",
+      "total_memory_mb": 64952
+    },
+    {
+      "index": 2,
+      "name": "NVIDIA H100",
+      "total_memory_mb": 64952
+    },
+    {
+      "index": 3,
+      "name": "NVIDIA H100",
+      "total_memory_mb": 64952
+    }
+  ],
+  "gpu_names": [
+    "NVIDIA H100",
+    "NVIDIA H100",
+    "NVIDIA H100",
+    "NVIDIA H100"
+  ]
+}

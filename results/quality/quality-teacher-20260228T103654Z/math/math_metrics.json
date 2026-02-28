@@ -1,0 +1,11 @@
+{
+  "total_examples": 500,
+  "scorable_examples": 468,
+  "unscorable_examples": 32,
+  "correct": 330,
+  "incorrect": 138,
+  "accuracy": 0.705128,
+  "accuracy_pct": 70.51,
+  "benchmark": "math",
+  "model": "Qwen/Qwen2.5-14B-Instruct"
+}

@@ -1,0 +1,4 @@
+total_examples,scorable_examples,unscorable_examples,correct,incorrect,accuracy,accuracy_pct,benchmark,model
+1319,1313,6,1122,191,0.854532,85.45,gsm8k,Qwen/Qwen2.5-7B-Instruct
+500,460,40,321,139,0.697826,69.78,math,Qwen/Qwen2.5-7B-Instruct
+1172,1172,0,750,422,0.639932,63.99,arc_challenge,Qwen/Qwen2.5-7B-Instruct

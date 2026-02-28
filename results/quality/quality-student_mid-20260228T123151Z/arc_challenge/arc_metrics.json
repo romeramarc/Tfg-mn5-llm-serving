@@ -1,0 +1,11 @@
+{
+  "total_examples": 1172,
+  "scorable_examples": 1172,
+  "unscorable_examples": 0,
+  "correct": 750,
+  "incorrect": 422,
+  "accuracy": 0.639932,
+  "accuracy_pct": 63.99,
+  "benchmark": "arc_challenge",
+  "model": "Qwen/Qwen2.5-7B-Instruct"
+}

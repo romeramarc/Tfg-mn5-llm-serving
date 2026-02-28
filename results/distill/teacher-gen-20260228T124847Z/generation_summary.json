@@ -1,0 +1,19 @@
+{
+  "total_prompts": 2991,
+  "successful": 2991,
+  "failed": 0,
+  "by_benchmark": {
+    "gsm8k": {
+      "total": 1319,
+      "ok": 1319
+    },
+    "math": {
+      "total": 500,
+      "ok": 500
+    },
+    "arc_challenge": {
+      "total": 1172,
+      "ok": 1172
+    }
+  }
+}
