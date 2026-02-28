@@ -134,6 +134,7 @@ def _prepare_dataset(
 def run(
     config_path: str = "configs/distill.yaml",
     student_override: Optional[str] = None,
+    max_samples: Optional[int] = None,
 ) -> Path:
     cfg = load_yaml(config_path)
     tcfg = cfg.get("training", {})
@@ -203,6 +204,10 @@ def run(
     )
     max_seq_length = tcfg.get("max_seq_length", 2048)
     ds = _prepare_dataset(dataset_path, tokeniser, max_seq_length)
+    if max_samples is not None and max_samples > 0 and max_samples < len(ds):
+        ds = ds.select(range(max_samples))
+        logger.info("Smoke-test mode: dataset truncated",
+                     extra={"max_samples": max_samples})
     logger.info("Dataset ready", extra={"samples": len(ds)})
 
     # ── Training arguments ──────────────────────────────────
@@ -277,8 +282,10 @@ def main() -> None:
     parser.add_argument("--config", default="configs/distill.yaml")
     parser.add_argument("--student", default=None,
                         help="Override training.student_model (e.g. Qwen/Qwen2.5-1.5B-Instruct)")
+    parser.add_argument("--max-samples", type=int, default=None,
+                        help="Truncate dataset (smoke test). E.g. --max-samples 20")
     args = parser.parse_args()
-    run(args.config, student_override=args.student)
+    run(args.config, student_override=args.student, max_samples=args.max_samples)
 
 
 if __name__ == "__main__":

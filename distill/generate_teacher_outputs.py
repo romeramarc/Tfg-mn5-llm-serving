@@ -305,7 +305,8 @@ async def _generate_all(
 
 # ── Public entry-point ──────────────────────────────────────
 
-def run(config_path: str = "configs/distill.yaml") -> Path:
+def run(config_path: str = "configs/distill.yaml",
+        max_samples: Optional[int] = None) -> Path:
     cfg = load_yaml(config_path)
     gen = cfg.get("generation", {})
     seed = gen.get("seed", 42)
@@ -320,6 +321,10 @@ def run(config_path: str = "configs/distill.yaml") -> Path:
     eval_cfg = load_yaml(gen.get("eval_config", "configs/eval.yaml"))
 
     prompts = collect_all_prompts(eval_cfg)
+    if max_samples is not None and max_samples > 0:
+        prompts = prompts[:max_samples]
+        logger.info("Smoke-test mode: truncated prompt list",
+                     extra={"max_samples": max_samples, "num_prompts": len(prompts)})
     logger.info("Generating teacher outputs",
                  extra={"num_prompts": len(prompts)})
 
@@ -366,8 +371,10 @@ def run(config_path: str = "configs/distill.yaml") -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate teacher outputs")
     parser.add_argument("--config", default="configs/distill.yaml")
+    parser.add_argument("--max-samples", type=int, default=None,
+                        help="Truncate total prompts (smoke test). E.g. --max-samples 15")
     args = parser.parse_args()
-    run(args.config)
+    run(args.config, max_samples=args.max_samples)
 
 
 if __name__ == "__main__":
