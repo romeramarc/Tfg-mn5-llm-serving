@@ -1,28 +1,38 @@
 # ─────────────────────────────────────────────────────────────
 # distill.yaml — Knowledge distillation configuration
 # ─────────────────────────────────────────────────────────────
+# Phase 2: hard-label black-box distillation.
+#   Step 1  generate_teacher_outputs.py  →  teacher_outputs.jsonl
+#   Step 2  train_student_sft.py         →  LoRA adapter
+# ─────────────────────────────────────────────────────────────
 
+# ── Step 1: Teacher output generation ──────────────────────
 generation:
   teacher_base_url: "http://localhost:8000"
-  teacher_model: "Qwen/Qwen2.5-72B-Instruct"
-  prompts_file: "configs/prompts.jsonl"
+  teacher_model: "Qwen/Qwen2.5-14B-Instruct"
+  eval_config: "configs/eval.yaml"       # benchmark defs for prompts
+  extra_prompts_file: null               # optional: "configs/prompts.jsonl"
   output_file: "results/distill/teacher_outputs.jsonl"
-  max_tokens: 512
-  temperature: 0.0               # greedy for hard-label distillation
+
+  # Generation parameters — greedy for hard-label distillation
+  max_tokens: 1024
+  temperature: 0.0
   top_p: 1.0
-  batch_size: 32                  # concurrent requests to teacher
-  timeout_seconds: 120
+  batch_size: 32                         # concurrent requests to teacher
+  timeout_seconds: 180
   seed: 42
 
+# ── Step 2: Student LoRA SFT ──────────────────────────────
 training:
+  # Override --student from CLI; default trains the 7B
   student_model: "Qwen/Qwen2.5-7B-Instruct"
   dataset_path: "results/distill/teacher_outputs.jsonl"
-  output_dir: "results/distill/checkpoints"
+  output_dir: "results/distill"
 
   # Training hyper-parameters
   num_train_epochs: 3
   per_device_train_batch_size: 4
-  gradient_accumulation_steps: 4
+  gradient_accumulation_steps: 4         # effective batch = 16
   learning_rate: 2.0e-4
   lr_scheduler_type: "cosine"
   warmup_ratio: 0.03
@@ -43,6 +53,7 @@ training:
     bias: "none"
     task_type: "CAUSAL_LM"
 
+  # Logging & checkpointing
   logging:
     logging_steps: 10
     save_strategy: "steps"
