@@ -38,5 +38,8 @@ fastapi>=0.108
 pyyaml>=6.0
 python-json-logger>=2.0
 
+# Math evaluation — symbolic answer comparison
+sympy>=1.12
+
 # Numerical
 numpy>=1.24

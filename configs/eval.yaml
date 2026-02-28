@@ -49,13 +49,11 @@ benchmarks:
     answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
 
   routerbench:
-    enabled: false             # no data yet — enable once routerbench.jsonl is placed under data/routerbench/
-    # RouterBench must be placed manually under data/routerbench/
-    dataset_path: "data/routerbench/routerbench.jsonl"
+    enabled: true
+    dataset_name: "rbench/routerbench"  # HuggingFace dataset — no manual download needed
+    dataset_split: "test"
     subset_size: null
-    prompt_template: null      # uses the prompt field from the dataset
-    # Scoring: accuracy if labels exist; otherwise raw output + placeholder
-    has_labels: false           # set to true once labels are confirmed
+    prompt_template: null      # uses the prompt field from the dataset directly
 
 # ── Request parameters ─────────────────────────────────────
 request:
