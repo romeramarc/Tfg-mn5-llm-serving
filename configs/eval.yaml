@@ -48,12 +48,15 @@ benchmarks:
     # Scoring: normalised exact-match on \\boxed{...} content
     answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
 
-  routerbench:
+  arc_challenge:
     enabled: true
-    dataset_name: "rbench/routerbench"  # HuggingFace dataset — no manual download needed
+    dataset_name: "allenai/ai2_arc"
+    dataset_config: "ARC-Challenge"   # 1172 MC science questions
     dataset_split: "test"
     subset_size: null
-    prompt_template: null      # uses the prompt field from the dataset directly
+
+  routerbench:
+    enabled: false  # withmartian/routerbench uses .pkl files; replaced by ARC-Challenge
 
 # ── Request parameters ─────────────────────────────────────
 request:

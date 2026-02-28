@@ -96,16 +96,25 @@ def run(
     else:
         logger.info("MATH evaluation disabled — skipping")
 
-    # ── RouterBench ─────────────────────────────────────────
+    # ── ARC-Challenge ───────────────────────────────────────
+    if benchmarks_cfg.get("arc_challenge", {}).get("enabled", False):
+        logger.info("Starting ARC-Challenge evaluation")
+        try:
+            from eval.arc_eval import run_arc
+            metrics = run_arc(cfg, run_dir)
+            all_metrics.append(metrics)
+        except Exception:
+            logger.exception("ARC-Challenge evaluation failed")
+    else:
+        logger.info("ARC-Challenge evaluation disabled — skipping")
+
+    # ── RouterBench (disabled — uses .pkl files, not load_dataset-compatible)
     if benchmarks_cfg.get("routerbench", {}).get("enabled", False):
         logger.info("Starting RouterBench evaluation")
         try:
             from eval.routerbench import run_routerbench
             metrics = run_routerbench(cfg, run_dir)
             all_metrics.append(metrics)
-        except FileNotFoundError as exc:
-            logger.error("RouterBench dataset not found",
-                         extra={"error": str(exc)})
         except Exception:
             logger.exception("RouterBench evaluation failed")
     else:
