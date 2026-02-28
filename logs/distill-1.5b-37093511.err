@@ -1,0 +1,28 @@
+unload bsc/1.0 (PATH, MANPATH)
+unload UCX/1.15.0 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH) 
+remove mkl/2023.2.0 (LD_LIBRARY_PATH)
+remove impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+Set INTEL compilers as MPI wrappers backend
+load impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+load mkl/2023.2.0 (LD_LIBRARY_PATH)
+load SQLITE3/3.45.2 (PATH)
+load HDF5/1.14.1-2 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH, HDF5_DIR, HDF5_ROOT,CFLAGS, CPPFLAGS, LDFLAGS) 
+load PYTHON/3.12.1 (PATH, MANPATH, LD_LIBRARY_PATH, LIBRARY_PATH,
+PKG_CONFIG_PATH, C_INCLUDE_PATH, CPLUS_INCLUDE_PATH, PYTHONHOME, PYTHONPATH) 
+unload SQLITE3/3.45.2 (PATH)
+load SQLITE3/3.45.2 (PATH)
+`torch_dtype` is deprecated! Use `dtype` instead!
+Map:   0%|          | 0/2991 [00:00<?, ? examples/s]Map:   3%|▎         | 85/2991 [00:00<00:03, 832.98 examples/s]Map:   6%|▌         | 185/2991 [00:00<00:03, 926.50 examples/s]Map:  10%|▉         | 294/2991 [00:00<00:02, 997.22 examples/s]Map:  13%|█▎        | 399/2991 [00:00<00:02, 1014.13 examples/s]Map:  17%|█▋        | 504/2991 [00:00<00:02, 1024.77 examples/s]Map:  22%|██▏       | 655/2991 [00:00<00:02, 1013.77 examples/s]Map:  26%|██▌       | 765/2991 [00:00<00:02, 1034.32 examples/s]Map:  31%|███       | 919/2991 [00:00<00:02, 1019.17 examples/s]Map:  35%|███▌      | 1051/2991 [00:01<00:03, 505.39 examples/s]Map:  39%|███▉      | 1162/2991 [00:01<00:03, 594.72 examples/s]Map:  42%|████▏     | 1267/2991 [00:01<00:02, 672.58 examples/s]Map:  47%|████▋     | 1393/2991 [00:01<00:02, 715.08 examples/s]Map:  50%|█████     | 1497/2991 [00:01<00:02, 708.13 examples/s]Map:  53%|█████▎    | 1597/2991 [00:02<00:02, 692.52 examples/s]Map:  57%|█████▋    | 1696/2991 [00:02<00:01, 681.79 examples/s]Map:  60%|██████    | 1803/2991 [00:02<00:01, 687.86 examples/s]Map:  63%|██████▎   | 1886/2991 [00:02<00:01, 645.60 examples/s]Map:  66%|██████▌   | 1976/2991 [00:02<00:01, 627.78 examples/s]Map:  69%|██████▊   | 2055/2991 [00:03<00:02, 335.00 examples/s]Map:  71%|███████   | 2116/2991 [00:03<00:02, 371.40 examples/s]Map:  73%|███████▎  | 2174/2991 [00:03<00:02, 404.21 examples/s]Map:  75%|███████▍  | 2231/2991 [00:03<00:01, 432.96 examples/s]Map:  77%|███████▋  | 2290/2991 [00:03<00:01, 464.88 examples/s]Map:  79%|███████▊  | 2349/2991 [00:03<00:01, 490.28 examples/s]Map:  81%|████████  | 2409/2991 [00:03<00:01, 513.64 examples/s]Map:  83%|████████▎ | 2468/2991 [00:03<00:00, 531.26 examples/s]Map:  85%|████████▌ | 2555/2991 [00:04<00:00, 544.52 examples/s]Map:  87%|████████▋ | 2613/2991 [00:04<00:00, 550.21 examples/s]Map:  90%|█████████ | 2694/2991 [00:04<00:00, 543.22 examples/s]Map:  92%|█████████▏| 2751/2991 [00:04<00:00, 547.54 examples/s]Map:  94%|█████████▍| 2813/2991 [00:04<00:00, 563.94 examples/s]Map:  96%|█████████▌| 2873/2991 [00:04<00:00, 569.96 examples/s]Map:  98%|█████████▊| 2931/2991 [00:04<00:00, 567.94 examples/s]Map: 100%|██████████| 2991/2991 [00:05<00:00, 263.56 examples/s]Map: 100%|██████████| 2991/2991 [00:05<00:00, 561.41 examples/s]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 292, in <module>
+    main()
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 288, in main
+    run(args.config, student_override=args.student, max_samples=args.max_samples)
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 215, in run
+    training_args = TrainingArguments(
+                    ^^^^^^^^^^^^^^^^^^
+TypeError: TrainingArguments.__init__() got an unexpected keyword argument 'evaluation_strategy'

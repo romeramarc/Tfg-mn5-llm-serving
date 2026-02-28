@@ -1,0 +1,29 @@
+unload bsc/1.0 (PATH, MANPATH)
+unload UCX/1.15.0 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH) 
+remove mkl/2023.2.0 (LD_LIBRARY_PATH)
+remove impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+Set INTEL compilers as MPI wrappers backend
+load impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+load mkl/2023.2.0 (LD_LIBRARY_PATH)
+load SQLITE3/3.45.2 (PATH)
+load HDF5/1.14.1-2 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH, HDF5_DIR, HDF5_ROOT,CFLAGS, CPPFLAGS, LDFLAGS) 
+load PYTHON/3.12.1 (PATH, MANPATH, LD_LIBRARY_PATH, LIBRARY_PATH,
+PKG_CONFIG_PATH, C_INCLUDE_PATH, CPLUS_INCLUDE_PATH, PYTHONHOME, PYTHONPATH) 
+unload SQLITE3/3.45.2 (PATH)
+load SQLITE3/3.45.2 (PATH)
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:02,  1.44it/s]Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.57it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.47it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:02<00:00,  1.56it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:02<00:00,  1.54it/s]
+Map:   0%|          | 0/2991 [00:00<?, ? examples/s]Map:   3%|▎         | 88/2991 [00:00<00:03, 867.35 examples/s]Map:   6%|▋         | 190/2991 [00:00<00:02, 949.65 examples/s]Map:  10%|█         | 301/2991 [00:00<00:02, 1015.39 examples/s]Map:  14%|█▎        | 405/2991 [00:00<00:02, 1020.46 examples/s]Map:  19%|█▊        | 556/2991 [00:00<00:02, 1010.77 examples/s]Map:  24%|██▍       | 711/2991 [00:00<00:02, 1016.77 examples/s]Map:  27%|██▋       | 818/2991 [00:00<00:02, 1029.13 examples/s]Map:  31%|███       | 924/2991 [00:00<00:01, 1036.09 examples/s]Map:  35%|███▌      | 1051/2991 [00:01<00:03, 492.68 examples/s]Map:  39%|███▉      | 1165/2991 [00:01<00:03, 590.98 examples/s]Map:  42%|████▏     | 1268/2991 [00:01<00:02, 669.64 examples/s]Map:  46%|████▋     | 1390/2991 [00:01<00:02, 705.65 examples/s]Map:  50%|█████     | 1496/2991 [00:01<00:02, 704.09 examples/s]Map:  53%|█████▎    | 1599/2991 [00:02<00:02, 695.82 examples/s]Map:  57%|█████▋    | 1700/2991 [00:02<00:01, 686.48 examples/s]Map:  60%|██████    | 1808/2991 [00:02<00:01, 694.60 examples/s]Map:  63%|██████▎   | 1892/2991 [00:02<00:01, 653.41 examples/s]Map:  66%|██████▋   | 1982/2991 [00:02<00:01, 635.38 examples/s]Map:  69%|██████▊   | 2055/2991 [00:03<00:02, 336.13 examples/s]Map:  71%|███████   | 2117/2991 [00:03<00:02, 374.75 examples/s]Map:  73%|███████▎  | 2178/2991 [00:03<00:01, 411.34 examples/s]Map:  75%|███████▍  | 2235/2991 [00:03<00:01, 440.10 examples/s]Map:  77%|███████▋  | 2294/2991 [00:03<00:01, 471.08 examples/s]Map:  79%|███████▊  | 2353/2991 [00:03<00:01, 497.24 examples/s]Map:  81%|████████  | 2413/2991 [00:03<00:01, 521.68 examples/s]Map:  83%|████████▎ | 2471/2991 [00:03<00:00, 534.51 examples/s]Map:  85%|████████▍ | 2529/2991 [00:04<00:00, 543.77 examples/s]Map:  86%|████████▋ | 2587/2991 [00:04<00:00, 552.44 examples/s]Map:  89%|████████▉ | 2672/2991 [00:04<00:00, 555.02 examples/s]Map:  92%|█████████▏| 2757/2991 [00:04<00:00, 556.35 examples/s]Map:  94%|█████████▍| 2820/2991 [00:04<00:00, 572.24 examples/s]Map:  96%|█████████▋| 2882/2991 [00:04<00:00, 582.93 examples/s]Map:  98%|█████████▊| 2942/2991 [00:04<00:00, 584.26 examples/s]Map: 100%|██████████| 2991/2991 [00:05<00:00, 567.75 examples/s]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 292, in <module>
+    main()
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 288, in main
+    run(args.config, student_override=args.student, max_samples=args.max_samples)
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 215, in run
+    training_args = TrainingArguments(
+                    ^^^^^^^^^^^^^^^^^^
+TypeError: TrainingArguments.__init__() got an unexpected keyword argument 'evaluation_strategy'

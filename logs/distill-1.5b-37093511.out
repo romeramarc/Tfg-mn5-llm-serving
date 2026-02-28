@@ -1,0 +1,35 @@
+──────────────────────────────────────────────
+ENV SETUP COMPLETE
+  Date:            2026-02-28T15:14:34Z
+  Hostname:        as03r4b13
+  SLURM_JOB_ID:    37093511
+  Python:          Python 3.12.1
+  CUDA:            12.8
+  vLLM:            0.15.1
+  HF_HOME:         /gpfs/projects/bsc98/tbsc381408/hf_cache
+  Git commit:      4638ed1
+──────────────────────────────────────────────
+
+index, name, memory.total [MiB], driver_version
+0, NVIDIA H100, 65247 MiB, 535.86.10
+1, NVIDIA H100, 65247 MiB, 535.86.10
+2, NVIDIA H100, 65247 MiB, 535.86.10
+3, NVIDIA H100, 65247 MiB, 535.86.10
+
+=========================================
+ Distillation Step 2: LoRA SFT
+ Student: Qwen/Qwen2.5-1.5B-Instruct
+ Dataset: results/distill/teacher_outputs.jsonl
+ Job ID:  37093511
+ Node:    as03r4b13
+ Date:    2026-02-28T15:14:41Z
+=========================================
+NVIDIA H100, 65247 MiB
+NVIDIA H100, 65247 MiB
+NVIDIA H100, 65247 MiB
+NVIDIA H100, 65247 MiB
+Dataset lines: 2991
+{"ts": "2026-02-28 16:14:48,402", "level": "INFO", "logger": "__main__", "message": "Loading student model", "model": "Qwen/Qwen2.5-1.5B-Instruct"}
+trainable params: 73,859,072 || all params: 1,617,573,376 || trainable%: 4.5660
+{"ts": "2026-02-28 16:14:50,435", "level": "INFO", "logger": "__main__", "message": "Loaded training samples", "total_rows": 2991, "path": "results/distill/teacher_outputs.jsonl"}
+{"ts": "2026-02-28 16:14:55,868", "level": "INFO", "logger": "__main__", "message": "Dataset ready", "samples": 2991}
