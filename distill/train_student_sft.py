@@ -181,6 +181,7 @@ def run(
     model = AutoModelForCausalLM.from_pretrained(
         student_model,
         torch_dtype=torch.bfloat16 if tcfg.get("bf16", True) else torch.float16,
+        device_map="auto",
     )
 
     # ── LoRA ────────────────────────────────────────────────
@@ -195,6 +196,8 @@ def run(
         bias=lora_cfg.get("bias", "none"),
         task_type=TaskType.CAUSAL_LM,
     )
+    # Required for gradient checkpointing to work with PEFT/LoRA
+    model.enable_input_require_grads()
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
@@ -231,8 +234,9 @@ def run(
         report_to=log_cfg.get("report_to", "none"),
         seed=seed,
         remove_unused_columns=False,
-        dataloader_pin_memory=True,
-        dataloader_num_workers=4,
+        dataloader_pin_memory=False,
+        dataloader_num_workers=0,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
     )
 
     data_collator = DataCollatorForLanguageModeling(
