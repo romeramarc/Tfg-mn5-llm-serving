@@ -178,9 +178,17 @@ def run(
     if tokeniser.pad_token is None:
         tokeniser.pad_token = tokeniser.eos_token
 
+    # Detect actual GPU/bf16 support (login nodes have no GPU)
+    has_gpu = torch.cuda.is_available()
+    use_bf16 = tcfg.get("bf16", True) and has_gpu and torch.cuda.is_bf16_supported()
+    use_fp16 = tcfg.get("fp16", False) and has_gpu and not use_bf16
+    if not has_gpu:
+        logger.warning("No GPU detected — running in fp32 (smoke-test / CPU mode)")
+    load_dtype = torch.bfloat16 if use_bf16 else (torch.float16 if use_fp16 else torch.float32)
+
     model = AutoModelForCausalLM.from_pretrained(
         student_model,
-        torch_dtype=torch.bfloat16 if tcfg.get("bf16", True) else torch.float16,
+        dtype=load_dtype,
         device_map="auto",
     )
 
@@ -224,8 +232,8 @@ def run(
         lr_scheduler_type=tcfg.get("lr_scheduler_type", "cosine"),
         warmup_ratio=tcfg.get("warmup_ratio", 0.03),
         weight_decay=tcfg.get("weight_decay", 0.0),
-        fp16=tcfg.get("fp16", False),
-        bf16=tcfg.get("bf16", True),
+        fp16=use_fp16,
+        bf16=use_bf16,
         gradient_checkpointing=tcfg.get("gradient_checkpointing", True),
         logging_steps=log_cfg.get("logging_steps", 10),
         save_strategy=log_cfg.get("save_strategy", "steps"),
