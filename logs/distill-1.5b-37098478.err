@@ -1,0 +1,48 @@
+unload bsc/1.0 (PATH, MANPATH)
+unload UCX/1.15.0 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH) 
+remove mkl/2023.2.0 (LD_LIBRARY_PATH)
+remove impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+Set INTEL compilers as MPI wrappers backend
+load impi/2021.10.0 (PATH, MANPATH, LD_LIBRARY_PATH)
+load mkl/2023.2.0 (LD_LIBRARY_PATH)
+load SQLITE3/3.45.2 (PATH)
+load HDF5/1.14.1-2 (PATH, LD_LIBRARY_PATH, LIBRARY_PATH, C_INCLUDE_PATH,
+CPLUS_INCLUDE_PATH, HDF5_DIR, HDF5_ROOT,CFLAGS, CPPFLAGS, LDFLAGS) 
+load PYTHON/3.12.1 (PATH, MANPATH, LD_LIBRARY_PATH, LIBRARY_PATH,
+PKG_CONFIG_PATH, C_INCLUDE_PATH, CPLUS_INCLUDE_PATH, PYTHONHOME, PYTHONPATH) 
+unload SQLITE3/3.45.2 (PATH)
+load SQLITE3/3.45.2 (PATH)
+`torch_dtype` is deprecated! Use `dtype` instead!
+Map:   0%|          | 0/2991 [00:00<?, ? examples/s]Map:   3%|▎         | 88/2991 [00:00<00:03, 862.68 examples/s]Map:   6%|▋         | 189/2991 [00:00<00:02, 941.22 examples/s]Map:  10%|▉         | 298/2991 [00:00<00:02, 1006.01 examples/s]Map:  13%|█▎        | 402/2991 [00:00<00:02, 1013.29 examples/s]Map:  17%|█▋        | 507/2991 [00:00<00:02, 1010.96 examples/s]Map:  21%|██        | 614/2991 [00:00<00:02, 1028.89 examples/s]Map:  24%|██▍       | 717/2991 [00:00<00:02, 1025.83 examples/s]Map:  27%|██▋       | 822/2991 [00:00<00:02, 1028.53 examples/s]Map:  31%|███       | 927/2991 [00:00<00:01, 1032.64 examples/s]Map:  35%|███▌      | 1051/2991 [00:01<00:04, 470.86 examples/s]Map:  39%|███▉      | 1163/2991 [00:01<00:03, 572.48 examples/s]Map:  42%|████▏     | 1267/2991 [00:01<00:02, 657.96 examples/s]Map:  47%|████▋     | 1391/2991 [00:01<00:02, 703.79 examples/s]Map:  50%|████▉     | 1494/2991 [00:01<00:02, 695.93 examples/s]Map:  53%|█████▎    | 1596/2991 [00:02<00:02, 687.82 examples/s]Map:  57%|█████▋    | 1696/2991 [00:02<00:01, 677.35 examples/s]Map:  60%|██████    | 1803/2991 [00:02<00:01, 685.01 examples/s]Map:  63%|██████▎   | 1886/2991 [00:02<00:01, 643.88 examples/s]Map:  66%|██████▌   | 1976/2991 [00:02<00:01, 627.39 examples/s]Map:  69%|██████▊   | 2055/2991 [00:03<00:02, 336.02 examples/s]Map:  71%|███████   | 2116/2991 [00:03<00:02, 372.87 examples/s]Map:  73%|███████▎  | 2174/2991 [00:03<00:02, 405.75 examples/s]Map:  75%|███████▍  | 2231/2991 [00:03<00:01, 434.95 examples/s]Map:  77%|███████▋  | 2289/2991 [00:03<00:01, 463.82 examples/s]Map:  79%|███████▊  | 2348/2991 [00:03<00:01, 489.74 examples/s]Map:  80%|████████  | 2407/2991 [00:03<00:01, 511.31 examples/s]Map:  82%|████████▏ | 2466/2991 [00:03<00:00, 528.36 examples/s]Map:  84%|████████▍ | 2523/2991 [00:04<00:00, 538.02 examples/s]Map:  86%|████████▋ | 2581/2991 [00:04<00:00, 546.63 examples/s]Map:  88%|████████▊ | 2638/2991 [00:04<00:00, 550.23 examples/s]Map:  91%|█████████ | 2721/2991 [00:04<00:00, 547.34 examples/s]Map:  93%|█████████▎| 2783/2991 [00:04<00:00, 564.26 examples/s]Map:  95%|█████████▌| 2843/2991 [00:04<00:00, 572.78 examples/s]Map:  97%|█████████▋| 2902/2991 [00:04<00:00, 575.96 examples/s]Map:  99%|█████████▉| 2962/2991 [00:04<00:00, 581.19 examples/s]Map: 100%|██████████| 2991/2991 [00:05<00:00, 563.84 examples/s]
+  0%|          | 0/141 [00:00<?, ?it/s]`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/torch/utils/checkpoint.py:85: UserWarning: None of the inputs have requires_grad=True. Gradients will be None
+  warnings.warn(
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 292, in <module>
+    main()
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 288, in main
+    run(args.config, student_override=args.student, max_samples=args.max_samples)
+  File "/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving/distill/train_student_sft.py", line 253, in run
+    trainer.train()
+  File "/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/transformers/trainer.py", line 2325, in train
+    return inner_training_loop(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/transformers/trainer.py", line 2674, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/transformers/trainer.py", line 4071, in training_step
+    self.accelerator.backward(loss, **kwargs)
+  File "/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/accelerate/accelerator.py", line 2852, in backward
+    loss.backward(**kwargs)
+  File "/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/torch/_tensor.py", line 625, in backward
+    torch.autograd.backward(
+  File "/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/torch/autograd/__init__.py", line 354, in backward
+    _engine_run_backward(
+  File "/home/bsc/bsc381408/.venvs/tfg/lib/python3.12/site-packages/torch/autograd/graph.py", line 841, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
+  0%|          | 0/141 [00:08<?, ?it/s]
