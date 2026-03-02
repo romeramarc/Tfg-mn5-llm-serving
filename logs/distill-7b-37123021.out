@@ -1,0 +1,99 @@
+──────────────────────────────────────────────
+ENV SETUP COMPLETE
+  Date:            2026-03-01T11:12:03Z
+  Hostname:        as07r3b19
+  SLURM_JOB_ID:    37123021
+  Python:          Python 3.12.1
+  CUDA:            12.8
+  vLLM:            0.15.1
+  HF_HOME:         /gpfs/projects/bsc98/tbsc381408/hf_cache
+  Git commit:      5bee212
+──────────────────────────────────────────────
+
+index, name, memory.total [MiB], driver_version
+0, NVIDIA H100, 65247 MiB, 535.86.10
+1, NVIDIA H100, 65247 MiB, 535.86.10
+2, NVIDIA H100, 65247 MiB, 535.86.10
+3, NVIDIA H100, 65247 MiB, 535.86.10
+
+=========================================
+ Distillation Step 2: LoRA SFT
+ Student: Qwen/Qwen2.5-7B-Instruct
+ Dataset: results/distill/teacher_outputs.jsonl
+ Job ID:  37123021
+ Node:    as07r3b19
+ Date:    2026-03-01T11:12:12Z
+=========================================
+NVIDIA H100, 65247 MiB
+NVIDIA H100, 65247 MiB
+NVIDIA H100, 65247 MiB
+NVIDIA H100, 65247 MiB
+Dataset lines: 2991
+{"ts": "2026-03-01 12:12:21,642", "level": "INFO", "logger": "__main__", "message": "Loading student model", "model": "Qwen/Qwen2.5-7B-Instruct"}
+trainable params: 161,480,704 || all params: 7,777,097,216 || trainable%: 2.0764
+{"ts": "2026-03-01 12:12:37,847", "level": "INFO", "logger": "__main__", "message": "Loaded training samples", "total_rows": 2991, "path": "results/distill/teacher_outputs.jsonl"}
+{"ts": "2026-03-01 12:12:45,214", "level": "INFO", "logger": "__main__", "message": "Dataset ready", "samples": 2991}
+{"ts": "2026-03-01 12:12:45,706", "level": "INFO", "logger": "__main__", "message": "Starting SFT training", "student": "Qwen/Qwen2.5-7B-Instruct", "samples": 2991, "epochs": 3}
+{'loss': 0.5465, 'grad_norm': 0.12245229631662369, 'learning_rate': 0.00010588235294117647, 'epoch': 0.05}
+{'loss': 0.3836, 'grad_norm': 0.06592073291540146, 'learning_rate': 0.00019999332998034514, 'epoch': 0.11}
+{'loss': 0.3264, 'grad_norm': 0.044197045266628265, 'learning_rate': 0.0001997599727063717, 'epoch': 0.16}
+{'loss': 0.2913, 'grad_norm': 0.037717610597610474, 'learning_rate': 0.000199194003699501, 'epoch': 0.21}
+{'loss': 0.3233, 'grad_norm': 0.04810302332043648, 'learning_rate': 0.0001982973099683902, 'epoch': 0.27}
+{'loss': 0.3135, 'grad_norm': 0.0450783409178257, 'learning_rate': 0.00019707288119765623, 'epoch': 0.32}
+{'loss': 0.3263, 'grad_norm': 0.04106955975294113, 'learning_rate': 0.000195524799779908, 'epoch': 0.37}
+{'loss': 0.3089, 'grad_norm': 0.04659831151366234, 'learning_rate': 0.00019365822720455916, 'epoch': 0.43}
+{'loss': 0.2821, 'grad_norm': 0.03500668704509735, 'learning_rate': 0.0001914793868488021, 'epoch': 0.48}
+{'loss': 0.3076, 'grad_norm': 0.043157655745744705, 'learning_rate': 0.0001889955432281212, 'epoch': 0.53}
+{'loss': 0.2898, 'grad_norm': 0.03674476221203804, 'learning_rate': 0.00018621497777552507, 'epoch': 0.59}
+{'loss': 0.3013, 'grad_norm': 0.03289293497800827, 'learning_rate': 0.00018314696123025454, 'epoch': 0.64}
+{'loss': 0.2896, 'grad_norm': 0.049119994044303894, 'learning_rate': 0.000179801722728024, 'epoch': 0.7}
+{'loss': 0.292, 'grad_norm': 0.035863205790519714, 'learning_rate': 0.00017619041569585418, 'epoch': 0.75}
+{'loss': 0.2854, 'grad_norm': 0.03576922044157982, 'learning_rate': 0.00017232508066520702, 'epoch': 0.8}
+{'loss': 0.2914, 'grad_norm': 0.04063825309276581, 'learning_rate': 0.00016821860512740671, 'epoch': 0.86}
+{'loss': 0.2794, 'grad_norm': 0.04167185723781586, 'learning_rate': 0.00016388468056519612, 'epoch': 0.91}
+{'loss': 0.3082, 'grad_norm': 0.05132494494318962, 'learning_rate': 0.00015933775680368822, 'epoch': 0.96}
+{'loss': 0.2911, 'grad_norm': 0.0441952720284462, 'learning_rate': 0.00015459299383291345, 'epoch': 1.02}
+{'loss': 0.2508, 'grad_norm': 0.048011504113674164, 'learning_rate': 0.00014966621126259183, 'epoch': 1.07}
+{'loss': 0.2594, 'grad_norm': 0.044722236692905426, 'learning_rate': 0.00014457383557765386, 'epoch': 1.12}
+{'loss': 0.2662, 'grad_norm': 0.05046624317765236, 'learning_rate': 0.00013933284537036625, 'epoch': 1.18}
+{'loss': 0.2538, 'grad_norm': 0.04791879281401634, 'learning_rate': 0.00013396071473166613, 'epoch': 1.23}
+{'loss': 0.2607, 'grad_norm': 0.055170923471450806, 'learning_rate': 0.0001284753549904423, 'epoch': 1.28}
+{'loss': 0.2749, 'grad_norm': 0.05339057371020317, 'learning_rate': 0.0001228950549950134, 'epoch': 1.34}
+{'loss': 0.2699, 'grad_norm': 0.054080430418252945, 'learning_rate': 0.00011723842013591044, 'epoch': 1.39}
+{'loss': 0.2518, 'grad_norm': 0.04902613162994385, 'learning_rate': 0.00011152431031326978, 'epoch': 1.44}
+{'loss': 0.2661, 'grad_norm': 0.06927232444286346, 'learning_rate': 0.00010577177705566061, 'epoch': 1.5}
+{'loss': 0.2828, 'grad_norm': 0.06754407286643982, 'learning_rate': 0.0001, 'epoch': 1.55}
+{'loss': 0.2581, 'grad_norm': 0.06129443645477295, 'learning_rate': 9.422822294433939e-05, 'epoch': 1.6}
+{'loss': 0.2577, 'grad_norm': 0.053316690027713776, 'learning_rate': 8.847568968673026e-05, 'epoch': 1.66}
+{'loss': 0.265, 'grad_norm': 0.053023118525743484, 'learning_rate': 8.27615798640896e-05, 'epoch': 1.71}
+{'loss': 0.2593, 'grad_norm': 0.055041439831256866, 'learning_rate': 7.710494500498662e-05, 'epoch': 1.76}
+{'loss': 0.2791, 'grad_norm': 0.05792694166302681, 'learning_rate': 7.152464500955769e-05, 'epoch': 1.82}
+{'loss': 0.2601, 'grad_norm': 0.06869946420192719, 'learning_rate': 6.603928526833387e-05, 'epoch': 1.87}
+{'loss': 0.2567, 'grad_norm': 0.06504794210195541, 'learning_rate': 6.066715462963376e-05, 'epoch': 1.93}
+{'loss': 0.2491, 'grad_norm': 0.05437477305531502, 'learning_rate': 5.542616442234618e-05, 'epoch': 1.98}
+{'loss': 0.2612, 'grad_norm': 0.05367486923933029, 'learning_rate': 5.033378873740819e-05, 'epoch': 2.03}
+{'loss': 0.2309, 'grad_norm': 0.06211119517683983, 'learning_rate': 4.540700616708658e-05, 'epoch': 2.09}
+{'loss': 0.2124, 'grad_norm': 0.06285499781370163, 'learning_rate': 4.0662243196311815e-05, 'epoch': 2.14}
+{'loss': 0.2277, 'grad_norm': 0.06598299741744995, 'learning_rate': 3.6115319434803894e-05, 'epoch': 2.19}
+{'loss': 0.2499, 'grad_norm': 0.07846439629793167, 'learning_rate': 3.1781394872593295e-05, 'epoch': 2.25}
+{'loss': 0.2255, 'grad_norm': 0.07056687772274017, 'learning_rate': 2.7674919334793035e-05, 'epoch': 2.3}
+{'loss': 0.2283, 'grad_norm': 0.07146601378917694, 'learning_rate': 2.3809584304145827e-05, 'epoch': 2.35}
+{'loss': 0.2275, 'grad_norm': 0.07069113105535507, 'learning_rate': 2.0198277271976052e-05, 'epoch': 2.41}
+{'loss': 0.2391, 'grad_norm': 0.08419255912303925, 'learning_rate': 1.6853038769745467e-05, 'epoch': 2.46}
+{'loss': 0.2151, 'grad_norm': 0.07945190370082855, 'learning_rate': 1.3785022224474942e-05, 'epoch': 2.51}
+{'loss': 0.2317, 'grad_norm': 0.07434633374214172, 'learning_rate': 1.1004456771878835e-05, 'epoch': 2.57}
+{'loss': 0.2222, 'grad_norm': 0.06239207461476326, 'learning_rate': 8.520613151197898e-06, 'epoch': 2.62}
+{'loss': 0.2487, 'grad_norm': 0.07008138298988342, 'learning_rate': 6.34177279544087e-06, 'epoch': 2.67}
+{'loss': 0.2376, 'grad_norm': 0.07868307828903198, 'learning_rate': 4.475200220092002e-06, 'epoch': 2.73}
+{'loss': 0.2229, 'grad_norm': 0.07097918540239334, 'learning_rate': 2.9271188023437867e-06, 'epoch': 2.78}
+{'loss': 0.2254, 'grad_norm': 0.08232308179140091, 'learning_rate': 1.7026900316098215e-06, 'epoch': 2.83}
+{'loss': 0.2117, 'grad_norm': 0.06894266605377197, 'learning_rate': 8.059963004990234e-07, 'epoch': 2.89}
+{'loss': 0.2291, 'grad_norm': 0.07357121258974075, 'learning_rate': 2.400272936283088e-07, 'epoch': 2.94}
+{'loss': 0.2107, 'grad_norm': 0.07504385709762573, 'learning_rate': 6.670019654875237e-09, 'epoch': 2.99}
+{'train_runtime': 4503.2826, 'train_samples_per_second': 1.993, 'train_steps_per_second': 0.125, 'train_loss': 0.26990470518615367, 'epoch': 3.0}
+{"ts": "2026-03-01 13:27:49,817", "level": "INFO", "logger": "__main__", "message": "Training complete", "adapter_dir": "results/distill/sft-qwen2.5-7b-20260301T111215Z/final_adapter", "student": "Qwen/Qwen2.5-7B-Instruct"}
+
+=========================================
+ 7B SFT training complete.
+ Adapter: results/distill/sft-qwen2.5-7b-*/final_adapter/
+=========================================
