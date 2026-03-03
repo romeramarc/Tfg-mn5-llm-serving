@@ -1,0 +1,11 @@
+{
+  "total_examples": 1319,
+  "scorable_examples": 1312,
+  "unscorable_examples": 7,
+  "correct": 862,
+  "incorrect": 450,
+  "accuracy": 0.657012,
+  "accuracy_pct": 65.7,
+  "benchmark": "gsm8k",
+  "model": "results/distill/merged-qwen2.5-1.5b"
+}

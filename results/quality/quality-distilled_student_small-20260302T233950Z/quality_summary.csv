@@ -1,0 +1,4 @@
+total_examples,scorable_examples,unscorable_examples,correct,incorrect,accuracy,accuracy_pct,benchmark,model
+1319,1312,7,862,450,0.657012,65.7,gsm8k,results/distill/merged-qwen2.5-1.5b
+500,451,49,214,237,0.474501,47.45,math,results/distill/merged-qwen2.5-1.5b
+1172,1172,0,766,406,0.653584,65.36,arc_challenge,results/distill/merged-qwen2.5-1.5b
