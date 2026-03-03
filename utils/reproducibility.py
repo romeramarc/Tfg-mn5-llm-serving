@@ -20,6 +20,7 @@ import platform
 import random
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -31,13 +32,21 @@ import torch
 # ── Seed management ─────────────────────────────────────────
 
 def set_seed(seed: int) -> None:
-    """Set deterministic seeds for Python, NumPy, and PyTorch."""
+    """Set deterministic seeds for Python, NumPy, and PyTorch.
+
+    Also enables cuDNN deterministic mode and disables benchmark mode
+    to guarantee bit-exact reproducibility across runs.
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
+
+    # Force cuDNN determinism (slight perf cost, reproducibility gain)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 # ── Run directory ───────────────────────────────────────────
@@ -112,7 +121,7 @@ def collect_metadata(seed: int, config: Dict[str, Any]) -> Dict[str, Any]:
         if val is not None:
             meta[var.lower()] = val
 
-    # GPU details — names and VRAM
+    # GPU details — names, VRAM, and driver version
     if torch.cuda.is_available():
         meta["gpu_count"] = torch.cuda.device_count()
         gpu_info: List[Dict[str, Any]] = []
@@ -125,6 +134,27 @@ def collect_metadata(seed: int, config: Dict[str, Any]) -> Dict[str, Any]:
             })
         meta["gpus"] = gpu_info
         meta["gpu_names"] = [g["name"] for g in gpu_info]
+
+        # CUDA runtime + driver versions
+        meta["cuda_version"] = torch.version.cuda or "unknown"
+        try:
+            driver_out = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                stderr=subprocess.DEVNULL, text=True,
+            )
+            meta["cuda_driver_version"] = driver_out.strip().splitlines()[0]
+        except Exception:
+            meta["cuda_driver_version"] = "unknown"
+
+    # pip freeze — full package manifest for exact reproducibility
+    try:
+        pip_out = subprocess.check_output(
+            [sys.executable, "-m", "pip", "freeze", "--disable-pip-version-check"],
+            stderr=subprocess.DEVNULL, text=True, timeout=30,
+        )
+        meta["pip_freeze"] = pip_out.strip().splitlines()
+    except Exception:
+        meta["pip_freeze"] = []
 
     return meta
 

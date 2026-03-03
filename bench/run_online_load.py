@@ -186,13 +186,31 @@ def run(
     base_url = common.get("base_url", "http://localhost:8000")
     model = common.get("model", "")
     request_rates = ocfg.get("request_rates", [10])
-    num_requests = ocfg.get("num_requests", 500)
+    num_requests = ocfg.get("num_requests", 10000)
     max_tokens = ocfg.get("max_tokens", 256)
     temperature = ocfg.get("temperature", 0.0)
     timeout = ocfg.get("timeout_seconds", 120)
     concurrency = ocfg.get("concurrency", 64)
+    num_warmups = ocfg.get("num_warmups", 200)
 
     all_summaries: list[dict] = []
+
+    # ── Warm-up phase (results discarded) ───────────────────
+    if num_warmups > 0:
+        logger.info("Running warm-up requests (results discarded)",
+                     extra={"num_warmups": num_warmups})
+        _warmup = asyncio.run(_run_at_rate(
+            prompts, base_url, model,
+            request_rate=0,  # burst mode for fast warm-up
+            num_requests=num_warmups,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+            concurrency=concurrency,
+        ))
+        warmup_ok = sum(1 for r in _warmup if r["error"] is None)
+        logger.info("Warm-up complete",
+                     extra={"total": len(_warmup), "ok": warmup_ok})
 
     for rate in request_rates:
         logger.info("Starting online benchmark",

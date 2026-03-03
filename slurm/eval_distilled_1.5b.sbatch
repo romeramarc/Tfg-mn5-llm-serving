@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────
 # SLURM job — Post-distillation evaluation: distilled 1.5B student
 #   Serves the LoRA-merged 1.5B model with vLLM and runs the same
-#   3 benchmarks (GSM8K, MATH-500, ARC-Challenge) as Phase 1.
+#   2 benchmarks (GSM8K, MATH-500) as Phase 1.
 # ─────────────────────────────────────────────────────────────
 #SBATCH --job-name=eval-dist1.5b
 #SBATCH --output=logs/eval-distilled-1.5b-%j.out
@@ -91,7 +91,7 @@ echo "Server is healthy."
 
 # ── [4/4] Quality evaluation ────────────────────────────────
 echo ""
-echo "--- [4/4] Quality evaluation (GSM8K + MATH-500 + ARC-Challenge) ---"
+echo "--- [4/4] Quality evaluation (GSM8K + MATH-500) ---"
 python -m eval.run_quality \
     --config configs/eval.yaml \
     --model  "${MERGED_DIR}" \
@@ -102,6 +102,11 @@ echo "Quality evaluation done."
 kill "${SERVER_PID}" 2>/dev/null || true
 wait "${SERVER_PID}" 2>/dev/null || true
 echo "Server stopped."
+
+# ── Final GPU/VRAM snapshot ──────────────────────────────────
+echo ""
+echo "--- Final GPU state ---"
+nvidia-smi
 
 echo ""
 echo "========================================="

@@ -6,11 +6,41 @@
 #   Step 2  train_student_sft.py         →  LoRA adapter
 # ─────────────────────────────────────────────────────────────
 
+# ── KD benchmark prompts (TRAIN splits — no test-set leakage) ──
+# These are used ONLY for generating the KD dataset.
+# Evaluation uses eval.yaml which points to the TEST splits.
+benchmarks:
+  gsm8k:
+    enabled: true
+    dataset_name: "openai/gsm8k"
+    dataset_split: "train"               # 7 473 items (train split)
+    subset_size: null
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+
+  math:
+    enabled: true
+    dataset_name: "lighteval/MATH"       # full MATH corpus (train + test)
+    dataset_split: "train"               # ~7 500 items (train split)
+    subset_size: null
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+
 # ── Step 1: Teacher output generation ──────────────────────
 generation:
   teacher_base_url: "http://localhost:8000"
   teacher_model: "Qwen/Qwen2.5-14B-Instruct"
-  eval_config: "configs/eval.yaml"       # benchmark defs for prompts
+  eval_config: "configs/eval.yaml"       # fallback only — benchmarks above take priority
   extra_prompts_file: null               # optional: "configs/prompts.jsonl"
   output_file: "results/distill/teacher_outputs.jsonl"
 
@@ -43,6 +73,10 @@ training:
   gradient_checkpointing: true
   seed: 42
 
+  # Train / validation split for early stopping
+  val_ratio: 0.15                        # 15 % held-out for validation
+  early_stopping_patience: 3             # stop after 3 eval steps without improvement
+
   # LoRA (PEFT) settings
   lora:
     r: 64
@@ -58,5 +92,7 @@ training:
     logging_steps: 10
     save_strategy: "steps"
     save_steps: 200
-    eval_strategy: "no"
+    eval_strategy: "steps"               # evaluate every eval_steps
+    eval_steps: 50                       # evaluation frequency
+    load_best_model_at_end: true         # restore best checkpoint at end
     report_to: "none"

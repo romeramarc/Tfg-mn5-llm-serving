@@ -48,10 +48,11 @@ def _build_bench_cmd(cfg: dict, result_file: Path) -> list[str]:
         "--base-url", common.get("base_url", "http://localhost:8000"),
         "--model", common.get("model", ""),
         "--dataset-name", tp.get("dataset_name", "sharegpt"),
-        "--num-prompts", str(tp.get("num_prompts", 1000)),
+        "--num-prompts", str(tp.get("num_prompts", 10000)),
         "--request-rate", str(tp.get("request_rate", "inf")),
         "--seed", str(common.get("seed", 42)),
         "--result-filename", str(result_file),
+        "--num-warmups", str(tp.get("num_warmups", 200)),
     ]
 
     if tp.get("dataset_path"):

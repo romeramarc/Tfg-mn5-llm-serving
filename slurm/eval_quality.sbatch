@@ -67,6 +67,14 @@ kill "${SERVER_PID}" 2>/dev/null || true
 wait  "${SERVER_PID}" 2>/dev/null || true
 echo "Server stopped."
 
+# ── Final GPU/VRAM snapshot ──────────────────────────────────
+echo ""
+echo "--- Final GPU state ---"
+nvidia-smi
+echo "pip freeze:"
+pip freeze 2>/dev/null | head -60
+echo "..."
+
 echo ""
 echo "=========================================="
 echo " ${ROLE} quality eval complete."

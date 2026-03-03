@@ -219,10 +219,32 @@ def run(
         ds = ds.select(range(max_samples))
         logger.info("Smoke-test mode: dataset truncated",
                      extra={"max_samples": max_samples})
-    logger.info("Dataset ready", extra={"samples": len(ds)})
+
+    # ── Train / validation split ────────────────────────────
+    val_ratio = tcfg.get("val_ratio", 0.15)
+    if val_ratio > 0:
+        split = ds.train_test_split(test_size=val_ratio, seed=seed)
+        train_ds = split["train"]
+        val_ds = split["test"]
+        logger.info("Dataset split into train/val",
+                     extra={"train": len(train_ds), "val": len(val_ds),
+                            "val_ratio": val_ratio})
+    else:
+        train_ds = ds
+        val_ds = None
+        logger.info("Validation disabled (val_ratio=0)")
+
+    logger.info("Dataset ready", extra={"samples": len(train_ds)})
 
     # ── Training arguments ──────────────────────────────────
     log_cfg = tcfg.get("logging", {})
+
+    # Eval strategy: use eval_strategy from config, default to "steps" if val set exists
+    eval_strategy_default = "steps" if val_ds is not None else "no"
+    eval_strategy = log_cfg.get("eval_strategy", eval_strategy_default)
+    eval_steps = log_cfg.get("eval_steps", 50)
+    load_best = log_cfg.get("load_best_model_at_end", val_ds is not None)
+
     training_args = TrainingArguments(
         output_dir=str(run_dir / "checkpoints"),
         num_train_epochs=tcfg.get("num_train_epochs", 3),
@@ -238,7 +260,11 @@ def run(
         logging_steps=log_cfg.get("logging_steps", 10),
         save_strategy=log_cfg.get("save_strategy", "steps"),
         save_steps=log_cfg.get("save_steps", 200),
-        eval_strategy=log_cfg.get("eval_strategy", "no"),
+        eval_strategy=eval_strategy,
+        eval_steps=eval_steps if eval_strategy != "no" else None,
+        load_best_model_at_end=load_best,
+        metric_for_best_model="eval_loss" if load_best else None,
+        greater_is_better=False if load_best else None,
         report_to=log_cfg.get("report_to", "none"),
         seed=seed,
         remove_unused_columns=False,
@@ -251,16 +277,30 @@ def run(
         tokenizer=tokeniser, mlm=False,
     )
 
+    # ── Callbacks ────────────────────────────────────────────
+    callbacks = []
+    if load_best and val_ds is not None:
+        from transformers import EarlyStoppingCallback
+        early_stop_patience = tcfg.get("early_stopping_patience", 3)
+        callbacks.append(EarlyStoppingCallback(
+            early_stopping_patience=early_stop_patience,
+        ))
+        logger.info("Early stopping enabled",
+                     extra={"patience": early_stop_patience})
+
     # ── Trainer ─────────────────────────────────────────────
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=ds,
+        train_dataset=train_ds,
+        eval_dataset=val_ds,
         data_collator=data_collator,
+        callbacks=callbacks,
     )
 
     logger.info("Starting SFT training",
-                extra={"student": student_model, "samples": len(ds),
+                extra={"student": student_model, "samples": len(train_ds),
+                       "val_samples": len(val_ds) if val_ds else 0,
                        "epochs": tcfg.get("num_train_epochs", 3)})
     trainer.train()
 
@@ -277,7 +317,9 @@ def run(
         "student_model": student_model,
         "adapter_dir": str(final_dir),
         "dataset_path": dataset_path,
-        "num_train_samples": len(ds),
+        "num_train_samples": len(train_ds),
+        "num_val_samples": len(val_ds) if val_ds else 0,
+        "val_ratio": val_ratio,
         "epochs": tcfg.get("num_train_epochs", 3),
         "lora_r": lora_cfg.get("r", 64),
     }

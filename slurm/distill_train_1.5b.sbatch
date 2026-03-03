@@ -49,6 +49,14 @@ python -m distill.train_student_sft \
     --config configs/distill.yaml \
     --student "${STUDENT}"
 
+# ── Final GPU/VRAM snapshot ──────────────────────────────────
+echo ""
+echo "--- Final GPU state ---"
+nvidia-smi
+echo "pip freeze:"
+pip freeze 2>/dev/null | head -60
+echo "..."
+
 echo ""
 echo "========================================="
 echo " 1.5B SFT training complete."

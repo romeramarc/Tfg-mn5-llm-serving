@@ -6,16 +6,17 @@ endpoint and persist (prompt, response, metadata) triples as JSONL.
 
 The output file becomes the training dataset for the student SFT step.
 
-Prompts are sourced from the **same evaluation benchmarks** used in Phase 1
-(GSM8K, MATH-500, ARC-Challenge) to ensure that the distillation dataset
-exercises the exact capabilities we will evaluate.  A configurable
+**Train/test separation:**  Prompts are sourced from the **train** splits
+of each benchmark (GSM8K train, MATH train) to prevent data leakage.
+The *test* splits (GSM8K test, MATH-500) are reserved exclusively for
+post-distillation quality evaluation. A configurable
 ``extra_prompts_file`` can add supplementary prompts beyond the benchmarks.
 
 JSONL output schema (one record per line)::
 
     {
         "id":                     "<benchmark>-<index>",
-        "benchmark":              "gsm8k" | "math" | "arc_challenge" | "extra",
+        "benchmark":              "gsm8k" | "math" | "extra",
         "prompt":                 "<full prompt text>",
         "teacher_completion":     "<greedy teacher answer>",
         "teacher_model":          "Qwen/Qwen2.5-14B-Instruct",
@@ -61,7 +62,7 @@ logger = get_logger(__name__)
 # ── Prompt collection from benchmarks ───────────────────────
 
 def _collect_gsm8k_prompts(cfg: dict) -> List[Dict[str, Any]]:
-    """Collect prompts from GSM8K test set."""
+    """Collect prompts from GSM8K **train** set (avoids test-set leakage)."""
     from datasets import load_dataset
 
     bench = cfg.get("benchmarks", {}).get("gsm8k", {})
@@ -71,7 +72,7 @@ def _collect_gsm8k_prompts(cfg: dict) -> List[Dict[str, Any]]:
     ds = load_dataset(
         bench.get("dataset_name", "openai/gsm8k"),
         "main",
-        split=bench.get("dataset_split", "test"),
+        split=bench.get("dataset_split", "train"),  # TRAIN split for KD
     )
     template = bench.get("prompt_template",
         "Solve the following math problem step by step.\n"
@@ -92,7 +93,12 @@ def _collect_gsm8k_prompts(cfg: dict) -> List[Dict[str, Any]]:
 
 
 def _collect_math_prompts(cfg: dict) -> List[Dict[str, Any]]:
-    """Collect prompts from MATH-500 test set."""
+    """Collect prompts from MATH **train** set (avoids test-set leakage).
+
+    Uses ``lighteval/MATH`` train split (~7500 items) by default.
+    The eval-only ``HuggingFaceH4/MATH-500`` test split is reserved
+    exclusively for post-distillation quality evaluation.
+    """
     from datasets import load_dataset
 
     bench = cfg.get("benchmarks", {}).get("math", {})
@@ -100,8 +106,8 @@ def _collect_math_prompts(cfg: dict) -> List[Dict[str, Any]]:
         return []
 
     ds = load_dataset(
-        bench.get("dataset_name", "HuggingFaceH4/MATH-500"),
-        split=bench.get("dataset_split", "test"),
+        bench.get("dataset_name", "lighteval/MATH"),
+        split=bench.get("dataset_split", "train"),  # TRAIN split for KD
     )
     template = bench.get("prompt_template",
         "Solve the following mathematics problem.\n"
@@ -188,11 +194,14 @@ def _collect_extra_prompts(path: Optional[str]) -> List[Dict[str, Any]]:
 
 
 def collect_all_prompts(cfg: dict) -> List[Dict[str, Any]]:
-    """Gather prompts from all configured benchmark sources + extras."""
+    """Gather prompts from all configured benchmark TRAIN sources + extras.
+
+    Only GSM8K and MATH train splits are used for KD data generation.
+    ARC-Challenge is not used in this project's evaluation pipeline.
+    """
     all_prompts: List[Dict[str, Any]] = []
     all_prompts.extend(_collect_gsm8k_prompts(cfg))
     all_prompts.extend(_collect_math_prompts(cfg))
-    all_prompts.extend(_collect_arc_prompts(cfg))
 
     extra_path = cfg.get("generation", {}).get("extra_prompts_file")
     all_prompts.extend(_collect_extra_prompts(extra_path))
@@ -317,10 +326,22 @@ def run(config_path: str = "configs/distill.yaml",
     snapshot_configs([config_path, "configs/eval.yaml"], run_dir)
     save_metadata(collect_metadata(seed, cfg), run_dir)
 
-    # Load eval config for benchmark prompt templates
-    eval_cfg = load_yaml(gen.get("eval_config", "configs/eval.yaml"))
+    # Use distill config's own benchmarks (TRAIN splits) — NOT eval.yaml's
+    # test splits. This prevents data leakage between KD training data and
+    # evaluation test sets.
+    kd_benchmarks = cfg.get("benchmarks")
+    if kd_benchmarks:
+        # Use the distill config's benchmark definitions (train splits)
+        prompt_cfg = {"benchmarks": kd_benchmarks, "generation": gen}
+    else:
+        # Fallback: load eval config (legacy path — NOT recommended)
+        logger.warning(
+            "No 'benchmarks' section in distill.yaml; falling back to eval.yaml. "
+            "This may cause data leakage if eval.yaml uses test splits!"
+        )
+        prompt_cfg = load_yaml(gen.get("eval_config", "configs/eval.yaml"))
 
-    prompts = collect_all_prompts(eval_cfg)
+    prompts = collect_all_prompts(prompt_cfg)
     if max_samples is not None and max_samples > 0:
         prompts = prompts[:max_samples]
         logger.info("Smoke-test mode: truncated prompt list",

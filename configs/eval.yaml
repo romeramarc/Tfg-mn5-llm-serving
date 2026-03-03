@@ -49,7 +49,7 @@ benchmarks:
     answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
 
   arc_challenge:
-    enabled: true
+    enabled: false                 # not used in this project's evaluation pipeline
     dataset_name: "allenai/ai2_arc"
     dataset_config: "ARC-Challenge"   # 1172 MC science questions
     dataset_split: "test"

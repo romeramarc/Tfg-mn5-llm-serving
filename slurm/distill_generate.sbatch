@@ -1,9 +1,9 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────
 # SLURM job — Distillation Step 1: Generate teacher outputs
-#   Starts vLLM teacher → collects completions for all benchmark
-#   prompts (GSM8K + MATH-500 + ARC-Challenge) → saves JSONL.
-#   ~2991 prompts × greedy decode ≈ 2-3 h on 1×H100.
+#   Starts vLLM teacher → collects completions from TRAIN splits
+#   (GSM8K train + MATH train) → saves JSONL.
+#   ~15 000 prompts × greedy decode ≈ 3-4 h on 1×H100.
 # ─────────────────────────────────────────────────────────────
 #SBATCH --job-name=distill-gen
 #SBATCH --output=logs/distill-gen-%j.out
@@ -65,6 +65,14 @@ echo "Teacher generation done."
 kill "${SERVER_PID}" 2>/dev/null || true
 wait "${SERVER_PID}" 2>/dev/null || true
 echo "Server stopped."
+
+# ── Final GPU/VRAM snapshot ──────────────────────────────────
+echo ""
+echo "--- Final GPU state ---"
+nvidia-smi
+echo "pip freeze:"
+pip freeze 2>/dev/null | head -60
+echo "..."
 
 echo ""
 echo "========================================="

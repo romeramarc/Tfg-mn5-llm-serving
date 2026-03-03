@@ -14,7 +14,8 @@ throughput:
   # Fixed input/output lengths ensure reproducible, comparable runs.
   dataset_name: "random"              # sharegpt | sonnet | random
   dataset_path: null                  # not used for random dataset
-  num_prompts: 1000
+  num_prompts: 10000                  # 10 K for stable p99 estimation
+  num_warmups: 200                    # warm-up requests (JIT, KV cache, etc.)
   request_rate: "inf"                 # inf = closed-loop (max throughput)
   input_len: 512                      # prompt length in tokens
   output_len: 256                     # generation length in tokens
@@ -23,7 +24,8 @@ throughput:
 online:
   # Online load benchmark — async HTTP client
   prompts_file: "configs/prompts.jsonl"
-  num_requests: 500
+  num_requests: 10000                 # 10 K per rate level
+  num_warmups: 200                    # warm-up requests before measurement
   request_rates: [1, 5, 10, 20, 50]  # requests per second
   max_tokens: 256
   temperature: 0.0
