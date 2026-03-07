@@ -1,13 +1,10 @@
 % ─────────────────────────────────────────────────────────────
-%  phase1_report.tex
-%  Fase 1 — Líneas Base: Evaluación de Eficiencia y Calidad
-%  TFE: Knowledge Distillation y despliegue eficiente de LLMs
-%        en entornos de supercomputación
-%  Autor: Marc Romera
+%  Informe Completo TFE — Knowledge Distillation en MN5
+%  Marc Romera · BSC · Marzo 2026
 % ─────────────────────────────────────────────────────────────
 \documentclass[11pt,a4paper]{article}
 
-% ── Packages ────────────────────────────────────────────────
+% ── paquetes ────────────────────────────────────────────────
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}
@@ -18,1420 +15,1766 @@
 \usepackage{hyperref}
 \usepackage{geometry}
 \usepackage{caption}
-\usepackage{subcaption}
 \usepackage{tikz}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
-\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc, patterns, decorations.pathreplacing}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,
+                patterns,decorations.pathreplacing}
 \usepackage{float}
 \usepackage{enumitem}
 \usepackage{fancyhdr}
-\usepackage[scale=0.85]{sourcecodepro}
 \usepackage{listings}
+\usepackage{colortbl}
+\usepackage{multirow}
+\usepackage{mdframed}
 
 \geometry{margin=2.5cm}
-\hypersetup{colorlinks=true, linkcolor=blue!60!black, citecolor=green!50!black, urlcolor=blue!70!black}
+\hypersetup{colorlinks=true,linkcolor=blue!60!black,
+            urlcolor=blue!70!black}
 
-% ── Colours ─────────────────────────────────────────────────
-\definecolor{teacher}{HTML}{2563EB}    % blue
-\definecolor{midstud}{HTML}{16A34A}    % green
-\definecolor{smallstud}{HTML}{DC2626}  % red
-\definecolor{infrabg}{HTML}{F8FAFC}
+% ── colores ─────────────────────────────────────────────────
+\definecolor{teacher}{HTML}{2563EB}
+\definecolor{midstud}{HTML}{16A34A}
+\definecolor{smallstud}{HTML}{DC2626}
 \definecolor{codebg}{HTML}{F1F5F9}
+\definecolor{warnbg}{HTML}{FEF3C7}
+\definecolor{warnborder}{HTML}{D97706}
+\definecolor{okbg}{HTML}{DCFCE7}
+\definecolor{okborder}{HTML}{16A34A}
+\definecolor{infobg}{HTML}{EFF6FF}
+\definecolor{infoborder}{HTML}{2563EB}
 
-% ── Code listing style ──────────────────────────────────────
+% ── cajas ───────────────────────────────────────────────────
+\newmdenv[backgroundcolor=warnbg,linecolor=warnborder,
+          linewidth=1.5pt,roundcorner=4pt,
+          skipabove=8pt,skipbelow=8pt]{warningbox}
+\newmdenv[backgroundcolor=okbg,linecolor=okborder,
+          linewidth=1.5pt,roundcorner=4pt,
+          skipabove=8pt,skipbelow=8pt]{okbox}
+\newmdenv[backgroundcolor=infobg,linecolor=infoborder,
+          linewidth=1.5pt,roundcorner=4pt,
+          skipabove=8pt,skipbelow=8pt]{infobox}
+
+% ── listings ────────────────────────────────────────────────
 \lstset{
-  basicstyle=\ttfamily\small,
+  basicstyle=\ttfamily\footnotesize,
   backgroundcolor=\color{codebg},
-  frame=single,
-  rulecolor=\color{gray!30},
-  breaklines=true,
-  captionpos=b,
+  frame=single,rulecolor=\color{gray!30},
+  breaklines=true,captionpos=b,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{gray!60},
 }
 
-% ── Header / Footer ────────────────────────────────────────
-\pagestyle{fancy}
-\fancyhf{}
-\lhead{\small Fase 1 — Informe de Líneas Base}
-\rhead{\small Marc Romera — TFE 2025--2026}
+% ── encabezados ─────────────────────────────────────────────
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small Informe TFE --- Knowledge Distillation en MN5}
+\rhead{\small Marc Romera --- Marzo 2026}
 \cfoot{\thepage}
 
-% ════════════════════════════════════════════════════════════
+% ════════════════════════════════════════════════════════════
 \begin{document}
 
+% ── PORTADA ─────────────────────────────────────────────────
 \begin{titlepage}
 \centering
 \vspace*{3cm}
-{\Huge\bfseries Informe Técnico — Fases 1 y 2\\[0.3em]
-Líneas Base, Destilación de Conocimiento\\[0.2em]
-y Despliegue Eficiente de LLMs\par}
-\vspace{1.5cm}
-{\Large Knowledge Distillation y Despliegue Eficiente\\[0.2em]
-de Modelos de Lenguaje en Entornos de Supercomputación\par}
-\vspace{2cm}
+{\Huge\bfseries Informe T\'ecnico Completo\par}
+\vspace{0.6cm}
+{\LARGE Knowledge Distillation y Despliegue Eficiente\\[4pt]
+de Modelos de Lenguaje en Entornos\\[4pt]de Supercomputaci\'on\par}
+\vspace{2.5cm}
 {\large Marc Romera\par}
-\vspace{0.5cm}
-{\large Barcelona Supercomputing Center (BSC) — MareNostrum~5\par}
-\vspace{0.5cm}
+\vspace{0.4cm}
+{\large Barcelona Supercomputing Center (BSC)\\MareNostrum~5\par}
+\vspace{0.4cm}
 {\large Marzo 2026\par}
 \vfill
-{\small Este documento cubre de forma técnica y detallada la Fase~1
-(evaluación de eficiencia y calidad sobre modelos de referencia) y la Fase~2
-(destilación de conocimiento SFT+LoRA desde un teacher de 14B hacia estudiantes
-de 7B y 1.5B), incluyendo la arquitectura del código, configuraciones SLURM,
-metodologías de evaluación y resultados experimentales.}
+\begin{infobox}
+\small
+Este documento describe todo el trabajo experimental del TFE: los
+experimentos preliminares (exploratorios, con resultados reales), la
+auditor\'ia metodol\'ogica que identific\'o sus limitaciones, y el
+pipeline definitivo riguroso que est\'a actualmente en ejecuci\'on en
+MareNostrum~5. Se incluyen todos los par\'ametros, decisiones de
+dise\~no, scripts y resultados obtenidos hasta la fecha.
+\end{infobox}
 \end{titlepage}
 
 \tableofcontents
 \newpage
 
-% ════════════════════════════════════════════════════════════
-\section{Introducción}
+% ════════════════════════════════════════════════════════════
+\section{Introducci\'on}
 \label{sec:intro}
 
-Este informe documenta de forma técnica exhaustiva las dos primeras fases del
-trabajo de fin de estudios (TFE):
+Los modelos de lenguaje grandes (LLMs) han demostrado capacidades
+notables en tareas de razonamiento matem\'atico, generaci\'on de texto
+y resoluci\'on de problemas complejos. Sin embargo, su despliegue en
+producci\'on presenta un reto fundamental: los modelos m\'as capaces
+suelen ser tambi\'en los m\'as costosos de servir, tanto en latencia
+como en consumo de recursos GPU.
 
-\begin{itemize}
-  \item \textbf{Fase~1} establece líneas base de eficiencia y calidad sobre
-    tres modelos \textbf{Qwen2.5-Instruct} (14B, 7B y 1.5B) desplegados en
-    MareNostrum~5 mediante vLLM. Estas líneas base cuantifican tanto el
-    rendimiento de servicio (throughput y latencia) como la calidad de respuesta
-    (benchmarks GSM8K y MATH-500) de los modelos sin ninguna
-    adaptación posterior.
+\textbf{Knowledge Distillation (KD)} es una t\'ecnica que busca
+transferir el conocimiento de un modelo grande (teacher) a uno m\'as
+peque\~no (student). En la variante \emph{black-box} que empleamos, el
+student no necesita acceder a los pesos internos del teacher; basta con
+que aprenda a imitar sus respuestas de texto. Esto lo hace compatible
+con cualquier API de inferencia, incluida vLLM.
 
-  \item \textbf{Fase~2} aplica \emph{Knowledge Distillation} black-box: el
-    teacher Qwen2.5-14B genera 1819 respuestas greedy sobre los mismos benchmarks;
-    esas respuestas se usan como señal de entrenamiento para ajustar finamente
-    (SFT) a los dos estudiantes (7B y 1.5B) con adaptadores LoRA, y a
-    continuación se re-evalúan en los mismos benchmarks para cuantificar la
-    ganancia de calidad atribuible a la destilación.
-\end{itemize}
+\subsection{Hip\'otesis del TFE}
 
-El objetivo final es demostrar que un estudiante destilado puede recuperar una
-parte sustancial de la calidad del teacher a una fracción de su coste de servicio,
-habilitando despliegues eficientes en entornos de supercomputación con restricciones
-de memoria y tiempo de cómputo.
+La hip\'otesis central que gu\'ia este trabajo es la siguiente:
 
-\subsection{Modelos bajo evaluación}
+\begin{quote}
+\emph{Un modelo estudiante m\'as peque\~no, entrenado con las respuestas
+generadas por un teacher m\'as capaz mediante Supervised Fine-Tuning
+(SFT), puede recuperar una fracci\'on significativa de la calidad del
+teacher en benchmarks matem\'aticos, mientras conserva sus ventajas
+intr\'insecas de eficiencia: mayor throughput y menor latencia.}
+\end{quote}
+
+Para validar esta hip\'otesis dise\~namos un pipeline experimental
+completo que mide calidad (precisi\'on en benchmarks) y eficiencia
+(peticiones por segundo, latencia end-to-end) antes y despu\'es de la
+destilaci\'on.
+
+\subsection{Modelos seleccionados}
+
+Utilizamos tres modelos de la familia \textbf{Qwen2.5-Instruct}, todos
+disponibles en HuggingFace y capaces de ejecutarse en una \'unica GPU
+H100 de 80\,GB. La elecci\'on de esta familia se debe a que ofrece tres
+tama\~nos con arquitectura id\'entica, lo que permite una comparaci\'on
+limpia al variar \'unicamente el n\'umero de par\'ametros.
 
 \begin{table}[H]
 \centering
-\caption{Inventario de modelos — todas las variantes Qwen2.5-Instruct.}
+\caption{Modelos empleados en el estudio.}
 \label{tab:models}
-\begin{tabular}{@{}llccc@{}}
+\begin{tabular}{@{}llcc@{}}
 \toprule
-\textbf{Rol} & \textbf{ID HuggingFace} & \textbf{Parámetros} & \textbf{Dtype} & \textbf{GPUs} \\
+\textbf{Rol} & \textbf{Modelo (HuggingFace)} & \textbf{Par\'ams} & \textbf{Precision} \\
 \midrule
-Teacher       & \texttt{Qwen/Qwen2.5-14B-Instruct}  & 14\,B & bf16/auto & 1$\times$H100-80G \\
-Student (medio) & \texttt{Qwen/Qwen2.5-7B-Instruct}   & 7\,B  & bf16/auto & 1$\times$H100-80G \\
-Student (pequeño) & \texttt{Qwen/Qwen2.5-1.5B-Instruct} & 1.5\,B & bf16/auto & 1$\times$H100-80G \\
+Teacher         & \texttt{Qwen/Qwen2.5-14B-Instruct}  & 14\,B & bfloat16 \\
+Student medio   & \texttt{Qwen/Qwen2.5-7B-Instruct}   & 7\,B  & bfloat16 \\
+Student peque\~no & \texttt{Qwen/Qwen2.5-1.5B-Instruct} & 1.5\,B & bfloat16 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Infraestructura}
+El teacher de 14\,B par\'ametros es el m\'as capaz y sirve como
+referencia de calidad m\'axima. Los dos students (7\,B y 1.5\,B) son
+progresivamente m\'as r\'apidos pero menos precisos. El objetivo de la
+destilaci\'on es cerrar esa brecha de calidad sin perder velocidad.
 
-Todos los experimentos se ejecutan en \textbf{MareNostrum~5} (BSC), específicamente
-la partición \texttt{acc} equipada con aceleradores NVIDIA H100.
+\subsection{Infraestructura: MareNostrum~5}
+
+Todos los experimentos se ejecutan en el cl\'uster MareNostrum~5 del
+Barcelona Supercomputing Center (BSC). La partici\'on aceleradora
+proporciona nodos con GPUs NVIDIA H100 de 80\,GB (SXM5), procesadores
+Intel Sapphire Rapids, y almacenamiento paralelo GPFS.
 
 \begin{table}[H]
 \centering
-\caption{Entorno hardware y software.}
+\caption{Especificaciones del entorno de ejecuci\'on.}
 \label{tab:infra}
 \begin{tabular}{@{}ll@{}}
 \toprule
-GPU             & NVIDIA H100 80\,GB SXM5 (fases de evaluación/generación) \\
-GPU (training)  & NVIDIA H100 64\,GB (nodo exclusivo, 4$\times$ disponibles) \\
-CPU             & Intel Sapphire Rapids (40 cores/nodo) \\
-Memoria         & 256\,GB DDR5 \\
+\textbf{Componente} & \textbf{Especificaci\'on} \\
+\midrule
+GPU             & NVIDIA H100 80\,GB SXM5 \\
+CPU m\'inimo    & 20 cores por GPU (pol\'itica del cl\'uster) \\
+Memoria nodo    & 256\,GB DDR5 \\
+Almacenamiento  & GPFS: \texttt{/gpfs/scratch/bsc98/tbsc381408/} \\
+\midrule
 Python          & 3.12.1 \\
+PyTorch         & 2.9.1+cu128 \\
 vLLM            & 0.15.1 \\
 CUDA            & 12.8 \\
-PyTorch         & 2.x (desde wheel de vLLM) \\
-Transformers    & 4.x (HuggingFace) \\
-PEFT            & 0.x (LoRA adapters) \\
-Datasets        & HuggingFace \texttt{datasets} (carga automática desde Hub) \\
-SymPy           & 1.x (comparación simbólica en scoring) \\
-Planificador    & SLURM 23.x \\
+Planificador    & SLURM (QOS \texttt{acc\_bsccs}, m\'ax 48\,h/job) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Configuración del entorno (\texttt{env/setup\_env.sh}).}
-Cada job SLURM llama a \texttt{source env/setup\_env.sh} como primer paso.
-Este script activa el entorno virtual Python con todas las dependencias instaladas
-(\texttt{vllm}, \texttt{transformers}, \texttt{peft}, \texttt{datasets}, \texttt{sympy},
-etc.) y configura las variables de entorno necesarias (caché de modelos HuggingFace
-en \texttt{/gpfs/scratch/bsc98/}, rutas de proyecto, etc.).
+Una restricci\'on importante del cl\'uster es que cada GPU solicitada
+requiere al menos 20 CPUs (\texttt{--cpus-per-task=20}). Adem\'as, la
+QOS tiene un l\'imite de 48 horas por job, lo que obliga a dise\~nar
+pipelines que puedan completarse dentro de ese margen.
 
-% ════════════════════════════════════════════════════════════
-\section{Estructura del Proyecto y Arquitectura del Código}
-\label{sec:architecture-code}
+\subsection{Estructura del repositorio}
 
-El repositorio está organizado en módulos Python bien delimitados, scripts SLURM
-independientes por tarea, y ficheros de configuración YAML que parametrizan cada
-experimento. Esta organización permite reutilizar módulos (por ejemplo, el scoring
-es compartido por todos los benchmarks) y reproducir cualquier resultado con un
-simple \texttt{sbatch}.
-
-\subsection{Organización de módulos}
+El c\'odigo del proyecto est\'a organizado en m\'odulos independientes,
+cada uno con una responsabilidad clara:
 
 \begin{table}[H]
 \centering
-\caption{Módulos del proyecto y sus responsabilidades.}
+\caption{M\'odulos principales del repositorio.}
 \label{tab:modules}
-\begin{tabular}{@{}lp{9.5cm}@{}}
+\begin{tabular}{@{}lp{10cm}@{}}
 \toprule
-\textbf{Módulo/Directorio} & \textbf{Responsabilidad} \\
+\textbf{Directorio} & \textbf{Funci\'on} \\
 \midrule
-\texttt{bench/}            & Benchmarks de eficiencia: throughput offline y carga online con latencia por percentiles. \\
-\texttt{eval/}             & Evaluación de calidad: módulos por benchmark (GSM8K, MATH-500), motor de scoring y orquestador unificado. \\
-\texttt{distill/}          & Pipeline de destilación: generación de salidas del teacher y entrenamiento SFT+LoRA del estudiante. \\
-\texttt{serving/}          & Gestión del servidor vLLM: arranque, health check y utilidades de cliente HTTP. \\
-\texttt{configs/}          & Ficheros YAML de configuración: \texttt{distill.yaml}, \texttt{eval.yaml}, \texttt{benchmark.yaml}, \texttt{serving.yaml}, \texttt{models.yaml}. \\
-\texttt{utils/}            & Utilidades transversales: carga de YAML, logging estructurado, reproducibilidad (semillas, directorios de ejecución, snapshots de config). \\
-\texttt{slurm/}            & Scripts \texttt{.sbatch} para cada tarea: generación, entrenamiento, evaluación, benchmarks. \\
-\texttt{results/}          & Directorio de artefactos en tiempo de ejecución (creado automáticamente, no en git salvo JSONs de métricas). \\
-\texttt{logs/}             & Salidas SLURM (\texttt{.out}, \texttt{.err}) de todos los jobs. \\
+\texttt{bench/}    & Scripts de benchmark de eficiencia: throughput offline
+                     y latencia online con carga Poisson. \\
+\texttt{eval/}     & Evaluaci\'on de calidad: ejecuci\'on de GSM8K y
+                     MATH-500 contra el servidor vLLM, scoring con
+                     pipeline de tres etapas. \\
+\texttt{distill/}  & Pipeline de destilaci\'on: generaci\'on de outputs
+                     del teacher y entrenamiento SFT con LoRA del student. \\
+\texttt{serving/}  & Gesti\'on del servidor vLLM: arranque, healthcheck,
+                     parada y cliente HTTP. \\
+\texttt{routing/}  & Pol\'iticas de routing (teacher/student h\'ibrido):
+                     cascading, confidence-based, always-teacher. \\
+\texttt{configs/}  & Archivos YAML de configuraci\'on para cada m\'odulo. \\
+\texttt{env/}      & Script de bootstrap del entorno (\texttt{setup\_env.sh}):
+                     carga de m\'odulos, entorno virtual, cache HuggingFace. \\
+\texttt{utils/}    & Funciones auxiliares: semillas, directorios de run
+                     con timestamp, recogida de metadata. \\
+\texttt{slurm/}    & Scripts \texttt{.sbatch} y launcher de cadena. \\
+\texttt{results/}  & Artefactos generados: JSON de m\'etricas, adaptadores
+                     LoRA, outputs del teacher. \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Sistema de reproducibilidad (\texttt{utils/reproducibility.py})}
+\subsubsection{Detalle de archivos por m\'odulo}
 
-Toda ejecución crea un \textbf{directorio de run} con timestamp UTC bajo
-\texttt{results/<subsistema>/}, mediante \texttt{make\_run\_dir(base, tag)}.
-La función \texttt{snapshot\_configs} copia todos los YAMLs activos al directorio
-de run.  \texttt{collect\_metadata} registra en \texttt{metadata.json}: hostname,
-nombre y memoria de GPU, versión de CUDA, versión de Python, git SHA, semilla
-aleatoria y hashes de los ficheros de config.  \texttt{set\_seed(seed)} fija las
-semillas de Python \texttt{random}, NumPy y PyTorch (incluyendo
-\texttt{cuda.manual\_seed\_all}).
+A continuaci\'on se describe la funci\'on espec\'ifica de cada archivo
+Python del proyecto. Esta secci\'on sirve como referencia para entender
+qu\'e se ejecuta exactamente en cada fase del pipeline.
 
-\begin{lstlisting}[caption={Estructura de un directorio de run típico.}]
-results/quality/quality-teacher-20260228T143200Z/
-  metadata.json          # hardware, git SHA, semilla, hashes config
-  eval.yaml              # snapshot config de evaluación
-  serving.yaml           # snapshot config de servicio
-  models.yaml            # snapshot registro de modelos
-  gsm8k/
-    gsm8k_results.jsonl  # predicciones por item
-    gsm8k_metrics.json   # {accuracy, correct, total, ...}
-    gsm8k_metrics.csv
-  math/
-    math_results.jsonl
-    math_metrics.json
-  quality_summary.json   # todos los benchmarks agregados
-  quality_summary.csv
+\paragraph{M\'odulo \texttt{serving/} --- Servidor vLLM.}
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{start\_server.py}: Entry-point que carga
+    \texttt{serving.yaml} y \texttt{models.yaml}, resuelve el modelo
+    seg\'un el rol (teacher/student\_mid/student\_small), genera metadata
+    estructurada (timestamp, SLURM job ID, GPU, git hash) y lanza
+    \texttt{vllm serve} v\'ia \texttt{os.execvp}. El servidor expone
+    endpoints OpenAI-compatibles: \texttt{/v1/completions},
+    \texttt{/v1/chat/completions} y \texttt{/health}.
+  \item \texttt{healthcheck.py}: Polling HTTP con reintentos
+    configurables (120 reintentos $\times$ 5\,s = hasta 10 minutos
+    esperando). Verifica que el endpoint \texttt{/health} responda OK
+    antes de continuar con los benchmarks.
+  \item \texttt{server\_utils.py}: Funciones auxiliares para construir
+    el comando \texttt{vllm serve} y recoger metadata del servidor.
+\end{itemize}
+
+\paragraph{M\'odulo \texttt{eval/} --- Evaluaci\'on de calidad.}
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{run\_quality.py}: Orquestador principal que carga
+    \texttt{eval.yaml}, itera sobre los benchmarks habilitados (GSM8K,
+    MATH-500), env\'ia cada problema al servidor y recoge las respuestas.
+  \item \texttt{gsm8k.py}: Carga el dataset \texttt{openai/gsm8k} desde
+    HuggingFace, construye los prompts con la plantilla de
+    \texttt{eval.yaml}, y extrae la respuesta final del marcador
+    \texttt{\#\#\#\#}.
+  \item \texttt{math\_eval.py}: An\'alogo para MATH-500, extrayendo
+    la respuesta de \texttt{\textbackslash boxed\{\}}.
+  \item \texttt{scoring.py}: Pipeline de scoring en tres etapas
+    (normalizaci\'on num\'erica $\to$ SymPy $\to$ string exacto).
+  \item \texttt{arc\_eval.py}: Evaluador para ARC-Challenge
+    (desactivado en el pipeline actual).
+  \item \texttt{routerbench.py}: Evaluador para RouterBench
+    (desactivado, reemplazado por ARC-Challenge).
+\end{itemize}
+
+\paragraph{M\'odulo \texttt{bench/} --- Benchmarks de eficiencia.}
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{run\_throughput.py}: Benchmark de throughput offline.
+    Invoca \texttt{vllm bench serve} con las opciones configuradas en
+    \texttt{benchmark.yaml} (dataset random, input\_len=512,
+    output\_len=256, 10\,000 peticiones + 200 warmup). Resultados se
+    guardan en \texttt{results/throughput/}.
+  \item \texttt{run\_online\_load.py}: Benchmark de latencia con carga
+    Poisson. Env\'ia peticiones a m\'ultiples tasas ($\lambda = 1, 5,
+    10, 20, 50$\,req/s) usando un cliente HTTP as\'incrono con
+    concurrencia 64.
+  \item \texttt{metrics.py}: C\'alculo de m\'etricas agregadas
+    (req/s, p50, p95, p99, TTFB).
+  \item \texttt{parse\_results.py}: Conversi\'on de resultados a JSON
+    estructurado.
+\end{itemize}
+
+\paragraph{M\'odulo \texttt{distill/} --- Destilaci\'on.}
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{generate\_teacher\_outputs.py}: Env\'ia cada problema
+    de los TRAIN splits (GSM8K train: 7\,473 + MATH train:
+    $\sim$7\,500) al teacher v\'ia vLLM. Almacena prompt, respuesta
+    completa, par\'ametros de generaci\'on, latencia y motivo de parada
+    en formato JSONL.
+  \item \texttt{train\_student\_sft.py}: Entrenamiento SFT con LoRA.
+    Carga el dataset de teacher outputs, aplica completion-only masking
+    (labels $-$100 para tokens del prompt), divide 85/15 en train/val,
+    entrena con early stopping (patience=3) y guarda el mejor checkpoint.
+  \item \texttt{dataset\_utils.py}: Preprocesamiento del dataset:
+    tokenizaci\'on, padding, construcci\'on de labels con masking.
+  \item \texttt{preflight.py}: Verificaciones pre-entrenamiento:
+    existencia de archivos, GPU disponible, espacio en disco.
+\end{itemize}
+
+\paragraph{M\'odulo \texttt{routing/} --- Routing h\'ibrido.}
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{router.py}: L\'ogica central del router que decide
+    si una petici\'on va al teacher o al student.
+  \item \texttt{policies.py}: Implementaci\'on de las tres pol\'iticas:
+    \texttt{always\_teacher}, \texttt{cascading} (student con fallback
+    si timeout) y \texttt{confidence} (basada en logprobs con umbral).
+  \item \texttt{confidence.py}: C\'alculo de confianza a partir de
+    logprobs: entrop\'ia normalizada y max\_logprob.
+\end{itemize}
+
+\paragraph{M\'odulo \texttt{env/} --- Bootstrap del entorno.}
+El archivo \texttt{setup\_env.sh} es cr\'itico y se ejecuta al inicio
+de \textbf{cada job SLURM}. Realiza las siguientes operaciones en orden:
+
+\begin{enumerate}
+  \item \textbf{Carga de m\'odulos}: \texttt{module purge} seguido de
+    \texttt{intel}, \texttt{impi}, \texttt{mkl}, \texttt{sqlite3},
+    \texttt{hdf5}, \texttt{python/3.12.1}.
+  \item \textbf{Limpieza de PYTHONPATH}: se elimina para evitar que el
+    PyTorch del sistema (2.3) enmascare al del venv (2.9).
+  \item \textbf{Activaci\'on del venv}: ubicado en
+    \texttt{\$HOME/.venvs/tfg}.
+  \item \textbf{Resoluci\'on de conflictos de librer\'ias}: prepone
+    \texttt{torch/lib} a \texttt{LD\_LIBRARY\_PATH} y usa
+    \texttt{LD\_PRELOAD} para forzar las versiones correctas de
+    \texttt{libc10.so}, \texttt{libtorch.so} y
+    \texttt{libtorch\_cpu.so}.
+  \item \textbf{Cache de HuggingFace}: apunta a
+    \texttt{/gpfs/projects/bsc98/tbsc381408/hf\_cache/} para evitar
+    llenar la cuota de HOME.
+  \item \textbf{Modo offline}: en nodos de c\'omputo (sin internet)
+    activa \texttt{HF\_HUB\_OFFLINE=1}.
+\end{enumerate}
+
+\subsection{Archivos de configuraci\'on}
+\label{sec:configs}
+
+Toda la parametrizaci\'on del pipeline se centraliza en archivos YAML
+en el directorio \texttt{configs/}. Ning\'un script Python codifica
+par\'ametros directamente; todos se leen de estos archivos.
+
+\subsubsection{\texttt{configs/models.yaml} --- Registro de modelos}
+
+Define los tres modelos del estudio m\'as uno de desarrollo:
+
+\begin{lstlisting}[language={},caption={Extracto de models.yaml}]
+teacher:
+  name: "Qwen/Qwen2.5-14B-Instruct"
+  dtype: "auto"              # resuelve a bfloat16 en H100
+  tensor_parallel_size: 1    # 14B cabe en 1 H100-80G
+
+student_mid:
+  name: "Qwen/Qwen2.5-7B-Instruct"
+  tensor_parallel_size: 1
+
+student_small:
+  name: "Qwen/Qwen2.5-1.5B-Instruct"
+  tensor_parallel_size: 1
 \end{lstlisting}
 
-\subsection{Ficheros de configuración YAML}
+\subsubsection{\texttt{configs/serving.yaml} --- Configuraci\'on del servidor vLLM}
 
-\paragraph{\texttt{configs/distill.yaml} — configuración del pipeline de destilación.}
-\begin{lstlisting}[language={}, caption={Extracto de configs/distill.yaml.}]
+Par\'ametros del motor de inferencia:
+
+\begin{lstlisting}[language={},caption={Extracto de serving.yaml}]
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+vllm:
+  tensor_parallel_size: 1
+  max_model_len: 4096         # contexto maximo en tokens
+  gpu_memory_utilization: 0.90  # 90% de los 80GB del H100
+  max_num_seqs: 256           # batch maximo concurrente
+  swap_space: 4               # 4 GiB de swap CPU por GPU
+  seed: 42
+\end{lstlisting}
+
+El par\'ametro \texttt{gpu\_memory\_utilization: 0.90} reserva el 90\%
+de la VRAM del H100 (72\,GB de 80\,GB) para el KV-cache y los pesos
+del modelo, dejando un 10\% de margen para evitar OOM.
+
+\subsubsection{\texttt{configs/benchmark.yaml} --- Configuraci\'on de benchmarks}
+
+\begin{lstlisting}[language={},caption={Extracto de benchmark.yaml}]
+throughput:
+  dataset_name: "random"      # dataset sintetico reproducible
+  num_prompts: 10000          # 10K peticiones por run
+  num_warmups: 200            # descartadas antes de medir
+  request_rate: "inf"         # closed-loop (max throughput)
+  input_len: 512              # tokens de entrada por peticion
+  output_len: 256             # tokens de salida por peticion
+
+online:
+  num_requests: 10000
+  num_warmups: 200
+  request_rates: [1, 5, 10, 20, 50]  # req/s (Poisson)
+  max_tokens: 256
+  concurrency: 64             # clientes HTTP simultaneos
+\end{lstlisting}
+
+El uso de \texttt{dataset\_name: "random"} evita la necesidad de
+descargar ShareGPT en nodos de login y garantiza longitudes de prompt
+fijas (512 tokens), haciendo los resultados comparables entre modelos.
+
+\subsubsection{\texttt{configs/eval.yaml} --- Configuraci\'on de evaluaci\'on}
+
+Define los benchmarks de calidad con sus plantillas de prompt:
+
+\begin{lstlisting}[language={},caption={Extracto de eval.yaml}]
+benchmarks:
+  gsm8k:
+    dataset_name: "openai/gsm8k"
+    dataset_split: "test"     # 1.319 items
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+      Question: {question}
+      Answer:
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+
+  math:
+    dataset_name: "HuggingFaceH4/MATH-500"
+    dataset_split: "test"     # 500 items
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{}.
+      Problem: {problem}
+      Solution:
+
+request:
+  batch_size: 16              # peticiones concurrentes
+  timeout_seconds: 180
+\end{lstlisting}
+
+\subsubsection{\texttt{configs/distill.yaml} --- Configuraci\'on de destilaci\'on}
+
+Configura tanto la generaci\'on de outputs como el entrenamiento SFT:
+
+\begin{lstlisting}[language={},caption={Extracto de distill.yaml}]
+benchmarks:
+  gsm8k:
+    dataset_split: "train"    # 7.473 items (NO test)
+  math:
+    dataset_name: "lighteval/MATH"
+    dataset_split: "train"    # ~7.500 items (NO test)
+
+generation:
+  max_tokens: 1024
+  temperature: 0.0            # greedy (hard-label KD)
+  batch_size: 32
+
 training:
-  student_model: "Qwen/Qwen2.5-7B-Instruct"
-  dataset_path:  "results/distill/teacher_outputs.jsonl"
-  output_dir:    "results/distill"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4  # effective batch = 16
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.03
+  max_seq_length: 2048
+  bf16: true
+  val_ratio: 0.15             # 15% validacion
+  early_stopping_patience: 3
+
   lora:
     r: 64
     lora_alpha: 16
     lora_dropout: 0.05
     target_modules: [q_proj, k_proj, v_proj, o_proj,
                      gate_proj, up_proj, down_proj]
-  num_train_epochs: 3
-  per_device_train_batch_size: 4
-  gradient_accumulation_steps: 4    # batch efectivo = 16
-  learning_rate: 2.0e-4
-  lr_scheduler_type: cosine
-  warmup_ratio: 0.03
-  max_seq_length: 2048
-  bf16: true
-  gradient_checkpointing: true
-  seed: 42
 \end{lstlisting}
 
-\paragraph{\texttt{configs/eval.yaml} — configuración de la evaluación de calidad.}
-Habilita/deshabilita benchmarks, especifica la URL del servidor vLLM, los datasets
-HuggingFace, plantillas de prompt y parámetros de generación
-(\texttt{temperature: 0.0}, \texttt{top\_p: 1.0}, \texttt{max\_tokens: 1024}).
+\subsubsection{\texttt{configs/routing.yaml} --- Configuraci\'on de routing}
 
-\paragraph{\texttt{configs/benchmark.yaml} — configuración de benchmarks de eficiencia.}
-Define la URL del servidor, número de prompts (\texttt{num\_prompts: 1000}),
-tasa de petición (\texttt{request\_rate: inf} para throughput, lista de tasas
-para online), longitudes de entrada/salida, y el directorio de resultados.
+Define las pol\'iticas de routing entre teacher y student:
 
-% ════════════════════════════════════════════════════════════
-\section{Fase 1A — Líneas Base de Eficiencia}
-\label{sec:efficiency}
+\begin{lstlisting}[language={},caption={Extracto de routing.yaml}]
+active_policy: "confidence"
 
-\subsection{Metodología}
-
-La eficiencia se mide en dos ejes ortogonales que cubren los dos modos
-principales de uso de LLMs en producción:
-
-\begin{enumerate}[leftmargin=2em]
-  \item \textbf{Rendimiento máximo (offline):}
-    Se envía un lote sostenido de 1000 peticiones ($\sim$150 tokens de entrada,
-    256 tokens de salida cada una) tan rápido como sea posible (\texttt{request\_rate=inf}).
-    La métrica es \emph{peticiones completadas por segundo} ($\text{req}/\text{s}$).
-    Esto simula el caso de uso de procesamiento por lotes donde la latencia
-    por petición individual no importa pero la productividad total es crítica.
-
-  \item \textbf{Latencia online bajo carga:}
-    Un flujo de peticiones distribuido según un proceso de Poisson a tasa
-    $\lambda = 10\,\text{req/s}$ se sostiene durante 120 segundos. Las métricas
-    reportadas son percentiles de latencia end-to-end (p50, p95, p99) y
-    time-to-first-byte (TTFB p50). Esto simula el caso de uso interactivo con
-    usuarios concurrentes.
-\end{enumerate}
-
-Todos los experimentos usan un servidor vLLM dedicado en un nodo H100 exclusivo.
-
-\subsection{Módulo \texttt{bench/run\_throughput.py}}
-
-Este script implementa el benchmark de rendimiento máximo invocando la herramienta
-oficial \texttt{vllm bench serve} como subproceso. La función \texttt{\_build\_bench\_cmd}
-construye la invocación de CLI con los parámetros leídos de \texttt{configs/benchmark.yaml}:
-
-\begin{lstlisting}[language=Python, caption={Construcción del comando vllm bench serve.}]
-cmd = [
-    "vllm", "bench", "serve",
-    "--base-url", "http://localhost:8000",
-    "--model",    model_id,
-    "--dataset-name", "sharegpt",
-    "--num-prompts",  str(1000),      # 1000 peticiones en lote
-    "--request-rate", "inf",          # tan rapido como sea posible
-    "--result-filename", str(result_file),
-]
+policies:
+  cascading:
+    student_timeout_ms: 3000   # fallback a teacher si >3s
+  confidence:
+    logprobs_top_k: 5
+    confidence_threshold: 0.70 # si <70% confianza -> teacher
+    fallback_method: "entropy"
 \end{lstlisting}
 
-\noindent El script crea un directorio de run con timestamp
-(\texttt{results/throughput/throughput-<role>-<ts>/}), ejecuta el comando,
-parsea la salida JSON y guarda las métricas en JSON y CSV junto al snapshot
-de la configuración activa. La función \texttt{parse\_json\_result} del módulo
-\texttt{bench/parse\_results.py} extrae el campo \texttt{request\_throughput} (req/s)
-y otros campos del fichero de resultados generado por vLLM.
+% ════════════════════════════════════════════════════════════
+\section{Sistema de evaluaci\'on}
+\label{sec:eval-system}
 
-\subsection{Módulo \texttt{bench/run\_online\_load.py}}
+Antes de describir los experimentos, conviene entender qu\'e medimos y
+c\'omo lo medimos. Nuestro sistema de evaluaci\'on contempla dos ejes
+complementarios: \textbf{calidad} (precisi\'on en tareas matem\'aticas)
+y \textbf{eficiencia} (velocidad de inferencia).
 
-El benchmark de carga online implementa un \textbf{cliente HTTP asíncrono}
-basado en \texttt{httpx.AsyncClient} con llegadas Poisson. La función
-\texttt{\_send\_request} mide con precisión de nanosegundo el TTFB (primer
-chunk recibido) y la latencia end-to-end vía streaming:
+\subsection{Evaluaci\'on de calidad}
 
-\begin{lstlisting}[language=Python, caption={Medición de TTFB y latencia en run\_online\_load.py.}]
-t_start = time.perf_counter()
-ttfb: Optional[float] = None
-
-async with client.stream("POST", url, json=payload) as resp:
-    async for chunk in resp.aiter_bytes():
-        if ttfb is None:         # primer byte recibido
-            ttfb = (time.perf_counter() - t_start) * 1000.0  # ms
-        chunks.append(chunk)
-
-latency_ms = (time.perf_counter() - t_start) * 1000.0
-\end{lstlisting}
-
-\noindent Las llegadas se generan con distribución exponencial
-(\texttt{numpy.random.exponential(1/lambda)}) para modelar un proceso de Poisson
-con $\lambda = 10\,\text{req/s}$. Los percentiles se calculan mediante
-\texttt{bench/metrics.py::summarise\_latencies} usando \texttt{numpy.percentile}.
-
-\subsection{Jobs SLURM de eficiencia}
-
-Cada modelo se mide con dos jobs SLURM:
-\begin{itemize}
-  \item \texttt{slurm/bench\_throughput.sbatch}: lanza el servidor vLLM, espera
-    \texttt{/health}, ejecuta \texttt{bench/run\_throughput.py}, detiene el servidor.
-    Tiempo asignado: 2h, 1$\times$H100, nodo exclusivo.
-  \item \texttt{slurm/online\_load.sbatch}: lanza el servidor, espera \texttt{/health},
-    ejecuta \texttt{bench/run\_online\_load.py} a $\lambda=10$, detiene el servidor.
-    Tiempo asignado: 1h, 1$\times$H100, nodo exclusivo.
-\end{itemize}
-
-\noindent La exclusividad del nodo (\texttt{--exclusive}) garantiza ausencia de
-interferencias de otros procesos sobre el acelerador, esencial para la
-reproducibilidad de los benchmarks de latencia.
-
-\subsection{Configuración del servidor vLLM}
+Medimos la calidad con dos benchmarks matem\'aticos est\'andar,
+elegidos por cubrir un espectro de dificultad: desde aritm\'etica
+escolar (GSM8K) hasta problemas de competici\'on matem\'atica
+(MATH-500):
 
 \begin{itemize}[leftmargin=2em]
-  \item \texttt{max\_model\_len = 4096}
-  \item \texttt{gpu\_memory\_utilization = 0.90}
-  \item \texttt{max\_num\_seqs = 256} (concurrencia máxima de secuencias en vuelo)
-  \item \texttt{tensor\_parallel\_size = 1} (un solo GPU)
-  \item \texttt{dtype = auto} (bfloat16 en H100)
+  \item \textbf{GSM8K} (\texttt{openai/gsm8k}): 1\,319 problemas de
+    aritm\'etica y razonamiento b\'asico. Las respuestas son n\'umeros
+    precedidos del marcador \texttt{\#\#\#\#}.
+  \item \textbf{MATH-500} (\texttt{HuggingFaceH4/MATH-500}): 500 problemas
+    de \'algebra, c\'alculo, teor\'ia de n\'umeros y geometr\'ia. Las
+    respuestas van dentro de \texttt{\textbackslash boxed\{\}}.
 \end{itemize}
 
-\subsection{Resultados de Rendimiento}
+Para cada problema, se env\'ia al modelo un prompt con instrucciones
+para razonar paso a paso. Se usa decodificaci\'on \textbf{greedy}
+(\texttt{temperature=0}, \texttt{top\_p=1}, \texttt{max\_tokens=1024},
+\texttt{seed=42}) para garantizar determinismo.
+
+\paragraph{Motor de scoring.}
+Comparar la predicci\'on con la referencia no es trivial: un modelo
+podr\'ia responder \texttt{"3/4"} cuando la referencia es
+\texttt{"0.75"}, o \texttt{"\$1,200"} cuando la referencia es
+\texttt{"1200"}. Por eso nuestro scoring usa un pipeline de tres etapas
+(Figura~\ref{fig:scoring}):
+
+\begin{enumerate}
+  \item \textbf{Normalizaci\'on num\'erica:} elimina s\'imbolos
+    (\$, \%, comas), convierte a \texttt{float} y compara con
+    tolerancia $10^{-6}$.
+  \item \textbf{Comparaci\'on simb\'olica (SymPy):} si la etapa
+    anterior falla, se parsean ambas expresiones con SymPy y se
+    comprueba si $\text{simplify}(p - r) = 0$.
+  \item \textbf{Comparaci\'on string exacta:} \'ultimo recurso, se
+    normalizan espacios y se comparan como texto.
+\end{enumerate}
+
+Si cualquiera de las tres etapas declara que la predicci\'on coincide,
+se cuenta como correcta. Esto minimize los falsos negativos.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=3pt, fill=blue!5,
+                minimum width=4cm, minimum height=0.8cm,
+                align=center, font=\small},
+    ok/.style={font=\small\bfseries, text=okborder},
+    fail/.style={font=\small\bfseries, text=red!60!black},
+    arr/.style={-{Stealth[length=2.5mm]}, thick},
+]
+    \node[box] (s1) at (0,0) {1. Normalizaci\'on num\'erica};
+    \node[box] (s2) at (0,-1.8) {2. SymPy: simplify(p$-$r)==0};
+    \node[box] (s3) at (0,-3.6) {3. Comparaci\'on string};
+
+    \node[ok]   (ok1) at (5, 0)   {Correcto};
+    \node[ok]   (ok2) at (5,-1.8) {Correcto};
+    \node[ok]   (ok3) at (5,-3.6) {Correcto};
+    \node[fail] (ko)  at (5,-4.8) {Incorrecto};
+
+    \draw[arr] (s1.east) -- node[above,font=\scriptsize]{coincide} (ok1);
+    \draw[arr] (s1.south) -- node[right,font=\scriptsize]{no} (s2.north);
+    \draw[arr] (s2.east) -- node[above,font=\scriptsize]{coincide} (ok2);
+    \draw[arr] (s2.south) -- node[right,font=\scriptsize]{no} (s3.north);
+    \draw[arr] (s3.east) -- node[above,font=\scriptsize]{coincide} (ok3);
+    \draw[arr] (s3.south) -- +(0,-0.6) -| (ko);
+\end{tikzpicture}
+\caption{Pipeline de scoring en tres etapas. Cada predicci\'on pasa por las
+tres comparaciones; basta con que una declare coincidencia para contar
+como correcta.}
+\label{fig:scoring}
+\end{figure}
+
+\subsection{Evaluaci\'on de eficiencia}
+
+La eficiencia se mide con dos benchmarks que simulan patrones de uso
+distintos:
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Throughput offline} (\texttt{bench/run\_throughput.py}):
+    env\'ia un lote de $N$ peticiones al servidor vLLM tan r\'apido
+    como sea posible (\texttt{request\_rate=inf}). Mide cu\'antas
+    peticiones procesa el servidor por segundo (\textbf{req/s}). Simula
+    un escenario de batch processing nocturno.
+
+  \item \textbf{Latencia online} (\texttt{bench/run\_online\_load.py}):
+    env\'ia $N$ peticiones con llegadas Poisson a tasa
+    $\lambda=10\;\text{req/s}$. Mide latencia end-to-end en percentiles
+    \textbf{p50, p95, p99} y Time-To-First-Byte (TTFB). Simula
+    usuarios interactivos concurrentes.
+\end{itemize}
+
+Ambos usan el dataset \texttt{ShareGPT} como fuente de prompts realistas
+(longitud media de entrada $\approx$150 tokens, salida $\approx$256 tokens).
+
+% ════════════════════════════════════════════════════════════
+\section{Experimentos preliminares}
+\label{sec:preliminary}
+
+\begin{warningbox}
+\textbf{Nota importante:} Los experimentos de esta secci\'on fueron
+nuestra primera iteraci\'on experimental. Los realizamos con una
+configuraci\'on que posteriormente identificamos como insuficiente en
+varios aspectos (ver Secci\'on~\ref{sec:audit}). Sus resultados son
+orientativos pero no definitivos. Los documentamos con total
+transparencia porque ilustran el proceso de aprendizaje y las
+decisiones tomadas.
+\end{warningbox}
+
+\subsection{Visi\'on general del pipeline preliminar}
+
+En esta primera fase, el pipeline segu\'ia una secuencia lineal simple:
+arrancar el servidor vLLM para cada modelo, ejecutar los benchmarks de
+eficiencia, evaluar la calidad, y luego realizar la destilaci\'on. La
+Figura~\ref{fig:prelim-pipeline} muestra el flujo general.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=4pt, fill=#1,
+                minimum width=4cm, minimum height=1cm,
+                align=center, font=\small},
+    arr/.style={-{Stealth[length=3mm]}, thick, gray!70},
+    lbl/.style={font=\scriptsize, text=gray!50!black},
+    warn/.style={font=\scriptsize\itshape, text=red!60!black},
+]
+    % fila 1
+    \node[box=blue!8] (f1a) at (0,0)
+        {Servidor vLLM\\para cada modelo};
+    \node[box=blue!8] (f1b) at (6,0)
+        {Bench eficiencia\\1\,000 req, sin warmup};
+    \node[box=blue!8] (f1c) at (12,0)
+        {Eval calidad\\GSM8K + MATH-500};
+
+    % fila 2
+    \node[box=purple!8] (f2a) at (0,-2.5)
+        {Gen.\ outputs teacher\\1\,819 items (TEST split)};
+    \node[box=purple!8] (f2b) at (6,-2.5)
+        {SFT + LoRA\\3 \'epocas, sin validaci\'on};
+    \node[box=purple!8] (f2c) at (12,-2.5)
+        {Eval post-KD\\mismos benchmarks};
+
+    \draw[arr] (f1a) -- (f1b);
+    \draw[arr] (f1b) -- (f1c);
+    \draw[arr] (f1c) -- +(0,-0.8) -| (f2a);
+    \draw[arr] (f2a) -- (f2b);
+    \draw[arr] (f2b) -- (f2c);
+
+    % warnings
+    \node[warn] at (6,-0.85) {Solo 1\,000 req, sin warmup};
+    \node[warn] at (0,-3.3) {TEST split $\to$ data leakage};
+    \node[warn] at (6,-3.3) {Sin split validaci\'on};
+\end{tikzpicture}
+\caption{Pipeline de los experimentos preliminares. Las notas en rojo
+se\~nalan las limitaciones metodol\'ogicas que se identificaron
+posteriormente.}
+\label{fig:prelim-pipeline}
+\end{figure}
+
+\subsection{Par\'ametros utilizados}
+
+Los par\'ametros de esta primera iteraci\'on se eligieron de forma
+conservadora, priorizando obtener resultados r\'apidos para validar que
+todo el c\'odigo funcionaba correctamente:
 
 \begin{table}[H]
 \centering
-\caption{Rendimiento máximo — lote offline de 1000 peticiones.}
-\label{tab:throughput}
-\begin{tabular}{@{}lccc@{}}
+\caption{Par\'ametros de los experimentos preliminares y razonamiento.}
+\label{tab:prelim-params}
+\begin{tabular}{@{}lll@{}}
 \toprule
-\textbf{Modelo} & \textbf{req/s} & \textbf{Aceleración vs.\ Teacher} & \textbf{Tiempo total (s)} \\
+\textbf{Par\'ametro} & \textbf{Valor} & \textbf{Razonamiento} \\
 \midrule
-\rowcolor{teacher!10} Teacher (14B) & 11.60 & 1.0$\times$ & 86.2 \\
-\rowcolor{midstud!10} Student medio (7B) & 24.89 & 2.15$\times$ & 40.2 \\
-\rowcolor{smallstud!10} Student pequeño (1.5B) & 48.04 & 4.14$\times$ & 20.8 \\
+Peticiones (throughput y online) & 1\,000
+    & Suficiente para un test r\'apido \\
+Warmup & Ninguno
+    & No se implement\'o inicialmente \\
+Split para KD & TEST (GSM8K test + MATH-500)
+    & Se carg\'o por defecto sin considerar leakage \\
+Dataset KD total & 1\,819 items
+    & Todo el contenido de los test splits \\
+Validaci\'on SFT & Ninguna (\texttt{eval\_strategy="no"})
+    & Simplificaci\'on inicial \\
+Repeticiones bench & 1 por modelo
+    & Resultado \'unico, sin estad\'istica \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    ybar,
-    width=0.75\textwidth,
-    height=6cm,
-    bar width=25pt,
-    ylabel={Peticiones / segundo},
-    symbolic x coords={Teacher 14B, Student 7B, Student 1.5B},
-    xtick=data,
-    nodes near coords,
-    nodes near coords align={vertical},
-    ymin=0, ymax=60,
-    enlarge x limits=0.3,
-    every node near coord/.append style={font=\small\bfseries},
-    legend style={at={(0.98,0.95)}, anchor=north east},
-]
-\addplot[fill=teacher!50, draw=teacher!70] coordinates {(Teacher 14B, 11.60)};
-\addplot[fill=midstud!50, draw=midstud!70] coordinates {(Student 7B, 24.89)};
-\addplot[fill=smallstud!50, draw=smallstud!70] coordinates {(Student 1.5B, 48.04)};
-\end{axis}
-\end{tikzpicture}
-\caption{Rendimiento offline — mayor aceleración con modelos más pequeños.}
-\label{fig:throughput}
-\end{figure}
+\subsection{Resultados de eficiencia}
 
-\subsection{Resultados de Latencia Online}
+Los benchmarks de eficiencia se ejecutaron con 1\,000 peticiones sin
+warmup, una sola vez por modelo. Pese a las limitaciones metodol\'ogicas,
+estos resultados proporcionan una primera imagen del rendimiento relativo
+de cada modelo.
+
+\subsubsection{Throughput offline}
 
 \begin{table}[H]
 \centering
-\caption{Latencia online a $\lambda = 10$ req/s, 120\,s sostenidos.}
-\label{tab:latency}
+\caption{Throughput (1\,000 peticiones, sin warmup, 1 repetici\'on).}
+\label{tab:prelim-throughput}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{req/s} & \textbf{Speedup vs.\ Teacher} & \textbf{Tiempo (s)} \\
+\midrule
+\rowcolor{teacher!10}    Teacher 14B    & 11.60 & 1.00$\times$ & 86.2 \\
+\rowcolor{midstud!10}    Student 7B     & 24.89 & 2.15$\times$ & 40.2 \\
+\rowcolor{smallstud!10}  Student 1.5B   & 48.04 & 4.14$\times$ & 20.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El patr\'on es el esperado: cuanto m\'as peque\~no el modelo, mayor
+throughput. El student de 7\,B duplica la velocidad del teacher, y el de
+1.5\,B la cuadruplica. Esto confirma que hay un beneficio de eficiencia
+claro que justifica invertir en destilaci\'on.
+
+\subsubsection{Latencia online}
+
+\begin{table}[H]
+\centering
+\caption{Latencia online ($\lambda=10$ req/s, 1\,000 peticiones, 1 rep).}
+\label{tab:prelim-latency}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
 \textbf{Modelo} & \textbf{p50 (ms)} & \textbf{p95 (ms)} & \textbf{p99 (ms)} & \textbf{TTFB p50 (ms)} \\
 \midrule
-\rowcolor{teacher!10} Teacher (14B)     & 6\,083 & 6\,097 & 6\,104 & 6\,083 \\
-\rowcolor{midstud!10} Student medio (7B)  & 3\,004 & 3\,022 & 3\,027 & 3\,004 \\
-\rowcolor{smallstud!10} Student pequeño (1.5B) & 906 & 912 & 914 & 906 \\
+\rowcolor{teacher!10}   Teacher 14B   & 6\,083 & 6\,097 & 6\,104 & 6\,083 \\
+\rowcolor{midstud!10}   Student 7B    & 3\,004 & 3\,022 & 3\,027 & 3\,004 \\
+\rowcolor{smallstud!10} Student 1.5B  &    906 &    912 &    914 &    906 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+La latencia mediana del teacher (6 segundos) ser\'ia inaceptable para
+una aplicaci\'on interactiva. El student de 1.5\,B, con menos de 1
+segundo de latencia, habilita una experiencia de usuario fluida, pero
+Â¿a qu\'e coste de calidad?
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
-    ybar,
-    width=0.75\textwidth,
-    height=6cm,
-    bar width=25pt,
-    ylabel={Latencia mediana (ms)},
-    symbolic x coords={Teacher 14B, Student 7B, Student 1.5B},
-    xtick=data,
+    width=0.48\textwidth, height=6cm,
+    ybar, bar width=18pt,
+    ylabel={req/s}, ymin=0, ymax=58,
+    symbolic x coords={Teacher,Student 7B,Student 1.5B},
+    xtick=data, enlarge x limits=0.3,
     nodes near coords,
-    nodes near coords align={vertical},
-    ymin=0, ymax=8000,
-    enlarge x limits=0.3,
-    every node near coord/.append style={font=\small\bfseries},
+    every node near coord/.append style={font=\footnotesize\bfseries},
+    title style={font=\small\bfseries},
+    title={Throughput offline},
+    name=plot1,
 ]
-\addplot[fill=teacher!50, draw=teacher!70] coordinates {(Teacher 14B, 6083)};
-\addplot[fill=midstud!50, draw=midstud!70] coordinates {(Student 7B, 3004)};
-\addplot[fill=smallstud!50, draw=smallstud!70] coordinates {(Student 1.5B, 906)};
+\addplot[fill=teacher!40]  coordinates {(Teacher,11.60)};
+\addplot[fill=midstud!40]  coordinates {(Student 7B,24.89)};
+\addplot[fill=smallstud!40] coordinates {(Student 1.5B,48.04)};
+\end{axis}
+\begin{axis}[
+    width=0.48\textwidth, height=6cm,
+    ybar, bar width=18pt,
+    ylabel={Latencia p50 (ms)}, ymin=0, ymax=7500,
+    symbolic x coords={Teacher,Student 7B,Student 1.5B},
+    xtick=data, enlarge x limits=0.3,
+    nodes near coords,
+    every node near coord/.append style={font=\footnotesize\bfseries},
+    title style={font=\small\bfseries},
+    title={Latencia online (p50)},
+    at={(plot1.east)}, anchor=west, xshift=1.5cm,
+]
+\addplot[fill=teacher!40]  coordinates {(Teacher,6083)};
+\addplot[fill=midstud!40]  coordinates {(Student 7B,3004)};
+\addplot[fill=smallstud!40] coordinates {(Student 1.5B,906)};
 \end{axis}
 \end{tikzpicture}
-\caption{Latencia mediana end-to-end a 10\,req/s — modelo más pequeño $\Rightarrow$ menor latencia.}
-\label{fig:latency}
+\caption{Resultados preliminares de eficiencia. Izquierda: throughput
+(mayor es mejor). Derecha: latencia (menor es mejor).}
+\label{fig:prelim-efficiency}
 \end{figure}
 
-\subsection{Conclusiones — Eficiencia}
+\subsection{Resultados de calidad (l\'ineas base)}
 
-\begin{itemize}
-  \item El estudiante de 7B ofrece \textbf{$2.15\times$} mayor rendimiento y
-    \textbf{$2.02\times$} menor latencia que el teacher.
-  \item El estudiante de 1.5B logra \textbf{$4.14\times$} mayor rendimiento y
-    \textbf{$6.71\times$} menor latencia.
-  \item Ambos estudiantes caben cómodamente en una sola H100 con alta
-    utilización de memoria GPU ($\geq 0.90$), facilitando el despliegue eficiente.
-  \item La brecha de eficiencia motiva la destilación de conocimiento: si se
-    puede recuperar la mayor parte de la calidad del teacher en un modelo más
-    pequeño, la mejora en el coste de servicio es dramática.
-\end{itemize}
-
-
-% ════════════════════════════════════════════════════════════
-\section{Fase 1B — Líneas Base de Calidad}
-\label{sec:quality}
-
-\subsection{Benchmarks}
-
-La calidad se evalúa en \textbf{tres} benchmarks que cubren capacidades
-cognitivas distintas y de dificultad creciente:
+Evaluamos los tres modelos sin ning\'un fine-tuning previo para
+establecer las l\'ineas base de calidad.
 
 \begin{table}[H]
 \centering
-\caption{Benchmarks de evaluación de calidad.}
-\label{tab:benchmarks}
-\begin{tabular}{@{}lllc@{}}
-\toprule
-\textbf{Benchmark} & \textbf{Dataset HuggingFace} & \textbf{Capacidad evaluada} & \textbf{$N$ items} \\
-\midrule
-GSM8K          & \texttt{openai/gsm8k}           & Aritmética escolar  & 1\,319 \\
-MATH-500       & \texttt{HuggingFaceH4/MATH-500} & Álgebra, cálculo, matemáticas de competición & 500 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\noindent Los prompts de evaluación usan plantillas específicas por benchmark:
-\begin{itemize}
-  \item \textbf{GSM8K:} ``\textit{Solve the following math problem step by step.
-    Put your final numeric answer after \texttt{\#\#\#\#}. Question: [q] Answer:}''
-  \item \textbf{MATH-500:} ``\textit{Solve the following mathematics problem.
-    Put your final answer inside \textbackslash boxed\{\}. Problem: [p] Solution:}''
-\end{itemize}
-
-\subsection{Orquestador unificado — \texttt{eval/run\_quality.py}}
-\label{sec:eval-methodology}
-
-El script \texttt{eval/run\_quality.py} es el punto de entrada único para todas
-las evaluaciones de calidad. Su función \texttt{run(config\_path, model\_override,
-role)} realiza los siguientes pasos:
-
-\begin{enumerate}
-  \item Carga \texttt{configs/eval.yaml} y aplica cualquier override de modelo.
-  \item Crea un directorio de run con timestamp
-    (\texttt{results/quality/quality-<role>-<ts>/}).
-  \item Hace snapshot de todos los YAMLs activos y registra metadata de hardware.
-  \item Para cada benchmark habilitado en \texttt{benchmarks:}, llama al módulo
-    específico (\texttt{eval.gsm8k}, \texttt{eval.math\_eval},
-    \texttt{eval.math\_eval}) y acumula las métricas.
-  \item Serializa el resumen agregado en \texttt{quality\_summary.json} y
-    \texttt{quality\_summary.csv}.
-\end{enumerate}
-
-\paragraph{Parámetros de generación.}
-Todas las evaluaciones usan \textbf{decodificación greedy} (\texttt{temperature=0.0},
-\texttt{top\_p=1.0}) con \texttt{max\_tokens=1024}, garantizando salidas
-determinísticas y reproducibles. La semilla aleatoria se fija en 42.
-
-\paragraph{Jobs SLURM de calidad.}
-Los scripts \texttt{slurm/eval\_quality.sbatch}, \texttt{slurm/eval\_student\_mid.sbatch}
-y \texttt{slurm/eval\_student\_small.sbatch} siguen el mismo patrón de tres etapas:
-(1) arrancar servidor vLLM en GPU exclusiva, (2) health check con hasta 10 minutos
-de espera, (3) llamar a \texttt{eval/run\_quality.py --role <rol>}.
-
-\subsection{Motor de puntuación — \texttt{eval/scoring.py}}
-
-El módulo \texttt{eval/scoring.py} implementa una \textbf{estrategia de comparación
-multi-etapa} que gestiona la variabilidad en la codificación matemática de las
-respuestas del modelo.
-
-\paragraph{Extracción de respuesta por benchmark.}
-\begin{itemize}
-  \item \textbf{GSM8K (\texttt{eval/gsm8k.py}):} usa el patrón
-    \texttt{\#\#\#\#\textbackslash{}s*(.*)} para extraer el valor numérico final.
-    Se toma la \emph{última} ocurrencia del patrón en la respuesta, ya que los
-    modelos a menudo reformulan la respuesta al final.
-  \item \textbf{MATH-500 (\texttt{eval/math\_eval.py}):} la función
-    \texttt{extract\_boxed\_answer} detecta la última expresión
-    \texttt{\textbackslash{}boxed\{...\}} mediante seguimiento de profundidad
-    de llaves, soportando construcciones anidadas como
-    \texttt{\textbackslash{}boxed\{\textbackslash{}frac\{1\}\{2\}\}}.
-\end{itemize}
-
-\paragraph{Pipeline de comparación de tres etapas.}
-La función \texttt{math\_answer\_match(prediction, reference)} de
-\texttt{eval/scoring.py} implementa:
-
-\begin{enumerate}
-  \item \textbf{Normalización numérica} (\texttt{normalise\_numeric}):
-    elimina signos \$, comas de millar, espacios y símbolo \%; intenta parsear
-    como \texttt{float}. Si ambas respuestas son valores numéricos, compara con
-    \texttt{math.isclose(rel\_tol=1e-4)}.
-    Ejemplo: \texttt{"1,234.5"} $\to$ 1234.5; \texttt{"50\%"} $\to$ 0.5.
-
-  \item \textbf{Comparación simbólica vía SymPy}
-    (\texttt{\_sympy\_equal}): si la comparación numérica falla,
-    \texttt{normalise\_math\_answer} convierte construcciones LaTeX a sintaxis
-    SymPy (Tabla~\ref{tab:latex-sympy}), y llama a
-    \texttt{sympy.simplify(p - r) == 0}.
-
-  \item \textbf{Comparación exacta de strings}: fallback final para
-    respuestas no numéricas.
-\end{enumerate}
-
-\begin{table}[H]
-\centering
-\caption{Conversiones LaTeX $\to$ SymPy en \texttt{normalise\_math\_answer}.}
-\label{tab:latex-sympy}
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{LaTeX} & \textbf{SymPy} \\
-\midrule
-\texttt{\textbackslash frac\{a\}\{b\}}  & \texttt{(a)/(b)} \\
-\texttt{\textbackslash sqrt\{x\}}       & \texttt{sqrt(x)} \\
-\texttt{\textbackslash sqrt[n]\{x\}}    & \texttt{(x)**(1/n)} \\
-\texttt{x\^\{n\}}                       & \texttt{x**(n)} \\
-\texttt{\textbackslash pi}              & \texttt{pi} \\
-\texttt{\textbackslash infty}           & \texttt{oo} \\
-\texttt{\textbackslash cdot}, \texttt{\textbackslash times} & \texttt{*} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
-    node distance=0.6cm and 1.5cm,
-    box/.style={draw, rounded corners, fill=blue!5, minimum width=3.5cm,
-                minimum height=0.8cm, align=center, font=\small},
-    decision/.style={draw, diamond, fill=yellow!10, minimum width=2cm,
-                     aspect=2, align=center, font=\small},
-    arrow/.style={-{Stealth[length=3mm]}, thick},
-]
-    \node[box] (extract) {Extraer respuesta\\de la salida del modelo};
-    \node[box, below=of extract] (numeric) {Normalizar numéricamente\\(quitar \$, comas, \%)};
-    \node[decision, below=of numeric] (numcheck) {Coincidencia\\numérica?};
-    \node[box, below left=1cm and 0.5cm of numcheck] (correct1) {\textcolor{green!60!black}{\textbf{Correcto}}};
-    \node[box, below=of numcheck] (sympy) {Parsear vía SymPy\\comparación simbólica};
-    \node[decision, below=of sympy] (sympcheck) {Coincidencia\\simbólica?};
-    \node[box, below left=1cm and 0.5cm of sympcheck] (correct2) {\textcolor{green!60!black}{\textbf{Correcto}}};
-    \node[box, below=of sympcheck] (exact) {Comparación\\exacta de strings};
-    \node[decision, below=of exact] (excheck) {Strings\\iguales?};
-    \node[box, below left=1cm and 0.5cm of excheck] (correct3) {\textcolor{green!60!black}{\textbf{Correcto}}};
-    \node[box, below right=1cm and 0.5cm of excheck] (wrong) {\textcolor{red!60!black}{\textbf{Incorrecto}}};
-    \draw[arrow] (extract) -- (numeric);
-    \draw[arrow] (numeric) -- (numcheck);
-    \draw[arrow] (numcheck) -- node[left, font=\scriptsize]{Sí} (correct1);
-    \draw[arrow] (numcheck) -- node[right, font=\scriptsize]{No} (sympy);
-    \draw[arrow] (sympy) -- (sympcheck);
-    \draw[arrow] (sympcheck) -- node[left, font=\scriptsize]{Sí} (correct2);
-    \draw[arrow] (sympcheck) -- node[right, font=\scriptsize]{No} (exact);
-    \draw[arrow] (exact) -- (excheck);
-    \draw[arrow] (excheck) -- node[left, font=\scriptsize]{Sí} (correct3);
-    \draw[arrow] (excheck) -- node[right, font=\scriptsize]{No} (wrong);
-\end{tikzpicture}
-\caption{Pipeline de scoring tres etapas: numérica $\to$ simbólica (SymPy) $\to$ string exacto.}
-\label{fig:scoring}
-\end{figure}
-
-\paragraph{Cómputo de precisión.}
-La función \texttt{compute\_accuracy} de \texttt{eval/scoring.py} calcula:
-\[
-  \text{precisión} = \frac{\text{correctos}}{\text{puntuables}} \times 100\%
-\]
-donde ``puntuables'' excluye items donde el modelo falla en producir cualquier
-respuesta parseable (errores de red, respuestas vacías). La función devuelve
-un diccionario con \texttt{total\_examples}, \texttt{scorable\_examples},
-\texttt{unscorable\_examples}, \texttt{correct}, \texttt{incorrect},
-\texttt{accuracy} y \texttt{accuracy\_pct}.
-
-\subsection{Resultados de Calidad — Fase 1}
-
-\begin{table}[H]
-\centering
-\caption{Líneas base de calidad — evaluación de los dos benchmarks matemáticos.}
-\label{tab:quality}
+\caption{Precisi\'on base en los benchmarks de calidad.}
+\label{tab:prelim-quality}
 \begin{tabular}{@{}lcc@{}}
 \toprule
 \textbf{Modelo} & \textbf{GSM8K (\%)} & \textbf{MATH-500 (\%)} \\
 \midrule
-\rowcolor{teacher!10}    Teacher (14B)        & 92.41 & 70.51 \\
-\rowcolor{midstud!10}    Student medio (7B)   & 85.45 & 69.78 \\
-\rowcolor{smallstud!10}  Student pequeño (1.5B) & 63.56 & 36.81 \\
+\rowcolor{teacher!10}   Teacher 14B   & 92.41 & 70.51 \\
+\rowcolor{midstud!10}   Student 7B    & 85.45 & 69.78 \\
+\rowcolor{smallstud!10} Student 1.5B  & 63.56 & 36.81 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+Estos resultados revelan informaci\'on crucial para el dise\~no de la
+destilaci\'on:
+
+\begin{itemize}
+  \item El \textbf{teacher 14B} alcanza un 92.41\% en GSM8K y un
+    70.51\% en MATH-500, estableci\'endose como techo de calidad.
+  \item El \textbf{student 7B} est\'a sorprendentemente cerca del
+    teacher en MATH-500 (69.78\% vs.\ 70.51\%, diferencia $< 1$\,pp),
+    pero pierde casi 7 puntos en GSM8K. Esto sugiere que ya tiene buena
+    capacidad abstracta pero le falta consistencia en c\'alculo b\'asico.
+  \item El \textbf{student 1.5B} muestra la mayor brecha, especialmente
+    en MATH-500 (36.81\% vs.\ 70.51\%), lo que lo convierte en el
+    candidato m\'as interesante para la destilaci\'on: tiene el mayor
+    margen de mejora.
+\end{itemize}
+
+\subsection{Destilaci\'on preliminar}
+
+Con las l\'ineas base establecidas, procedimos a ejecutar la
+destilaci\'on black-box, que consta de dos pasos: generar las
+respuestas del teacher y entrenar a los students para imitarlas.
+
+\subsubsection{Paso 1: Generaci\'on de outputs del teacher}
+
+El script \texttt{distill/generate\_teacher\_outputs.py} env\'ia cada
+problema al teacher a trav\'es de vLLM y almacena su respuesta completa
+paso a paso. En esta versi\'on preliminar, usamos los \textbf{1\,819
+items de los TEST splits} (1\,319 de GSM8K test + 500 de MATH-500 test).
+
+Cada ejemplo se guarda en formato JSONL con el prompt original, la
+respuesta completa del teacher, los par\'ametros de generaci\'on, la
+latencia y el motivo de parada (\texttt{stop} o \texttt{length}).
+
+\subsubsection{Paso 2: Entrenamiento SFT con LoRA}
+
+El script \texttt{distill/train\_student\_sft.py} entrena cada student
+para predecir las respuestas del teacher. Para hacer el entrenamiento
+eficiente en memoria, usamos \textbf{LoRA} (Low-Rank Adaptation): en
+lugar de actualizar todos los par\'ametros del modelo, se insertan
+matrices de bajo rango en las capas de atenci\'on y feed-forward, lo
+que reduce dram\'aticamente el n\'umero de par\'ametros entrenables.
+
+Los hiperpar\'ametros de entrenamiento se muestran en la
+Tabla~\ref{tab:hparams}. Un detalle importante del entrenamiento es el
+\textbf{completion-only masking}: los tokens del prompt reciben label
+$-100$ (ignorados por la loss), de forma que el modelo solo aprende a
+generar la respuesta, no a repetir la pregunta.
+
+\begin{table}[H]
+\centering
+\caption{Hiperpar\'ametros de entrenamiento SFT + LoRA.}
+\label{tab:hparams}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Hiperpar\'ametro} & \textbf{Valor} \\
+\midrule
+LoRA rango ($r$)        & 64 \\
+LoRA alpha ($\alpha$)   & 16 \quad (escala efectiva: $\alpha/r = 0.25$) \\
+LoRA dropout            & 0.05 \\
+M\'odulos objetivo      & q/k/v/o\_proj, gate/up/down\_proj \\
+Batch size              & 4 (con gradient accumulation $\times$4 = 16 efectivo) \\
+Learning rate           & $2 \times 10^{-4}$ \\
+Scheduler               & Coseno con warmup ratio 0.03 \\
+\'Epocas                & 3 \\
+Longitud m\'ax.\ seq.  & 2\,048 tokens \\
+Precisi\'on             & bfloat16 \\
+Semilla                 & 42 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Bugs encontrados durante el desarrollo}
+
+El proceso de poner en marcha el entrenamiento en MN5 requiri\'o
+5 intentos (jobs SLURM 37093510 a 37123022) y la correcci\'on de 6
+bugs. Los documentamos porque ilustran problemas t\'ipicos de trabajar
+con entornos de supercomputaci\'on:
+
+\begin{table}[H]
+\centering
+\caption{Bugs encontrados y corregidos en el training.}
+\label{tab:bugs}
+\begin{tabular}{@{}p{3.5cm}p{4.8cm}p{4.8cm}@{}}
+\toprule
+\textbf{Error} & \textbf{Causa} & \textbf{Soluci\'on} \\
+\midrule
+\texttt{TypeError:\newline evaluation\_strategy}
+& Argumento renombrado en Transformers $\geq$4.47
+& Usar \texttt{eval\_strategy} \\[6pt]
+
+Crash gradient checkpointing
+& LoRA necesita gradientes en las entradas antes de \texttt{get\_peft\_model()}
+& Llamar a \texttt{enable\_input\_require\_grads()} \\[6pt]
+
+OOM al cargar modelo
+& \texttt{from\_pretrained()} carga en CPU
+& Usar \texttt{device\_map="auto"} \\[6pt]
+
+\texttt{TypeError: torch\_dtype}
+& Par\'ametro renombrado a \texttt{dtype}
+& Actualizar la llamada \\[6pt]
+
+Deadlock en SLURM
+& Workers \texttt{fork} duplican contexto CUDA
+& \texttt{num\_workers=0} \\[6pt]
+
+Warning \texttt{use\_reentrant}
+& Gradient checkpointing legacy
+& A\~nadir \texttt{\{"use\_reentrant": False\}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Resultados de entrenamiento}
+
+Tras corregir todos los bugs, los entrenamientos se completaron con
+\'exito en los jobs 37123021 (7B) y 37123022 (1.5B):
+
+\begin{table}[H]
+\centering
+\caption{Resultados del entrenamiento SFT preliminar.}
+\label{tab:prelim-train}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{Loss final} & \textbf{Duraci\'on}
+    & \textbf{Muestras/s} & \textbf{Job SLURM} \\
+\midrule
+Student 7B   & 0.2699 & 75\,min & 1.99 & 37123021 \\
+Student 1.5B & 0.3383 & 32\,min & 4.68 & 37123022 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El loss final m\'as bajo del 7B (0.2699 vs.\ 0.3383) indica que, como
+era de esperar, el modelo m\'as grande tiene mayor capacidad para
+imitar al teacher. El 1.5B, con menos par\'ametros, se queda a mayor
+distancia pero igualmente converge a un loss razonable.
+
+Los adaptadores LoRA finales ocupan 617\,MB (7B) y 282\,MB (1.5B),
+frente a los 14\,GB y 3\,GB de los modelos completos respectivamente,
+lo que demuestra la eficiencia de LoRA en t\'erminos de almacenamiento.
+
+\subsubsection{Resultados post-destilaci\'on}
+
+Para evaluar el efecto de la destilaci\'on, fusionamos cada adaptador
+LoRA con su modelo base ($W_\text{merged} = W_0 + \frac{\alpha}{r}BA$)
+y evaluamos en los mismos benchmarks de calidad:
+
+\begin{warningbox}
+\textbf{Advertencia de data leakage:} estos resultados pueden estar
+inflados porque el training us\'o los mismos items que la evaluaci\'on
+(ver Secci\'on~\ref{sec:audit}).
+\end{warningbox}
+
+\begin{table}[H]
+\centering
+\caption{Resultados post-destilaci\'on preliminares.}
+\label{tab:prelim-postdistill}
+\begin{tabular}{@{}lccl@{}}
+\toprule
+\textbf{Modelo} & \textbf{GSM8K (\%)} & \textbf{MATH-500 (\%)}
+    & \textbf{Cambio vs.\ base} \\
+\midrule
+Teacher 14B (referencia) & 92.41 & 70.51 & --- \\
+\midrule
+Student 7B base          & 85.45 & 69.78 & --- \\
+\rowcolor{yellow!15}
+Student 7B destilado     & 82.00 & 72.61 & $-3.45$ GSM, $+2.83$ MATH \\
+\midrule
+Student 1.5B base        & 63.56 & 36.81 & --- \\
+\rowcolor{yellow!15}
+Student 1.5B destilado   & 65.70 & 47.45 & $+2.14$ GSM, $+10.64$ MATH \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Estos resultados, aunque pend\'ientes de confirmaci\'on sin data
+leakage, son alentadores:
+
+\begin{itemize}
+  \item El \textbf{student 1.5B} mejora \textbf{10.64 puntos
+    porcentuales} en MATH-500 (de 36.81\% a 47.45\%), lo que representa
+    un salto sustancial. Tambi\'en mejora en GSM8K ($+2.14$\,pp). Esto
+    sugiere que el modelo peque\~no aprende del teacher cadenas de
+    razonamiento matem\'atico complejo que antes no pod\'ia producir.
+
+  \item El \textbf{student 7B} presenta un patr\'on mixto: gana $+2.83$
+    puntos en MATH-500 (superando incluso al teacher: 72.61\% vs.\
+    70.51\%) pero pierde $-3.45$ en GSM8K. Esto podr\'ia indicar que el
+    entrenamiento optimiz\'o m\'as para razonamiento complejo a costa de
+    aritm\'etica simple, o bien podr\'ia ser un artefacto del data
+    leakage.
+\end{itemize}
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
-    ybar,
-    width=0.85\textwidth,
-    height=7cm,
-    bar width=15pt,
-    ylabel={Precisión (\%)},
+    width=0.85\textwidth, height=7cm,
+    ybar, bar width=9pt,
+    ylabel={Precisi\'on (\%)},
+    ymin=0, ymax=105,
     symbolic x coords={GSM8K, MATH-500},
-    xtick=data,
-    ymin=0, ymax=110,
-    enlarge x limits=0.5,
-    legend style={at={(0.98,0.95)}, anchor=north east, font=\small},
+    xtick=data, enlarge x limits=0.5,
+    legend style={at={(0.02,0.97)}, anchor=north west,
+                  font=\scriptsize, draw=gray!30},
     nodes near coords,
-    every node near coord/.append style={font=\scriptsize\bfseries},
+    every node near coord/.append style={font=\tiny, rotate=45, anchor=west},
+    title style={font=\small\bfseries},
+    title={Calidad baseline vs.\ post-KD (resultados preliminares)},
 ]
-\addplot[fill=teacher!50, draw=teacher!70] coordinates
-    {(GSM8K, 92.41) (MATH-500, 70.51)};
-\addplot[fill=midstud!50, draw=midstud!70] coordinates
-    {(GSM8K, 85.45) (MATH-500, 69.78)};
-\addplot[fill=smallstud!50, draw=smallstud!70] coordinates
-    {(GSM8K, 63.56) (MATH-500, 36.81)};
-\legend{Teacher 14B, Student 7B, Student 1.5B}
+\addplot[fill=teacher!50]
+    coordinates {(GSM8K,92.41) (MATH-500,70.51)};
+\addplot[fill=midstud!50]
+    coordinates {(GSM8K,85.45) (MATH-500,69.78)};
+\addplot[fill=midstud!15, postaction={pattern=north east lines,
+         pattern color=midstud!50}]
+    coordinates {(GSM8K,82.00) (MATH-500,72.61)};
+\addplot[fill=smallstud!50]
+    coordinates {(GSM8K,63.56) (MATH-500,36.81)};
+\addplot[fill=smallstud!15, postaction={pattern=north east lines,
+         pattern color=smallstud!50}]
+    coordinates {(GSM8K,65.70) (MATH-500,47.45)};
+\legend{Teacher 14B, 7B base, 7B KD, 1.5B base, 1.5B KD}
 \end{axis}
 \end{tikzpicture}
-\caption{Líneas base de calidad — el estudiante de 7B retiene la mayor parte de la
-precisión del teacher; el estudiante de 1.5B muestra degradación significativa.}
-\label{fig:quality}
+\caption{Comparativa de calidad baseline vs.\ post-KD (resultados
+preliminares, con advertencia de data leakage). Las barras con rayas
+diagonales corresponden a los modelos destilados.}
+\label{fig:prelim-quality-bars}
 \end{figure}
 
-\subsection{Análisis detallado}
+% ════════════════════════════════════════════════════════════
+\section{Auditor\'ia metodol\'ogica}
+\label{sec:audit}
 
-\paragraph{GSM8K (Aritmética escolar).}
-El teacher logra un excelente 92.41\%, demostrando dominio en problemas
-aritméticos de nivel escolar. El estudiante de 7B retiene el 92.5\% de esta
-capacidad (85.45\%), mientras que el de 1.5B cae al 68.8\% del teacher (63.56\%).
-La diferencia sugiere que incluso problemas aritméticos simples requieren una
-capacidad mínima de razonamiento secuencial que el modelo de 1.5B no tiene
-completamente desarrollada.
+Tras obtener los resultados preliminares, realizamos una revisi\'on
+cr\'itica de toda la metodolog\'ia utilizada. Esta auditor\'ia
+identific\'o \textbf{seis problemas} que compromet\'ian en distintos
+grados la validez y reproducibilidad de los experimentos. A
+continuaci\'on describimos cada problema, su impacto y la correcci\'on
+dise\~nada.
 
-\paragraph{MATH-500 (Álgebra y cálculo de competición).}
-El teacher alcanza 70.51\%; el estudiante de 7B casi lo iguala con 69.78\%
-(98.9\% del teacher). El de 1.5B cae dramáticamente a 36.81\% (52.2\%
-del teacher). Esta brecha tan pronunciada sugiere que el razonamiento
-matemático de competición requiere una densidad de parámetros mínima para
-mantener cadenas de razonamiento largas y correctas.
+\subsection{Problema 1: Data leakage en la destilaci\'on}
 
+Este es el problema m\'as grave. Al generar los outputs del teacher,
+usamos los \textbf{TEST splits} de GSM8K y MATH-500 (los mismos 1\,819
+items que luego usamos para evaluar). Esto significa que durante el
+entrenamiento SFT, el student ve la respuesta ``correcta'' del teacher
+para exactamente los mismos problemas que despu\'es componen el examen.
 
-% ════════════════════════════════════════════════════════════
-\section{Arquitectura Global del Pipeline}
-\label{sec:architecture}
+La Figura~\ref{fig:leakage} ilustra la diferencia entre la
+configuraci\'on incorrecta y la correcta:
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-    node distance=1.2cm and 2cm,
-    phase/.style={draw, rounded corners=6pt, fill=#1!15, minimum width=4cm,
-                  minimum height=1cm, align=center, font=\small\bfseries,
-                  drop shadow={shadow xshift=1pt, shadow yshift=-1pt}},
-    arrow/.style={-{Stealth[length=3.5mm]}, thick, draw=gray!60},
-    note/.style={font=\scriptsize\itshape, text=gray!70!black},
+    box/.style={draw, rounded corners=4pt, fill=#1,
+                minimum width=3.5cm, minimum height=1.5cm,
+                align=center, font=\small},
+    arr/.style={<->, thick},
 ]
-    % Phase 1
-    \node[phase=blue] (serve) {Servidor vLLM\\(1$\times$H100)};
-    \node[phase=blue, right=3cm of serve] (bench) {Benchmarks\\de eficiencia};
-    \node[phase=blue, below=of bench] (eval) {Evaluación\\de calidad};
-    % Phase 2
-    \node[phase=orange, below=2cm of serve] (gen) {Generación de\\salidas del teacher};
-    \node[phase=orange, right=3cm of gen] (sft) {SFT + LoRA\\(estudiante)};
-    \node[phase=orange, below=of sft] (evalpost) {Evaluación\\post-destilación};
-    % Arrows
-    \draw[arrow] (serve) -- (bench);
-    \draw[arrow] (serve) |- (eval);
-    \draw[arrow] (serve) -- (gen);
-    \draw[arrow] (gen) -- node[above, note] {teacher\_outputs.jsonl} (sft);
-    \draw[arrow] (sft) -- (evalpost);
-    \draw[arrow] (eval.south) -- ++(0,-0.5) -|
-        node[near start, note, above] {líneas base} (evalpost);
-    % Labels
-    \node[above=0.3cm of serve, font=\large\bfseries, text=blue!70!black]
-        {Fase 1 (completa)};
-    \node[above=0.3cm of gen, font=\large\bfseries, text=orange!70!black]
-        {Fase 2 (training completo)};
+    % Incorrecto
+    \node[font=\bfseries, text=red!60!black] at (-4,2.8)
+        {Incorrecto (preliminar)};
+    \node[box=blue!10] (kd1) at (-5.5,1) {KD:\\GSM8K \textbf{test}\\1\,319 items};
+    \node[box=red!10]  (ev1) at (-2.5,1) {Eval:\\GSM8K \textbf{test}\\1\,319 items};
+    \draw[arr, red!60, line width=1.5pt] (kd1) -- (ev1)
+        node[midway, above, font=\scriptsize\bfseries, text=red!60!black]
+        {mismos items!};
+
+    % Correcto
+    \node[font=\bfseries, text=okborder] at (4,2.8)
+        {Correcto (definitivo)};
+    \node[box=blue!10]  (kd2) at (2.5,1) {KD:\\GSM8K \textbf{train}\\7\,473 items};
+    \node[box=okbg]     (ev2) at (5.5,1) {Eval:\\GSM8K \textbf{test}\\1\,319 items};
+    \draw[arr, gray!40, line width=1.5pt] (kd2) -- (ev2)
+        node[midway, above, font=\scriptsize, text=gray!60]
+        {sin solapamiento};
 \end{tikzpicture}
-\caption{Pipeline de alto nivel: la Fase~1 establece líneas base; la Fase~2 usa el
-teacher para generar datos de entrenamiento, ajusta finamente los estudiantes con
-SFT+LoRA y re-evalúa con el mismo pipeline de calidad.}
-\label{fig:pipeline}
+\caption{Data leakage: en la configuraci\'on preliminar (izq.), el
+training y la evaluaci\'on usan los mismos datos. En la definitiva
+(der.), los splits son disjuntos.}
+\label{fig:leakage}
 \end{figure}
 
-% ════════════════════════════════════════════════════════════
-\section{Fase 2 — Destilación de Conocimiento}
-\label{sec:distillation}
+\textbf{Correcci\'on:} usar los TRAIN splits para la destilaci\'on
+(GSM8K train: 7\,473 items; MATH train: $\sim$7\,500 items), que son
+completamente disjuntos de los test splits utilizados en la evaluaci\'on.
 
-\textbf{Estado:} Generación completada (1819 prompts).
-Training completado (jobs SLURM 37123021 y 37123022).
-Evaluación post-destilación \emph{pendiente de ejecución}.
+\subsection{Problema 2: N\'umero insuficiente de peticiones}
 
-\subsection{Estrategia de destilación}
+Con solo 1\,000 peticiones, los benchmarks de eficiencia tienen
+\textbf{alta varianza muestral}. El throughput medido puede variar
+significativamente entre ejecuciones, haciendo imposible sacar
+conclusiones robustas.
 
-Se emplea \textbf{Knowledge Distillation black-box con etiquetas duras}
-(\emph{hard-label KD}):
+\textbf{Correcci\'on:} aumentar a \textbf{10\,000 peticiones} por
+benchmark. Con $N=10{,}000$, el error est\'andar del throughput se
+reduce en un factor de $\sqrt{10} \approx 3.16$.
 
-\begin{itemize}
-  \item El teacher se accede \textbf{únicamente} a través de su endpoint de
-    completado de texto (\texttt{/v1/completions} compatible con API OpenAI).
-    No se accede a sus logits, no se usa divergencia KL, no hay etiquetas
-    suaves (\textit{soft labels}). El término \emph{black-box} se refiere al
-    teacher: sus pesos son inaccesibles; solo se consumen sus predicciones en texto.
-  \item El estudiante se entrena por \textbf{SFT} (\textit{Supervised Fine-Tuning})
-    sobre pares $(\text{prompt}, \text{completion\_teacher})$ minimizando la
-    pérdida cross-entropy sobre los tokens de completado.
-  \item Se usa \textbf{LoRA} (\textit{Low-Rank Adaptation}, PEFT) para mantener
-    el número de parámetros entrenables bajo: solo las matrices de proyección de
-    atención y las capas MLP se modifican mediante matrices de bajo rango, lo que
-    reduce drásticamente el consumo de memoria y el riesgo de \emph{catastrophic
-    forgetting}.
-\end{itemize}
+\subsection{Problema 3: Sin warmup}
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
-    node distance=0.8cm and 2cm,
-    modelbox/.style={draw, rounded corners=4pt, fill=#1!12,
-                     minimum width=3cm, minimum height=1.2cm,
-                     align=center, font=\small},
-    data/.style={draw, rounded corners=2pt, fill=gray!10,
-                 minimum width=3cm, minimum height=0.8cm,
-                 align=center, font=\small\ttfamily},
-    arrow/.style={-{Stealth[length=3.5mm]}, thick},
-]
-    \node[modelbox=blue] (teacher) {\textbf{Teacher}\\Qwen2.5-14B};
-    \node[data, below=1cm of teacher] (prompts) {prompts.jsonl};
-    \node[data, right=3cm of teacher] (outputs) {teacher\_outputs.jsonl};
-    \node[modelbox=green!60!black, right=3cm of outputs] (student)
-        {\textbf{Student}\\Qwen2.5-7B \emph{or} 1.5B};
-    \node[data, below=1cm of student] (finetuned) {LoRA adapter\\(final\_adapter/)};
-    \draw[arrow] (prompts) -- (teacher);
-    \draw[arrow] (teacher) -- node[above, font=\scriptsize] {decodificación greedy} (outputs);
-    \draw[arrow] (outputs) -- node[above, font=\scriptsize] {SFT + LoRA} (student);
-    \draw[arrow] (student) -- (finetuned);
-    \node[below=0.3cm of prompts, font=\scriptsize\itshape, text=gray!60!black]
-        {GSM8K + MATH-500};
-    \node[below=0.3cm of finetuned, font=\scriptsize\itshape, text=gray!60!black]
-        {listo para merge + servicio};
-\end{tikzpicture}
-\caption{Pipeline de destilación black-box: las salidas del teacher se recopilan
-una vez y se usan para entrenar ambos estudiantes con SFT+LoRA.}
-\label{fig:distillation}
-\end{figure}
+Las primeras peticiones a un servidor vLLM se sirven con cach\'es
+fr\'ios (KV-cache vac\'io, JIT no optimizado, GPU en estado bajo de
+frecuencia). Incluir esas peticiones en la medici\'on sesga las
+m\'etricas hacia abajo.
 
-\subsection{Hiperparámetros de entrenamiento}
+\textbf{Correcci\'on:} a\~nadir \textbf{200 peticiones de warmup} que
+se env\'ian y descartan antes de comenzar la medici\'on real.
+
+\subsection{Problema 4: Sin validaci\'on durante el entrenamiento}
+
+El entrenamiento SFT se ejecut\'o con \texttt{eval\_strategy="no"}, lo
+que significa que \textbf{no hab\'ia forma de detectar overfitting}. El
+modelo guardado era simplemente el de la \'ultima \'epoca, sin garant\'ia
+de que fuera el mejor.
+
+\textbf{Correcci\'on:} dividir el dataset de KD en 85\% training y
+15\% validaci\'on. Evaluar la loss de validaci\'on cada 50 pasos y
+usar \texttt{EarlyStoppingCallback(patience=3)} para detener el
+entrenamiento si la loss deja de mejorar durante 3 evaluaciones
+consecutivas. Adem\'as, activar \texttt{load\_best\_model\_at\_end=True}
+para guardar autom\'aticamente el mejor checkpoint.
+
+\subsection{Problema 5: Una \'unica repetici\'on}
+
+Con una sola ejecuci\'on por benchmark no es posible estimar la
+variabilidad de los resultados. Un run at\'ipico (por ejemplo, si la
+GPU estaba compartiendo ancho de banda con otro job) pasar\'ia
+inadvertido.
+
+\textbf{Correcci\'on:} ejecutar \textbf{3 repeticiones independientes}
+de cada benchmark de eficiencia por modelo, lo que permite reportar
+media y desviaci\'on est\'andar.
+
+\subsection{Problema 6: Sin \texttt{cudnn.deterministic}}
+
+Las operaciones CUDA pueden usar algoritmos no deterministas por defecto,
+lo que introduce variabilidad entre ejecuciones id\'enticas.
+
+\textbf{Correcci\'on:} a\~nadir
+\texttt{torch.backends.cudnn.deterministic = True} y
+\texttt{torch.backends.cudnn.benchmark = False} en la funci\'on
+\texttt{set\_seed()}.
+
+\subsection{Resumen de la auditor\'ia}
 
 \begin{table}[H]
 \centering
-\caption{Hiperparámetros de entrenamiento — extraídos de \texttt{configs/distill.yaml}.}
-\label{tab:distill-hparams}
-\begin{tabular}{@{}ll@{}}
+\caption{Resumen: configuraci\'on preliminar vs.\ definitiva.}
+\label{tab:audit-summary}
+\begin{tabular}{@{}p{4.5cm}ll@{}}
 \toprule
-\textbf{Parámetro} & \textbf{Valor} \\
+\textbf{Aspecto} & \textbf{Preliminar} & \textbf{Definitivo} \\
 \midrule
-\multicolumn{2}{@{}l}{\textit{LoRA (PEFT)}} \\
-Rango LoRA ($r$)            & 64 \\
-LoRA $\alpha$               & 16 \\
-LoRA dropout                & 0.05 \\
-Módulos objetivo            & \texttt{q\_proj}, \texttt{k\_proj}, \texttt{v\_proj}, \texttt{o\_proj}, \texttt{gate\_proj}, \texttt{up\_proj}, \texttt{down\_proj} \\
-Task type                   & \texttt{CAUSAL\_LM} \\
-\midrule
-\multicolumn{2}{@{}l}{\textit{Entrenamiento SFT}} \\
-Tasa de aprendizaje         & $2 \times 10^{-4}$ \\
-Scheduler LR                & Coseno con warmup \\
-Ratio de warmup             & 0.03 \\
-Épocas                      & 3 \\
-Batch por GPU               & 4 \\
-Acumulación de gradientes   & 4 pasos (batch efectivo = 16) \\
-Longitud máxima de secuencia & 2048 tokens \\
-Precisión de cómputo        & bfloat16 (auto-detectado; float32 en CPU) \\
-Gradient checkpointing      & Activado (\texttt{use\_reentrant=False}) \\
-\texttt{dataloader\_num\_workers} & 0 (necesario en SLURM para evitar deadlocks) \\
-\texttt{dataloader\_pin\_memory}  & False \\
-Semilla                     & 42 \\
-\midrule
-\multicolumn{2}{@{}l}{\textit{Hardware de entrenamiento}} \\
-GPUs                        & 4 $\times$ NVIDIA H100 64\,GB (nodo exclusivo MN5) \\
-Jobs SLURM                  & \texttt{distill-7b} (ID 37123021), \texttt{distill-1.5b} (ID 37123022) \\
+Split para KD          & \cellcolor{warnbg}TEST (leakage)
+    & \cellcolor{okbg}TRAIN \\
+Peticiones bench       & \cellcolor{warnbg}1\,000
+    & \cellcolor{okbg}10\,000 \\
+Warmup                 & \cellcolor{warnbg}0
+    & \cellcolor{okbg}200 \\
+Validaci\'on SFT       & \cellcolor{warnbg}Ninguna
+    & \cellcolor{okbg}85/15 + early stopping \\
+Repeticiones           & \cellcolor{warnbg}1
+    & \cellcolor{okbg}3 \\
+\texttt{cudnn.deterministic}
+    & \cellcolor{warnbg}No & \cellcolor{okbg}S\'i \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Parámetros LoRA: elección de $r$ y $\alpha$.}
-El rango $r=64$ determina el rango de las matrices de adaptación:
-$W_{\text{LoRA}} = W_0 + \frac{\alpha}{r} \cdot B A$
-donde $A \in \mathbb{R}^{d \times r}$ y $B \in \mathbb{R}^{r \times d}$.
-Con $\alpha=16$ y $r=64$, el factor de escala es $\alpha/r = 0.25$.
-Los 7 módulos objetivo cubren toda la ruta de información: proyecciones de
-atención (Q, K, V, O) y la red MLP (\texttt{gate\_proj}, \texttt{up\_proj},
-\texttt{down\_proj}), maximizando la expresividad del adaptador.
+% ════════════════════════════════════════════════════════════
+\section{Pipeline definitivo}
+\label{sec:definitive}
 
-\subsection{Paso 1 — Generación de salidas del teacher}
-\label{subsec:generation}
+Tras la auditor\'ia, redise\~namos el pipeline experimental desde cero,
+corrigiendo todos los problemas identificados. El resultado es un
+sistema de tres fases encadenadas mediante dependencias SLURM, donde
+cada fase solo se ejecuta si la anterior termina correctamente.
 
-\subsubsection{Job SLURM — \texttt{slurm/distill\_generate.sbatch}}
+\subsection{Arquitectura general}
 
-\begin{lstlisting}[language=bash, caption={Cabecera SLURM del job de generación.}]
-#SBATCH --job-name=distill-gen
+El pipeline definitivo se divide en \textbf{tres jobs SLURM encadenados}
+(Figura~\ref{fig:pipeline-def}):
+
+\begin{enumerate}
+  \item \textbf{Fase~1 --- Baselines} (18\,h): mide calidad y eficiencia
+    de los 3 modelos base (teacher + 2 students).
+  \item \textbf{Fase~2 --- Destilaci\'on} (12\,h): genera outputs del
+    teacher con los TRAIN splits y entrena ambos students con SFT+LoRA.
+  \item \textbf{Fase~3 --- Post-evaluaci\'on} (18\,h): fusiona los
+    adaptadores LoRA, sirve los modelos destilados y mide su calidad y
+    eficiencia.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    fase/.style={draw, rounded corners=5pt, fill=#1,
+                 minimum width=4cm, minimum height=2.2cm,
+                 align=center, font=\small},
+    arr/.style={-{Stealth[length=4mm]}, line width=2pt, gray!60},
+    lbl/.style={font=\scriptsize\itshape, text=gray!50},
+]
+    \node[fase=blue!10] (f1) at (0,0) {
+        \textbf{Fase 1}\\[2pt]
+        Baselines\\[2pt]
+        {\scriptsize 18h $\cdot$ Job 37344851}
+    };
+    \node[fase=orange!10] (f2) at (6,0) {
+        \textbf{Fase 2}\\[2pt]
+        Destilaci\'on\\[2pt]
+        {\scriptsize 12h $\cdot$ Job 37344852}
+    };
+    \node[fase=teal!10] (f3) at (12,0) {
+        \textbf{Fase 3}\\[2pt]
+        Post-evaluaci\'on\\[2pt]
+        {\scriptsize 18h $\cdot$ Job 37344853}
+    };
+
+    \draw[arr] (f1.east) -- (f2.west)
+        node[midway, above, lbl] {afterok};
+    \draw[arr] (f2.east) -- (f3.west)
+        node[midway, above, lbl] {afterok};
+\end{tikzpicture}
+\caption{Los tres jobs del pipeline definitivo, encadenados con
+\texttt{--dependency=afterok}. Si cualquier fase falla, las siguientes
+no se ejecutan.}
+\label{fig:pipeline-def}
+\end{figure}
+
+La raz\'on de dividir en tres jobs en lugar de uno solo es la
+\textbf{restricci\'on de 48 horas por job} de la QOS del cl\'uster. Un
+\'unico job con las 36 mediciones necesarias podr\'ia exceder ese
+l\'imite. Adem\'as, la divisi\'on permite re-lanzar una fase individual
+si falla, sin perder el trabajo de las fases anteriores.
+
+\subsection{Cadena SLURM y lanzamiento}
+
+Los tres jobs se lanzan con un \'unico script
+(\texttt{slurm/launch\_pipeline.sh}) que encadena las dependencias
+autom\'aticamente:
+
+\begin{lstlisting}[language=bash,
+  caption={Script \texttt{slurm/launch\_pipeline.sh}.}]
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+JOB1=$(sbatch --parsable slurm/fase1_baselines.sbatch)
+echo "  FASE 1 (baselines):  Job ${JOB1}  [18h]"
+
+JOB2=$(sbatch --parsable --dependency=afterok:${JOB1} \
+       slurm/fase2_distill.sbatch)
+echo "  FASE 2 (distill):    Job ${JOB2}  [12h]"
+
+JOB3=$(sbatch --parsable --dependency=afterok:${JOB2} \
+       slurm/fase3_posteval.sbatch)
+echo "  FASE 3 (post-eval):  Job ${JOB3}  [18h]"
+\end{lstlisting}
+
+La directiva \texttt{--dependency=afterok:JOBID} indica a SLURM que
+mantenga el job en estado ``Pending (Dependency)'' hasta que el job
+anterior termine con c\'odigo de salida 0. Si el job anterior falla, el
+dependiente pasa a estado ``Cancelled''.
+
+\paragraph{Configuraci\'on SLURM com\'un a los tres jobs:}
+\begin{lstlisting}[language=bash,
+  caption={Directivas SLURM comunes.}]
 #SBATCH --partition=acc
 #SBATCH --account=bsc98
 #SBATCH --qos=acc_bsccs
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
-#SBATCH --exclusive
-#SBATCH --time=04:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=20     # minimo obligatorio por GPU en MN5
+# SIN --exclusive  (eliminado para evitar esperas de dias)
 \end{lstlisting}
 
-\noindent El script realiza tres etapas encadenadas con \texttt{set -euo pipefail}
-(aborta inmediatamente en cualquier error):
+Un aprendizaje importante de este proyecto fue que el flag
+\texttt{--exclusive} (que reserva un nodo completo) caus\'o que jobs
+anteriores (37257890--37257892) quedaran en cola durante 2 d\'ias sin
+ejecutarse. Al eliminarlo, los jobs se asignan a nodos compartidos y
+arrancan mucho m\'as r\'apido.
+
+\subsection{Detalle de ejecuci\'on SLURM}
+\label{sec:slurm-detail}
+
+Para entender exactamente qu\'e ocurre al lanzar el pipeline, es
+necesario conocer el flujo completo desde el \texttt{sbatch} hasta la
+ejecuci\'on del c\'odigo Python.
+
+\subsubsection{Secuencia de arranque de cada job}
+
+Cuando SLURM asigna recursos a un job, se ejecuta la siguiente
+secuencia (com\'un a los tres scripts \texttt{.sbatch}):
+
 \begin{enumerate}
-  \item Arranca \texttt{serving.start\_server} con el modelo teacher
-    (\texttt{Qwen/Qwen2.5-14B-Instruct}) en segundo plano.
-  \item Espera hasta 10 minutos a que \texttt{/health} responda OK
-    (\texttt{serving.healthcheck --retries 120 --interval 5}).
-  \item Ejecuta \texttt{distill.generate\_teacher\_outputs --config configs/distill.yaml}.
+  \item \textbf{Asignaci\'on de SLURM}: el scheduler selecciona un nodo
+    con GPU libre (p.ej.~\texttt{as04r3b24}) y reserva 1~GPU H100 +
+    20~CPUs + memoria proporcional.
+  \item \textbf{Cambio de directorio}: \texttt{cd /gpfs/scratch/bsc98/\-tbsc381408/\-Tfg-mn5-llm-serving} (ra\'iz del repositorio en GPFS).
+  \item \textbf{Bootstrap del entorno}: \texttt{source env/setup\_env.sh}
+    que:
+    \begin{itemize}
+      \item Carga 6 m\'odulos Lmod (intel, impi, mkl, sqlite3, hdf5,
+        python/3.12.1).
+      \item Activa el virtualenv en \texttt{\$HOME/.venvs/tfg}.
+      \item Configura \texttt{LD\_LIBRARY\_PATH} y \texttt{LD\_PRELOAD}
+        para evitar conflictos de versiones de PyTorch.
+      \item Establece \texttt{HF\_HOME} al GPFS del proyecto
+        (\texttt{/gpfs/projects/bsc98/tbsc381408/hf\_cache/}) y activa
+        modo offline.
+    \end{itemize}
+  \item \textbf{Registro de trap}: se define \texttt{cleanup()} con
+    \texttt{trap cleanup EXIT} para garantizar que el servidor vLLM se
+    pare aunque el script falle o sea cancelado por SLURM.
+  \item \textbf{Diagn\'osticos}: imprime fecha UTC, job ID, nodo,
+    commit git, modelo de GPU y versi\'on del driver.
+  \item \textbf{Ejecuci\'on del payload}: arranca servidor vLLM,
+    ejecuta benchmarks, para servidor. El ciclo se repite por cada
+    modelo.
 \end{enumerate}
 
-\subsubsection{Script \texttt{distill/generate\_teacher\_outputs.py}}
+\subsubsection{Sistema de gesti\'on del servidor vLLM}
 
-Este script recorre los dos benchmarks matemáticos y consulta el teacher mediante la
-API OpenAI-compatible del servidor vLLM. Usa un \textbf{cliente HTTP asíncrono}
-(\texttt{httpx.AsyncClient}) con concurrencia configurable para no saturar el servidor.
+Dentro de cada script \texttt{.sbatch}, la funci\'on
+\texttt{start\_server()} sigue este patr\'on:
 
-\paragraph{Recolección de prompts.}
-Dos funciones independientes (\texttt{\_collect\_gsm8k\_prompts},
-\texttt{\_collect\_math\_prompts}) cargan
-los datasets desde HuggingFace Hub y formatan cada item con su plantilla de prompt.
-La lista unificada de 1819 prompts se pasa al generador asíncrono.
-
-\paragraph{Generación greedy y formato JSONL.}
-Cada llamada al servidor usa exactamente los mismos parámetros que en evaluación
-(\texttt{temperature=0.0}, \texttt{top\_p=1.0}, \texttt{max\_tokens=1024}) para
-que las salidas del teacher sean coherentes con el benchmark. Cada resultado se
-escribe en \texttt{results/distill/teacher\_outputs.jsonl} con el esquema:
-
-\begin{lstlisting}[language={}, caption={Esquema JSONL de teacher\_outputs.}]
-{
-  "id":                    "gsm8k-0",
-  "benchmark":             "gsm8k",
-  "prompt":                "<texto completo del prompt>",
-  "teacher_completion":    "<respuesta greedy del teacher>",
-  "teacher_model":         "Qwen/Qwen2.5-14B-Instruct",
-  "generation_parameters": {"temperature": 0.0, "max_tokens": 1024},
-  "latency_ms":            234.7,
-  "finish_reason":         "stop",
-  "error":                 null
+\begin{lstlisting}[language=bash, caption={Patr\'on de arranque del
+servidor vLLM dentro de cada sbatch.}]
+start_server() {
+    local ROLE=$1              # teacher | student_mid | student_small
+    python -m serving.start_server \
+        --config configs/serving.yaml \
+        --models configs/models.yaml \
+        --role "${ROLE}" &     # lanza en background
+    _SERVER_PID=$!             # captura PID
+    python -m serving.healthcheck \
+        --url http://localhost:8000 \
+        --retries 120 --interval 5  # espera max 10 min
 }
 \end{lstlisting}
 
-\noindent Los items con \texttt{"error": <mensaje>} se omiten automáticamente
-en el paso de entrenamiento. El job de generación procesó los \textbf{1819 prompts
-completamente} (Tabla~\ref{tab:distill-dataset}) sin ningún fallo de red.
+El servidor se arranca como proceso background (\texttt{\&}) y el
+script espera con \texttt{healthcheck.py} hasta que el endpoint
+\texttt{/health} responda correctamente. La carga del modelo de 14B
+tarda $\sim$30 segundos en el H100. Una vez sano, se ejecutan los
+benchmarks contra \texttt{http://localhost:8000}.
+
+Cuando terminan los benchmarks para un modelo, \texttt{stop\_server()}
+env\'ia \texttt{SIGTERM} al proceso, espera con \texttt{wait} y
+duerme 5 segundos antes de arrancar el siguiente modelo, para
+garantizar que la GPU se libere completamente.
+
+\subsubsection{Recursos SLURM por fase}
+
+La siguiente tabla detalla los recursos exactos que solicita cada job:
 
 \begin{table}[H]
 \centering
-\caption{Distribución del dataset de destilación por benchmark.}
-\label{tab:distill-dataset}
-\begin{tabular}{@{}lcc@{}}
-\toprule
-\textbf{Benchmark} & \textbf{Prompts} & \textbf{Errores} \\
-\midrule
-GSM8K          & 1\,319 & 0 \\
-MATH-500       &   500 & 0 \\
-\midrule
-\textbf{Total} & \textbf{1\,819} & \textbf{0} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{Paso 2 — Entrenamiento SFT con LoRA}
-\label{subsec:sft}
-
-\subsubsection{Jobs SLURM — \texttt{slurm/distill\_train\_7b.sbatch} y \texttt{distill\_train\_1.5b.sbatch}}
-
-\begin{lstlisting}[language=bash, caption={Cabecera SLURM del job de training (7B).}]
-#SBATCH --job-name=distill-7b
-#SBATCH --partition=acc
-#SBATCH --account=bsc98
-#SBATCH --qos=acc_bsccs
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:1
-#SBATCH --exclusive          # nodo entero: 4x H100 64GB disponibles
-#SBATCH --time=06:00:00
-\end{lstlisting}
-
-\noindent La flag \texttt{--exclusive} garantiza el acceso exclusivo al nodo
-completo con sus 4 GPUs H100-64\,GB. El script verifica que el dataset exista
-(\texttt{results/distill/teacher\_outputs.jsonl}), imprime estadísticas del nodo
-y lanza:
-\begin{lstlisting}[language=bash]
-python -m distill.train_student_sft \
-    --config configs/distill.yaml \
-    --student "Qwen/Qwen2.5-7B-Instruct"
-\end{lstlisting}
-
-\noindent El script del 1.5B es idéntico excepto por el modelo estudiante
-(\texttt{Qwen/Qwen2.5-1.5B-Instruct}) y el tiempo asignado (4h frente a 6h).
-
-\subsubsection{Script central — \texttt{distill/train\_student\_sft.py}}
-
-La función \texttt{run(config\_path, student\_override, max\_samples)} implementa el
-bucle completo de SFT en cinco etapas:
-
-\paragraph{Etapa 1: Carga del modelo con distribución automática.}
-\begin{lstlisting}[language=Python, caption={Carga del modelo estudiante con detección GPU.}]
-has_gpu = torch.cuda.is_available()
-use_bf16 = tcfg.get("bf16", True) and has_gpu and \
-           torch.cuda.is_bf16_supported()
-load_dtype = torch.bfloat16 if use_bf16 else torch.float32
-
-model = AutoModelForCausalLM.from_pretrained(
-    student_model,
-    dtype=load_dtype,    # bfloat16 en H100, float32 en CPU
-    device_map="auto",   # distribuye sobre las GPUs disponibles
-)
-\end{lstlisting}
-
-\texttt{device\_map="auto"} hace que \texttt{accelerate} distribuya las capas
-del modelo entre todas las GPUs disponibles del nodo, maximizando el uso de
-VRAM. En el nodo de training (4$\times$H100-64\,GB), el 7B cabe en 1--2 GPUs,
-y el 1.5B en 1 GPU; las restantes se usan para el batch en paralelo.
-
-\paragraph{Etapa 2: Aplicación del adaptador LoRA.}
-\begin{lstlisting}[language=Python, caption={Configuración e inicialización del adaptador LoRA.}]
-peft_config = LoraConfig(
-    r=64, lora_alpha=16, lora_dropout=0.05,
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                    "gate_proj", "up_proj", "down_proj"],
-    bias="none",
-    task_type=TaskType.CAUSAL_LM,
-)
-# CRITICO: habilitar gradientes en entradas ANTES de get_peft_model
-# (requisito para que gradient_checkpointing funcione con PEFT)
-model.enable_input_require_grads()
-model = get_peft_model(model, peft_config)
-model.print_trainable_parameters()
-# -> trainable params: ~167M / 7B = ~2.4% (7B)
-# -> trainable params:  ~29M / 1.5B = ~1.9% (1.5B)
-\end{lstlisting}
-
-\paragraph{Etapa 3: Tokenización con enmascaramiento de completado.}
-La función \texttt{\_prepare\_dataset} carga el JSONL, filtra items con error,
-tokeniza cada par $(\text{prompt}, \text{completion})$ y aplica el
-\textbf{completion-only masking}: solo los tokens de la respuesta del teacher
-contribuyen a la pérdida; los tokens del prompt reciben \texttt{label=-100}
-(ignorados por \texttt{CrossEntropyLoss}).
-
-\begin{lstlisting}[language=Python, caption={Completion-only masking en \_prepare\_dataset.}]
-# Longitud del prompt en tokens
-prompt_enc = tokeniser(prompt_text, add_special_tokens=True, truncation=False)
-prompt_len = len(prompt_enc["input_ids"])
-
-# Secuencia completa: prompt + completion
-full_enc = tokeniser(
-    prompt_text + completion_text,
-    truncation=True, max_length=2048, padding="max_length",
-)
-input_ids     = full_enc["input_ids"]
-attention_mask = full_enc["attention_mask"]
-
-# Labels: -100 hasta prompt_len, id real para completion (no padding)
-labels = [-100] * len(input_ids)
-for i in range(prompt_len, len(input_ids)):
-    if attention_mask[i] == 1:   # ignorar padding
-        labels[i] = input_ids[i]
-full_enc["labels"] = labels
-\end{lstlisting}
-
-Esta estrategia evita que el estudiante memorice la formulación del prompt y
-fuerza el aprendizaje de las \emph{cadenas de razonamiento} del teacher.
-El dataset final contiene 1819 ejemplos (filtrado de items sin completado o con
-error), en formato \texttt{torch} con columnas \texttt{input\_ids},
-\texttt{attention\_mask} y \texttt{labels}.
-
-\paragraph{Etapa 4: Configuración de TrainingArguments.}
-\begin{lstlisting}[language=Python, caption={Argumentos clave de entrenamiento.}]
-training_args = TrainingArguments(
-    output_dir=str(run_dir / "checkpoints"),
-    num_train_epochs=3,
-    per_device_train_batch_size=4,
-    gradient_accumulation_steps=4,  # batch efectivo = 16
-    learning_rate=2e-4,
-    lr_scheduler_type="cosine",
-    warmup_ratio=0.03,
-    bf16=True,
-    gradient_checkpointing=True,
-    gradient_checkpointing_kwargs={"use_reentrant": False},
-    eval_strategy="no",
-    dataloader_num_workers=0,   # 0: evita deadlocks SLURM
-    dataloader_pin_memory=False,
-    seed=42,
-)
-\end{lstlisting}
-
-\paragraph{Etapa 5: Entrenamiento y guardado del adaptador.}
-\texttt{transformers.Trainer} gestiona el bucle de entrenamiento con
-\texttt{DataCollatorForLanguageModeling(mlm=False)} (modelado de lenguaje
-causal). Al finalizar las 3 épocas:
-\begin{itemize}
-  \item \texttt{trainer.save\_model(final\_dir)} guarda únicamente los pesos LoRA
-    (no el modelo base) en \texttt{run\_dir/final\_adapter/}.
-  \item \texttt{tokeniser.save\_pretrained(final\_dir)} guarda el tokenizador.
-  \item Se escribe un \texttt{training\_manifest.json} con metadatos del run:
-    modelo estudiante, ruta del adaptador, número de muestras, épocas, rango $r$.
-\end{itemize}
-
-\subsection{Bugs encontrados y corregidos durante el desarrollo}
-\label{subsec:bugs}
-
-El proceso de training requirió identificar y corregir seis bugs antes de
-lograr una ejecución exitosa. Se documentan aquí para referencia:
-
-\begin{table}[H]
-\centering
-\caption{Bugs encontrados en \texttt{distill/train\_student\_sft.py} y sus correcciones.}
-\label{tab:bugs}
-\begin{tabular}{@{}p{4.5cm}p{4.5cm}p{4.5cm}@{}}
-\toprule
-\textbf{Bug} & \textbf{Causa raíz} & \textbf{Corrección} \\
-\midrule
-\texttt{TypeError: evaluation\_strategy} &
-  Argumento deprecado en \texttt{transformers $\geq$\,4.47} &
-  Renombrarlo a \texttt{eval\_strategy} \\
-\addlinespace
-Crash al iniciar training con gradient checkpointing &
-  PEFT/LoRA requiere que los gradientes en las entradas estén habilitados antes de aplicar los adaptadores &
-  Añadir \texttt{model.enable\_input\_require\_grads()} antes de \texttt{get\_peft\_model()} \\
-\addlinespace
-Modelo cargado en CPU (OOM al procesar el primer batch) &
-  Sin \texttt{device\_map}, \texttt{from\_pretrained} carga en CPU por defecto &
-  Añadir \texttt{device\_map=``auto''} \\
-\addlinespace
-\texttt{TypeError: torch\_dtype} &
-  \texttt{torch\_dtype} deprecado; el argumento correcto es \texttt{dtype} &
-  Cambiar a \texttt{dtype=load\_dtype} con auto-detección de bf16 \\
-\addlinespace
-Deadlock del dataloader en SLURM &
-  Workers de dataloader con \texttt{fork} en SLURM causa deadlock por duplicación de recursos CUDA &
-  Establecer \texttt{dataloader\_num\_workers=0} y \texttt{pin\_memory=False} \\
-\addlinespace
-Warning: \texttt{use\_reentrant} deprecado &
-  Gradient checkpointing con PEFT lanza advertencia sobre la implementación reentrant legacy &
-  Añadir \texttt{gradient\_checkpointing\_kwargs=\{``use\_reentrant'': False\}} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\noindent Las correcciones 1--4 eran \emph{bloqueantes} (training no arrancaba);
-las correcciones 5--6 solucionaron problemas de estabilidad en SLURM.
-En total se necesitaron 5 intentos de ejecución (jobs 37093510, 37093511,
-37098477, 37098478, y finalmente 37123021/37123022) antes de obtener un run limpio.
-
-\subsection{Resultados del entrenamiento}
-\label{subsec:training-results}
-
-\begin{table}[H]
-\centering
-\caption{Resultados del entrenamiento SFT — jobs SLURM 37123021 (7B) y 37123022 (1.5B).}
-\label{tab:train-results}
+\caption{Recursos SLURM solicitados por cada fase del pipeline.}
+\label{tab:slurm-resources}
 \begin{tabular}{@{}lcccccc@{}}
 \toprule
-\textbf{Modelo} & \textbf{Pérdida final} & \textbf{Épocas} & \textbf{Runtime} & \textbf{Muestras/s} & \textbf{Nodo} & \textbf{Job} \\
+\textbf{Fase} & \textbf{GPU} & \textbf{CPU} & \textbf{Tiempo}
+  & \textbf{Partici\'on} & \textbf{QoS} & \textbf{Job ID} \\
 \midrule
-Student 7B   & 0.2699 & 3 & 75 min & 1.99 & as03r1b11 & 37123021 \\
-Student 1.5B & 0.3383 & 3 & 32 min & 4.68 & as03r1b11 & 37123022 \\
+Fase~1 (baselines)  & 1$\times$H100 & 20 & 18\,h & acc & acc\_bsccs & 37344851 \\
+Fase~2 (distill)    & 1$\times$H100 & 20 & 12\,h & acc & acc\_bsccs & 37344852 \\
+Fase~3 (post-eval)  & 1$\times$H100 & 20 & 18\,h & acc & acc\_bsccs & 37344853 \\
+\midrule
+\textbf{Total}      & & & \textbf{48\,h} & & & \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\noindent El 1.5B entrena 2.4$\times$ más rápido (4.68 vs 1.99 muestras/s),
-coherente con su menor número de parámetros. La pérdida final mayor del 1.5B
-(0.3383 > 0.2699) refleja su menor capacidad para imitar al teacher de 14B.
-Ambos muestran convergencia limpia con la schedulación coseno: gradient norms
-estables ($\approx 0.06$--$0.08$) sin inestabilidad numérica.
+Las tres fases usan exactamente los mismos recursos: 1 GPU H100 con
+20 CPUs (m\'inimo obligatorio por GPU en MN5). La partici\'on
+\texttt{acc} proporciona nodos con hasta 4 GPUs H100-SXM5 por nodo
+(35 nodos en total).
+
+\subsection{Fase~1: Baselines}
+
+La primera fase mide las l\'ineas base de los tres modelos sin
+modificar. Para cada modelo, el script:
+
+\begin{enumerate}
+  \item Arranca el servidor vLLM con el modelo correspondiente
+    (\texttt{serving/start\_server.py}).
+  \item Ejecuta la \textbf{evaluaci\'on de calidad}: GSM8K (1\,319
+    items) + MATH-500 (500 items).
+  \item Ejecuta el \textbf{benchmark de throughput} 3 veces (10\,000
+    peticiones + 200 warmup cada una).
+  \item Ejecuta el \textbf{benchmark de latencia online} 3 veces
+    (10\,000 peticiones + 200 warmup, tasa Poisson $\lambda=10$).
+  \item Para el servidor vLLM.
+\end{enumerate}
+
+Adem\'as, para el teacher se ejecuta un \textbf{routing benchmark}
+adicional que eval\'ua su capacidad de clasificar preguntas por
+dificultad (\'util para sistemas h\'ibridos en producci\'on).
+
+En total, la Fase~1 ejecuta:
+
+\begin{table}[H]
+\centering
+\caption{Mediciones de la Fase~1.}
+\label{tab:fase1-runs}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{Quality} & \textbf{Throughput} & \textbf{Online} \\
+\midrule
+Teacher 14B  & 1 run + 1 routing & 3 reps & 3 reps \\
+Student 7B   & 1 run             & 3 reps & 3 reps \\
+Student 1.5B & 1 run             & 3 reps & 3 reps \\
+\midrule
+\textbf{Subtotal} & 4 & 9 & 9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Fase~2: Destilaci\'on}
+
+La segunda fase ejecuta la destilaci\'on propiamente dicha, con todas
+las correcciones de la auditor\'ia aplicadas.
+
+\subsubsection{Generaci\'on de outputs del teacher (TRAIN splits)}
+
+A diferencia de los experimentos preliminares, el teacher genera sus
+respuestas sobre los \textbf{TRAIN splits}, que son completamente
+independientes de los TEST splits usados en la evaluaci\'on:
+
+\begin{table}[H]
+\centering
+\caption{Dataset de destilaci\'on definitivo.}
+\label{tab:distill-dataset}
+\begin{tabular}{@{}llcl@{}}
+\toprule
+\textbf{Benchmark} & \textbf{Split} & \textbf{Items}
+    & \textbf{Â¿Solapa con eval?} \\
+\midrule
+GSM8K  & train & 7\,473          & No (eval = test, 1\,319) \\
+MATH   & train & $\sim$7\,500    & No (eval = MATH-500, 500) \\
+\midrule
+\textbf{Total} & & \textbf{$\sim$15\,000} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El dataset de destilaci\'on pasa de 1\,819 items (preliminar) a
+$\sim$15\,000 items --- un aumento de $8\times$ en datos de
+entrenamiento, adem\'as de eliminar el data leakage.
+
+\subsubsection{Entrenamiento con validaci\'on y early stopping}
+
+Los hiperpar\'ametros base (LoRA $r$=64, $\alpha$=16, lr=$2 \times
+10^{-4}$, etc.) se mantienen id\'enticos a los preliminares, pero
+se a\~naden los mecanismos de regularizaci\'on:
+
+\begin{itemize}
+  \item \textbf{Split 85/15:} el 85\% de los $\sim$15\,000 items se usa
+    para training ($\sim$12\,750 items) y el 15\% restante para
+    validaci\'on ($\sim$2\,250 items).
+  \item \textbf{Evaluaci\'on peri\'odica:} cada 50 pasos de training se
+    calcula la loss sobre el conjunto de validaci\'on.
+  \item \textbf{Early stopping con patience 3:} si la loss de
+    validaci\'on no mejora durante 3 evaluaciones consecutivas (150
+    pasos), el entrenamiento se detiene.
+  \item \textbf{Best model:} al finalizar se carga autom\'aticamente el
+    checkpoint con la mejor loss de validaci\'on, no el \'ultimo.
+\end{itemize}
+
+La Figura~\ref{fig:training-flow} ilustra este flujo:
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.85\textwidth,
-    height=7cm,
-    xlabel={Época},
-    ylabel={Training loss (cross-entropy)},
-    xmin=1.8, xmax=3.05,
-    ymin=0.18, ymax=0.40,
-    legend style={at={(0.98,0.95)}, anchor=north east, font=\small},
-    grid=both,
-    grid style={line width=0.2pt, draw=gray!20},
-    major grid style={line width=0.4pt, draw=gray!40},
-    xtick={2.0,2.2,2.4,2.6,2.8,3.0},
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=4pt, fill=#1,
+                minimum width=3.5cm, minimum height=1cm,
+                align=center, font=\small},
+    arr/.style={-{Stealth[length=2.5mm]}, thick, gray!60},
 ]
-% 7B loss (epocas 2-3, 23 puntos del log SLURM)
-\addplot[color=midstud, thick, mark=none] coordinates {
-  (1.82, 0.2791) (1.87, 0.2601) (1.93, 0.2567) (1.98, 0.2491)
-  (2.03, 0.2612) (2.09, 0.2309) (2.14, 0.2124) (2.19, 0.2277)
-  (2.25, 0.2499) (2.30, 0.2255) (2.35, 0.2283) (2.41, 0.2275)
-  (2.46, 0.2391) (2.51, 0.2151) (2.57, 0.2317) (2.62, 0.2222)
-  (2.67, 0.2487) (2.73, 0.2376) (2.78, 0.2229) (2.83, 0.2254)
-  (2.89, 0.2117) (2.94, 0.2291) (2.99, 0.2107)
-};
-% 1.5B loss (epocas 2-3, 23 puntos del log SLURM)
-\addplot[color=smallstud, thick, mark=none, dashed] coordinates {
-  (1.82, 0.3474) (1.87, 0.3218) (1.93, 0.3215) (1.98, 0.3099)
-  (2.03, 0.3319) (2.09, 0.3046) (2.14, 0.2821) (2.19, 0.3010)
-  (2.25, 0.3262) (2.30, 0.3016) (2.35, 0.3011) (2.41, 0.3035)
-  (2.46, 0.3162) (2.51, 0.2886) (2.57, 0.3046) (2.62, 0.2963)
-  (2.67, 0.3278) (2.73, 0.3131) (2.78, 0.2994) (2.83, 0.2984)
-  (2.89, 0.2870) (2.94, 0.2999) (2.99, 0.2816)
-};
-\legend{Student 7B (loss fin\,=\,0.2699), Student 1.5B (loss fin\,=\,0.3383)}
-\end{axis}
+    \node[box=orange!10] (data) at (0,0) {$\sim$15\,000 ejemplos\\(TRAIN splits)};
+    \node[box=blue!8]  (tr) at (-3,-2) {85\% Training\\$\sim$12\,750};
+    \node[box=teal!8]  (va) at (3,-2)  {15\% Validaci\'on\\$\sim$2\,250};
+    \node[box=orange!8] (sft) at (0,-4) {SFT + LoRA\\(eval cada 50 pasos)};
+    \node[box=okbg] (es) at (0,-6) {Early Stopping\\(patience = 3)};
+    \node[box=okbg] (best) at (0,-8) {Guardar mejor modelo\\(m\'in.\ val loss)};
+
+    \draw[arr] (data) -- (tr);
+    \draw[arr] (data) -- (va);
+    \draw[arr] (tr) -- (sft);
+    \draw[arr, dashed] (va.south) -- +(0,-0.5) -| (sft.east)
+        node[pos=0.25, right, font=\scriptsize] {eval c/50 steps};
+    \draw[arr] (sft) -- (es);
+    \draw[arr] (es) -- (best);
 \end{tikzpicture}
-\caption{Curvas de pérdida durante las épocas 2--3 del entrenamiento SFT (datos reales
-de los logs SLURM 37123021 y 37123022). La schedulación coseno produce descenso suave;
-menor pérdida del 7B refleja su mayor capacidad de imitar al teacher.}
-\label{fig:loss}
+\caption{Flujo de entrenamiento definitivo. El dataset se divide en
+training y validaci\'on. El entrenamiento se detiene autom\'aticamente
+si la loss de validaci\'on deja de mejorar.}
+\label{fig:training-flow}
 \end{figure}
 
-\noindent Los adaptadores finales se guardaron en:
-\begin{itemize}
-  \item \texttt{results/distill/sft-qwen2.5-7b-20260301T111215Z/final\_adapter/}
-    (617\,MB, pesos LoRA en \texttt{adapter\_model.safetensors})
-  \item \texttt{results/distill/sft-qwen2.5-1.5b-20260301T121533Z/final\_adapter/}
-    (282\,MB)
-\end{itemize}
+\subsection{Fase~3: Post-evaluaci\'on}
 
-\subsection{Paso 3 — Evaluación post-destilación}
-\label{subsec:eval-pipeline}
+La tercera fase eval\'ua los modelos ya destilados. Para cada student
+(7B y 1.5B):
 
-\subsubsection{Job SLURM — \texttt{slurm/eval\_distilled\_7b.sbatch}}
+\begin{enumerate}
+  \item \textbf{Localiza el adaptador LoRA} m\'as reciente en
+    \texttt{results/distill/} (selecciona el directorio con timestamp
+    m\'as reciente mediante \texttt{ls -dt}).
+  \item \textbf{Fusiona el adaptador} con el modelo base mediante
+    \texttt{merge\_and\_unload()}, produciendo un modelo completo que
+    ya no necesita la librer\'ia PEFT. La fusi\'on aplica
+    $W_{\text{merged}} = W_0 + \frac{\alpha}{r} B A$ directamente
+    sobre los pesos.
+  \item \textbf{Sirve el modelo fusionado} con vLLM (lanzado
+    directamente como \texttt{vllm.entrypoints.openai.api\_server}
+    apuntando al directorio del modelo fusionado).
+  \item \textbf{Ejecuta calidad:} GSM8K + MATH-500.
+  \item \textbf{Ejecuta eficiencia:} throughput $\times$3 + online
+    $\times$3 (con 10\,000 peticiones y 200 warmup cada vez).
+\end{enumerate}
 
-\begin{lstlisting}[language=bash, caption={Cabecera SLURM del job de evaluación post-destilación.}]
-#SBATCH --job-name=eval-dist7b
-#SBATCH --partition=acc
-#SBATCH --account=bsc98
-#SBATCH --qos=acc_bsccs
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:1
-#SBATCH --exclusive
-#SBATCH --time=05:00:00
-\end{lstlisting}
+A diferencia de las fases 1 y 2 (que usan \texttt{serving/start\_server.py}),
+la fase 3 usa la funci\'on \texttt{start\_server\_custom()} que lanza
+\texttt{vllm.entrypoints.openai.api\_server} directamente con la ruta
+al modelo fusionado, ya que estos modelos no est\'an en el registro
+de \texttt{models.yaml}.
 
-\noindent El job detecta automáticamente el adaptador más reciente con:
-\begin{lstlisting}[language=bash]
-ADAPTER_DIR=$(ls -dt results/distill/sft-qwen2.5-7b-*/final_adapter \
-              2>/dev/null | head -1)
-\end{lstlisting}
-\noindent Esto garantiza que siempre se usa el último run exitoso sin hardcodear
-timestamps en el script.
-
-\subsubsection{Los cuatro subpasos encadenados}
-
-\paragraph{[1/4] Fusión del adaptador LoRA con el modelo base.}
-\begin{lstlisting}[language=Python, caption={Merge LoRA embebido en eval\_distilled\_7b.sbatch.}]
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch, shutil, os
-
-# Cargar modelo base en bfloat16
-base = AutoModelForCausalLM.from_pretrained(
-    'Qwen/Qwen2.5-7B-Instruct', torch_dtype=torch.bfloat16)
-# Cargar adaptador LoRA sobre el base
-model = PeftModel.from_pretrained(base, ADAPTER_DIR)
-# Fusionar: absorbe los deltas LoRA en los pesos densos
-merged = model.merge_and_unload()
-# Guardar como HuggingFace estándar (sin dependencia de PEFT)
-merged.save_pretrained(MERGED_DIR)
-AutoTokenizer.from_pretrained('Qwen/Qwen2.5-7B-Instruct') \
-             .save_pretrained(MERGED_DIR)
-\end{lstlisting}
-
-\noindent \texttt{merge\_and\_unload()} absorbe los deltas LoRA directamente en
-los pesos del transformer: $W_{\text{merged}} = W_0 + \frac{\alpha}{r} B A$.
-El resultado es un modelo HuggingFace estándar en
-\texttt{results/distill/merged-qwen2.5-7b/}, directamente cargable por vLLM
-sin ninguna dependencia de PEFT.
-
-\paragraph{[2/4] Arranque del servidor vLLM con el modelo fusionado.}
-\begin{lstlisting}[language=bash]
-python -m vllm.entrypoints.openai.api_server \
-    --model "${MERGED_DIR}" \
-    --host 0.0.0.0 --port 8000 \
-    --max-model-len 4096 \
-    --gpu-memory-utilization 0.90 \
-    --dtype auto \
-    --seed 42 &
-SERVER_PID=$!
-\end{lstlisting}
-
-\paragraph{[3/4] Health check hasta 10 minutos.}
-\begin{lstlisting}[language=bash]
-python -m serving.healthcheck \
-    --url "http://localhost:8000" \
-    --retries 120 --interval 5
-\end{lstlisting}
-
-\noindent El módulo \texttt{serving.healthcheck} hace polling del endpoint
-\texttt{GET /health} con hasta 120 reintentos cada 5 segundos (10 minutos total).
-Si el servidor no responde en ese tiempo, el script falla con error y el job SLURM
-termina con código de salida no nulo.
-
-\paragraph{[4/4] Evaluación de calidad con los mismos benchmarks de Fase 1.}
-\begin{lstlisting}[language=bash]
-python -m eval.run_quality \
-    --config configs/eval.yaml \
-    --model  "${MERGED_DIR}" \
-    --role   "distilled_student_mid"
-\end{lstlisting}
-
-\noindent Esto ejecuta GSM8K y MATH-500 con los mismos parámetros
-que en Fase~1 (greedy, seed=42), escribiendo los resultados en:
-\begin{center}
-\texttt{results/quality/quality-distilled\_student\_mid-<ts>/quality\_summary.json}
-\end{center}
-
-\noindent El job análogo (\texttt{eval\_distilled\_1.5b.sbatch}) usa el modelo
-\texttt{Qwen/Qwen2.5-1.5B-Instruct}, el role \texttt{distilled\_student\_small},
-y guarda en \texttt{results/quality/quality-distilled\_student\_small-<ts>/}.
-
-\subsection{Resultados post-destilación}
-
-Los jobs de evaluación post-destilación (\texttt{eval\_distilled\_7b.sbatch}
-y \texttt{eval\_distilled\_1.5b.sbatch}) han completado con éxito en MN5.
-Los resultados finales se muestran en la tabla \ref{tab:postdistill}.
-
-\medskip
+\subsection{Total de mediciones del pipeline}
 
 \begin{table}[H]
 \centering
-\caption{Resultados post-destilación: comparativa entre modelos base F1 y versiones destiladas.}
-\label{tab:postdistill}
-\begin{tabular}{@{}lccc@{}}
+\caption{Inventario completo de mediciones.}
+\label{tab:total-measurements}
+\begin{tabular}{@{}lccccc@{}}
 \toprule
-\textbf{Modelo} & \textbf{GSM8K (\%)} & \textbf{MATH-500 (\%)} & \textbf{$\Delta$ vs.\ base} \\
+\textbf{Modelo} & \textbf{Quality} & \textbf{Routing}
+    & \textbf{Throughput} & \textbf{Online} & \textbf{Total} \\
 \midrule
-Teacher 14B (ref.)        & 92.41 & 70.51 & --- \\
-Student 7B (base F1)      & 85.45 & 69.78 & --- \\
-Student 7B (destilado)    & 82.00 & 72.61 & $-3.45$ GSM, $+2.83$ MATH \\
-Student 1.5B (base F1)    & 63.56 & 36.81 & --- \\
-Student 1.5B (destilado)  & 65.70 & 47.45 & $+2.14$ GSM, $+10.64$ MATH \\
+Teacher 14B (base)     & 1 & 1 & 3 & 3 & 8 \\
+Student 7B (base)      & 1 & 0 & 3 & 3 & 7 \\
+Student 1.5B (base)    & 1 & 0 & 3 & 3 & 7 \\
+Distilled 7B           & 1 & 0 & 3 & 3 & 7 \\
+Distilled 1.5B         & 1 & 0 & 3 & 3 & 7 \\
+\midrule
+\textbf{Total}         & \textbf{5} & \textbf{1}
+    & \textbf{15} & \textbf{15} & \textbf{36} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Análisis de resultados.}
-El modelo 7B destilado muestra un trade-off: pierde $3.45$ puntos en GSM8K
-(aritmética escolar) pero gana $2.83$ puntos en MATH-500 (razonamiento de competición).
-Esto sugiere que la destilación refuerza capacidades de razonamiento matemático complejo
-a costa de cálculo numérico rutinario.
+Cada medici\'on de eficiencia usa 10\,000 peticiones con 200 de warmup,
+y se repite 3 veces. Esto supone que el pipeline procesa en total
+$15 \times (10{,}000 + 200) = 153{,}000$ peticiones solo en benchmarks
+de eficiencia, frente a las $2 \times 1{,}000 = 2{,}000$ del pipeline
+preliminar.
 
-El modelo 1.5B destilado mejora en ambos benchmarks
-($+2.14$ en GSM8K, $+10.64$ en MATH-500), lo que indica que la destilación es especialmente
-efectiva cuando el gap inicial entre teacher y student es amplio (el 1.5B base tenía
-solo 36.81\% en MATH vs.\ 70.51\% del teacher).
-
-
-% ════════════════════════════════════════════════════════════
+% ════════════════════════════════════════════════════════════
 \section{Reproducibilidad}
 \label{sec:reproducibility}
 
-Cada experimento es completamente reproducible. La reproducibilidad se garantiza
-por diseño a múltiples niveles:
-
-\paragraph{Nivel de configuración.}
-Todos los hiperparámetros, rutas y opciones están externalizados en ficheros YAML
-bajo \texttt{configs/}. Ningún hiperparámetro está hardcodeado en el código Python
-salvo valores por defecto con \texttt{.get("param", default)}.
-
-\paragraph{Nivel de ejecución.}
-Cada run crea un directorio con timestamp UTC único, copia todos los YAMLs activos
-y registra en \texttt{metadata.json}: hostname, GPU (nombre y memoria), versión CUDA,
-versión Python, git SHA del repositorio y semilla aleatoria utilizada.
-
-\paragraph{Nivel de aleatoriedad.}
-La función \texttt{set\_seed(seed)} de \texttt{utils/reproducibility.py} fija las
-semillas de Python \texttt{random}, NumPy y PyTorch (incluyendo
-\texttt{torch.cuda.manual\_seed\_all}), garantizando determinismo en la inicialización
-de LoRA y el shuffle del dataloader.
-
-\paragraph{Nivel de generación.}
-El teacher genera con \texttt{temperature=0.0} (decodificación greedy pura),
-produciendo salidas determinísticas dado el mismo peso de modelo y prompt.
-Todas las evaluaciones de calidad también usan decodificación greedy para
-reproducibilidad exacta.
-
-\begin{lstlisting}[caption={Estructura completa de un directorio de run.}]
-results/quality/quality-teacher-20260228T143200Z/
-  metadata.json            # gpu, git_sha, seed, py_version, config_hashes
-  eval.yaml                # snapshot config evaluacion
-  serving.yaml             # snapshot config servidor
-  models.yaml              # snapshot registro modelos
-  gsm8k/
-    gsm8k_results.jsonl    # {item_id, prompt, prediction, correct, ...}
-    gsm8k_metrics.json     # {accuracy, correct, scorable, total, ...}
-    gsm8k_metrics.csv
-  math/
-    math_results.jsonl
-    math_metrics.json
-    math_metrics.csv
-  quality_summary.json     # todos los benchmarks agregados
-  quality_summary.csv
-
-results/distill/sft-qwen2.5-7b-20260301T111215Z/
-  metadata.json
-  distill.yaml             # snapshot config destilacion
-  training_manifest.json   # student_model, adapter_dir, samples, epochs, lora_r
-  checkpoints/             # checkpoints intermedios (cada 200 pasos)
-  final_adapter/           # adapter_model.safetensors + tokenizer_*.json
-\end{lstlisting}
-
-
-% ════════════════════════════════════════════════════════════
-\section{Resumen Técnico y Próximos Pasos}
-\label{sec:summary}
-
-\subsection{Fase 1 — Completada}
+La reproducibilidad es un pilar del pipeline definitivo. Cada
+ejecuci\'on genera autom\'aticamente un directorio \'unico con
+timestamp UTC (p.~ej.\
+\texttt{results/quality/quality-teacher-20260305T143200Z/}) que contiene:
 
 \begin{itemize}
-  \item \textbf{Eficiencia:} líneas base establecidas mostrando $2.15\times$ (7B)
-    y $4.14\times$ (1.5B) de ganancia en throughput sobre el teacher de 14B,
-    con mejoras de latencia de $2.02\times$ y $6.71\times$ respectivamente.
-  \item \textbf{Calidad:} el student 7B retiene el 92.5\% (GSM8K) y el 99\%
-    (MATH-500) de la calidad del teacher; el student 1.5B retiene el 68.8\% y
-    el 52.2\% respectivamente.
-  \item \textbf{Pipeline de evaluación:} completamente automatizado con orquestador
-    \texttt{eval/run\_quality.py}, motor de scoring multi-etapa (\texttt{eval/scoring.py}),
-    benchmarks independientes y jobs SLURM autocontenidos.
-  \item \textbf{Benchmark de eficiencia:} cliente throughput (\texttt{bench/run\_throughput.py}
-    vía \texttt{vllm bench serve}) y cliente latencia online (\texttt{bench/run\_online\_load.py}
-    con llegadas Poisson asíncronas).
+  \item \textbf{\texttt{metadata.json}}: informaci\'on del entorno
+    (GPU, versi\'on CUDA, Python, git SHA, \texttt{pip freeze}
+    completo, semilla).
+  \item \textbf{Copias de los YAML de configuraci\'on} usados en ese
+    run espec\'ifico.
+  \item \textbf{Resultados por item} (JSONL) y \textbf{m\'etricas
+    agregadas} (JSON).
 \end{itemize}
 
-\subsection{Fase 2 — Completada}
+La funci\'on \texttt{set\_seed(42)} configura todas las fuentes de
+aleatoriedad: \texttt{random}, \texttt{numpy}, \texttt{torch} (CPU y
+GPU), y en la versi\'on definitiva tambi\'en
+\texttt{cudnn.deterministic=True} y \texttt{cudnn.benchmark=False}.
+
+% ════════════════════════════════════════════════════════════
+\section{Historial de jobs SLURM}
+\label{sec:slurm-history}
+
+A lo largo del proyecto hemos lanzado m\'ultiples jobs, muchos de los
+cuales fallaron o fueron cancelados. La Tabla~\ref{tab:slurm-history}
+documenta todos los jobs relevantes, proporcionando una traza del
+proceso de depuraci\'on.
+
+\begin{table}[H]
+\centering
+\caption{Historial completo de jobs SLURM.}
+\label{tab:slurm-history}
+\begin{tabular}{@{}rllp{5cm}@{}}
+\toprule
+\textbf{Job ID} & \textbf{Script} & \textbf{Estado} & \textbf{Nota} \\
+\midrule
+37093510 & train 7B  & FAILED & Bug: \texttt{evaluation\_strategy} \\
+37093511 & train 1.5B & FAILED & Idem \\
+37098477 & train 7B  & FAILED & Bug: gradient checkpointing \\
+37098478 & train 1.5B & FAILED & Idem \\
+37123021 & train 7B  & OK     & Preliminar: loss=0.2699, 75\,min \\
+37123022 & train 1.5B & OK    & Preliminar: loss=0.3383, 32\,min \\
+\midrule
+37255143--47 & varios & CANCELLED & Reemplazados por nueva cadena \\
+37257890--92 & cadena & CANCELLED & \texttt{--exclusive} $\to$ PD 2 d\'ias \\
+\midrule
+\rowcolor{okbg}
+37344851 & fase1-baselines & PD/Running & Pipeline definitivo \\
+\rowcolor{okbg}
+37344852 & fase2-distill   & PD (Dep.) & Espera 37344851 \\
+\rowcolor{okbg}
+37344853 & fase3-posteval  & PD (Dep.) & Espera 37344852 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Los jobs 37093510--37098478 corresponden a las iteraciones de depuraci\'on
+del c\'odigo de training (ver Tabla~\ref{tab:bugs}). Los jobs 37123021
+y 37123022 son los entrenamientos preliminares exitosos. Los jobs
+37255143--37257892 fueron intentos intermedios que se cancelaron por
+problemas de configuraci\'on SLURM. Los jobs 37344851--37344853 son
+la cadena definitiva actualmente en ejecuci\'on.
+
+% ════════════════════════════════════════════════════════════
+\section{Estado actual y resultados esperados}
+\label{sec:status}
+
+A fecha de este informe (6 de marzo de 2026), la Fase~1 del pipeline
+definitivo se encuentra \textbf{en ejecuci\'on activa} en el nodo
+\texttt{as04r3b24} de MareNostrum~5. Las fases 2 y 3 est\'an en cola
+esperando su dependencia.
+
+\begin{table}[H]
+\centering
+\caption{Estado de los jobs a 6 de marzo de 2026.}
+\label{tab:job-status-current}
+\begin{tabular}{@{}llllll@{}}
+\toprule
+\textbf{Job ID} & \textbf{Fase} & \textbf{Estado} & \textbf{Tiempo}
+  & \textbf{Nodo} & \textbf{Nota} \\
+\midrule
+\rowcolor{okbg}
+37344851 & Fase~1 (baselines) & \textbf{RUNNING} & 9h+ & as04r3b24
+  & En ejecuci\'on \\
+37344852 & Fase~2 (distill)   & PENDING & ---  & ---
+  & Dependency (espera Fase~1) \\
+37344853 & Fase~3 (post-eval) & PENDING & ---  & ---
+  & Dependency (espera Fase~2) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Incidencia SLURM: espera prolongada}
+
+Los tres jobs se lanzaron el 5 de marzo por la ma\~nana y permanecieron
+en estado \textbf{PENDING (reason: Priority)} durante m\'as de 6 horas
+sin ser asignados a ning\'un nodo. La investigaci\'on determin\'o que la
+causa era la \textbf{saturaci\'on grupal de la QoS \texttt{acc\_bsccs}}:
 
 \begin{itemize}
-  \item \textbf{Dataset de destilación:} 1819 salidas greedy del teacher
-    (GSM8K 1319 + MATH-500 500, 0 errores).
-    Almacenado en \texttt{results/distill/teacher\_outputs.jsonl}.
-  \item \textbf{Training 7B:} SLURM job 37123021, 75 min, pérdida final 0.2699,
-    1.99 muestras/s. Adaptador: \texttt{sft-qwen2.5-7b-20260301T111215Z/final\_adapter/}.
-  \item \textbf{Training 1.5B:} SLURM job 37123022, 32 min, pérdida final 0.3383,
-    4.68 muestras/s. Adaptador: \texttt{sft-qwen2.5-1.5b-20260301T121533Z/final\_adapter/}.
-  \item \textbf{Seis bugs corregidos} en \texttt{distill/train\_student\_sft.py}
-    antes de lograr runs exitosos (ver Tabla~\ref{tab:bugs}).
-  \item \textbf{Evaluación post-destilación:} completada exitosamente en MN5.
-    Resultados (ver Tabla~\ref{tab:postdistill}):
-    \begin{itemize}
-      \item \emph{7B destilado:} GSM8K 82.0\% ($-3.45$ vs.\ base), MATH 72.61\% ($+2.83$)
-      \item \emph{1.5B destilado:} GSM8K 65.70\% ($+2.14$ vs.\ base), MATH 47.45\% ($+10.64$)
-    \end{itemize}
+  \item El comando \texttt{sacctmgr show assoc account=bsc98} confirm\'o
+    que la cuenta tiene autorizaci\'on v\'alida para \texttt{acc\_bsccs}.
+  \item Sin embargo, la informaci\'on de la QoS mostraba
+    \texttt{GrpJobs=N(0)}, indicando que los slots del grupo QoS
+    estaban completamente ocupados por otros usuarios/cuentas.
+  \item La partici\'on \texttt{acc} ten\'ia 35 nodos H100 f\'isicamente
+    disponibles, pero el QoS no permit\'ia asignar m\'as jobs.
 \end{itemize}
 
-\subsection{Objetivo final — Resultados}
+Finalmente, los slots se liberaron y el job 37344851 comenz\'o su
+ejecuci\'on tras $\sim$9 horas de espera.
 
-El objetivo de la Fase~2 era \textbf{cerrar la brecha de calidad} de los estudiantes
-preservando su ventaja de eficiencia. Los resultados de la evaluación post-destilación
-(Tabla~\ref{tab:postdistill}) muestran que la destilación ha sido efectiva:
+\begin{infobox}
+\textbf{Lecci\'on aprendida:} En MareNostrum~5, el tiempo de espera en
+cola depende no solo de la disponibilidad f\'isica de nodos, sino
+tambi\'en de los l\'imites grupales de la QoS asignada. Para trabajos
+urgentes, considerar particiones alternativas como \texttt{gpp}.
+\end{infobox}
+
+\subsection{Qu\'e est\'a completado}
 
 \begin{itemize}
-  \item El \textbf{student 1.5B} mejora significativamente: $+10.64$ puntos en MATH-500
-    (de 36.81\% a 47.45\%), acercándose al teacher (70.51\%) y validando la hipótesis
-    de que aprender las cadenas de razonamiento del teacher compensa parcialmente
-    la menor capacidad del modelo.
-  \item El \textbf{student 7B} muestra un trade-off: pierde en aritmética simple
-    (GSM8K $-3.45$) pero gana en razonamiento de competición (MATH $+2.83$),
-    sugiriendo que la destilación refuerza capacidades de razonamiento complejo.
+  \item Todo el c\'odigo del pipeline (bench, eval, distill, serving,
+    routing, utils, configs).
+  \item La auditor\'ia metodol\'ogica y todas las correcciones.
+  \item Los scripts SLURM definitivos y su validaci\'on de lanzamiento.
+  \item Los resultados preliminares (orientativos).
+  \item La Fase~1 est\'a en \textbf{ejecuci\'on activa} (job 37344851,
+    nodo as04r3b24).
 \end{itemize}
 
-La ventaja de eficiencia se preserva: los modelos destilados mantienen sus ganancias
-de $2.15\times$ y $4.14\times$ en throughput, respectivamente. La destilación ha
-cumplido su objetivo de mejorar la calidad sin sacrificar rendimiento.
+\subsection{Qu\'e est\'a pendiente}
+
+\begin{itemize}
+  \item \textbf{Finalizaci\'on} de la Fase~1 (baselines definitivos con
+    10k peticiones, warmup y 3 repeticiones) --- actualmente en curso.
+  \item Ejecuci\'on de la Fase~2 (destilaci\'on con TRAIN splits y
+    validaci\'on).
+  \item Ejecuci\'on de la Fase~3 (evaluaci\'on de modelos destilados).
+\end{itemize}
+
+\subsection{Resultados que se espera obtener}
+
+Una vez completado el pipeline, dispondremos de:
+
+\begin{enumerate}
+  \item \textbf{L\'ineas base definitivas} de calidad para los 3
+    modelos (sin cambios esperados respecto a los preliminares, ya que
+    Quality no depend\'ia del split).
+  \item \textbf{M\'etricas de eficiencia robustas} con media y
+    desviaci\'on est\'andar de 3 repeticiones, eliminando el sesgo del
+    warmup.
+  \item \textbf{Resultados post-KD sin data leakage} que validar\'an o
+    matizar\'an las mejoras observadas en los preliminares
+    ($+10.64$\,pp en MATH-500 para el 1.5B).
+  \item \textbf{Routing benchmark} del teacher para explorar sistemas
+    h\'ibridos teacher-student.
+\end{enumerate}
+
+% ════════════════════════════════════════════════════════════
+\section{Conclusiones}
+\label{sec:conclusions}
+
+Este informe documenta el trabajo experimental completo del TFE hasta
+la fecha, estructurado en cuatro bloques:
+
+\begin{enumerate}
+  \item \textbf{Experimentos preliminares} (Secc.~\ref{sec:preliminary}):
+    primera iteraci\'on con resultados orientativos. El student de 1.5B
+    mostr\'o una mejora de $+10.64$\,pp en MATH-500 tras la destilaci\'on,
+    mientras que en eficiencia ofrece $4.14\times$ m\'as throughput y
+    $6.7\times$ menos latencia que el teacher. Estos resultados est\'an
+    marcados como preliminares debido a limitaciones metodol\'ogicas.
+
+  \item \textbf{Auditor\'ia metodol\'ogica} (Secc.~\ref{sec:audit}):
+    identificaci\'on de 6 problemas cr\'iticos (data leakage, muestra
+    insuficiente, sin warmup, sin validaci\'on, una repetici\'on, sin
+    determinismo GPU) y dise\~no de las correcciones para cada uno.
+
+  \item \textbf{Pipeline definitivo} (Secc.~\ref{sec:definitive}):
+    sistema riguroso con 10\,000 peticiones + 200 warmup, TRAIN splits
+    para KD ($\sim$15\,000 items), validaci\'on 85/15 con early stopping,
+    3 repeticiones, y 36 benchmark runs en total.
+
+  \item \textbf{Estado actual} (6 de marzo de 2026): la Fase~1 est\'a
+    en ejecuci\'on activa en el nodo \texttt{as04r3b24} (H100). Las
+    fases 2 y 3 est\'an en cola SLURM con dependencia
+    \texttt{afterok}. Se document\'o una incidencia de espera
+    prolongada ($\sim$9 horas PENDING) por saturaci\'on de la QoS
+    \texttt{acc\_bsccs}.
+\end{enumerate}
+
+La hip\'otesis del TFE --- que la destilaci\'on black-box permite a
+modelos peque\~nos recuperar una fracci\'on significativa de la calidad
+del teacher sin sacrificar eficiencia --- est\'a respaldada de forma
+orientativa por los resultados preliminares. Los resultados definitivos,
+obtenidos con metodolog\'ia rigurosa, confirmar\'an o matizar\'an estas
+conclusiones.
 
 \end{document}
