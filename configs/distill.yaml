@@ -24,9 +24,9 @@ benchmarks:
       Answer:
 
   math:
-    enabled: true
-    dataset_name: "hendrycks/competition_math"  # lighteval/MATH removed from Hub; all 7 subjects concatenated
-    dataset_split: "train"               # ~7 500 items (train split)
+    enabled: false                       # lighteval/MATH removed from Hub; no reliable replacement available
+    dataset_name: "hendrycks/competition_math"
+    dataset_split: "train"
     subset_size: null
     prompt_template: |
       Solve the following mathematics problem.
