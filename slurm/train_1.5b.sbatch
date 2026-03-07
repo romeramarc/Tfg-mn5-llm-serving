@@ -14,9 +14,6 @@ set -euo pipefail
 
 cd /gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving
 source env/setup_env.sh
-export HF_HUB_OFFLINE=0
-export TRANSFORMERS_OFFLINE=0
-export HF_DATASETS_OFFLINE=0
 mkdir -p logs results/distill
 
 echo "TRAIN 1.5B: LoRA SFT"
