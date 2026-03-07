@@ -14,8 +14,9 @@ set -euo pipefail
 
 cd /gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving
 source env/setup_env.sh
-unset HF_DATASETS_OFFLINE
-unset HF_HUB_OFFLINE
+export HF_HUB_OFFLINE=0
+export TRANSFORMERS_OFFLINE=0
+export HF_DATASETS_OFFLINE=0
 mkdir -p logs results/quality results/throughput results/online results/routing
 
 SERVER_URL="http://localhost:8000"
