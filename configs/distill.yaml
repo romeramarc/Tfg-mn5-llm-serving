@@ -25,7 +25,7 @@ benchmarks:
 
   math:
     enabled: true
-    dataset_name: "lighteval/MATH"       # full MATH corpus (train + test)
+    dataset_name: "hendrycks/competition_math"  # lighteval/MATH removed from Hub; all 7 subjects concatenated
     dataset_split: "train"               # ~7 500 items (train split)
     subset_size: null
     prompt_template: |

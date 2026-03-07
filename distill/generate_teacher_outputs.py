@@ -95,20 +95,32 @@ def _collect_gsm8k_prompts(cfg: dict) -> List[Dict[str, Any]]:
 def _collect_math_prompts(cfg: dict) -> List[Dict[str, Any]]:
     """Collect prompts from MATH **train** set (avoids test-set leakage).
 
-    Uses ``lighteval/MATH`` train split (~7500 items) by default.
+    Uses ``hendrycks/competition_math`` train split (~7500 items) by default.
+    All 7 subject configs are concatenated to reproduce the full MATH dataset
+    (``lighteval/MATH`` was removed from the Hub).
     The eval-only ``HuggingFaceH4/MATH-500`` test split is reserved
     exclusively for post-distillation quality evaluation.
     """
-    from datasets import load_dataset
+    from datasets import concatenate_datasets, load_dataset
 
     bench = cfg.get("benchmarks", {}).get("math", {})
     if not bench.get("enabled", True):
         return []
 
-    ds = load_dataset(
-        bench.get("dataset_name", "lighteval/MATH"),
-        split=bench.get("dataset_split", "train"),  # TRAIN split for KD
-    )
+    dataset_name = bench.get("dataset_name", "hendrycks/competition_math")
+    dataset_split = bench.get("dataset_split", "train")
+    if dataset_name == "hendrycks/competition_math":
+        # No top-level config — load and concatenate all 7 subjects
+        _SUBJECTS = [
+            "algebra", "counting_and_probability", "geometry",
+            "intermediate_algebra", "number_theory", "prealgebra", "precalculus",
+        ]
+        ds = concatenate_datasets([
+            load_dataset(dataset_name, subj, split=dataset_split)
+            for subj in _SUBJECTS
+        ])
+    else:
+        ds = load_dataset(dataset_name, split=dataset_split)
     template = bench.get("prompt_template",
         "Solve the following mathematics problem.\n"
         "Put your final answer inside \\boxed{{}}.\n\n"
