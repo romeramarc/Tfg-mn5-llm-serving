@@ -30,7 +30,7 @@ trap cleanup EXIT
 ADAPTER=$(ls -dt results/distill/sft-qwen2.5-1.5b-*/final_adapter 2>/dev/null | head -1)
 [[ -z "$ADAPTER" ]] && echo "ERROR: No 1.5B adapter" && exit 1
 
-MERGED="results/distill/merged-qwen2.5-1.5b"
+export ADAPTER MERGED="results/distill/merged-qwen2.5-1.5b"
 python3 << 'MERGE'
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -43,8 +43,6 @@ shutil.rmtree(os.environ['MERGED'], ignore_errors=True)
 merged.save_pretrained(os.environ['MERGED'])
 AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct').save_pretrained(os.environ['MERGED'])
 MERGE
-
-export ADAPTER="$ADAPTER" MERGED="$MERGED"
 
 python -m vllm.entrypoints.openai.api_server --model "$MERGED" --host 0.0.0.0 --port 8000 --max-model-len 4096 --gpu-memory-utilization 0.90 --dtype auto --seed 42 &
 _SERVER_PID=$!
