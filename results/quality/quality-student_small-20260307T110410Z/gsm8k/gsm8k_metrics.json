@@ -1,0 +1,11 @@
+{
+  "total_examples": 1319,
+  "scorable_examples": 1021,
+  "unscorable_examples": 298,
+  "correct": 651,
+  "incorrect": 370,
+  "accuracy": 0.63761,
+  "accuracy_pct": 63.76,
+  "benchmark": "gsm8k",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct"
+}

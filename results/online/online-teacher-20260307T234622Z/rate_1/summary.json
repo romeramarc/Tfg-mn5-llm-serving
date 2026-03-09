@@ -1,0 +1,22 @@
+{
+  "request_rate": 1,
+  "total_requests": 10000,
+  "successful_requests": 10000,
+  "failed_requests": 0,
+  "total_output_tokens": 2560000,
+  "effective_throughput_tps": 444110.1265435684,
+  "latency_count": 10000,
+  "latency_mean_ms": 5367.27987272758,
+  "latency_min_ms": 5302.430974319577,
+  "latency_max_ms": 5764.336021617055,
+  "latency_p50_ms": 5367.040930315852,
+  "latency_p95_ms": 5376.476667076349,
+  "latency_p99_ms": 5380.500908829272,
+  "ttfb_count": 10000,
+  "ttfb_mean_ms": 5367.1503453888,
+  "ttfb_min_ms": 5302.304025739431,
+  "ttfb_max_ms": 5764.144878834486,
+  "ttfb_p50_ms": 5366.911353543401,
+  "ttfb_p95_ms": 5376.3427454046905,
+  "ttfb_p99_ms": 5380.356182772666
+}
