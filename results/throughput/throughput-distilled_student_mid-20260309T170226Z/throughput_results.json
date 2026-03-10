@@ -1,0 +1,14 @@
+{
+  "completed_requests": 10000,
+  "total_time_s": 392.03,
+  "request_throughput_rps": 25.51,
+  "output_throughput_tps": 6530.12,
+  "mean_ttft_ms": 192650.03,
+  "p99_ttft_ms": 379619.27,
+  "mean_tpot_ms": 37.85,
+  "p99_tpot_ms": 38.48,
+  "mean_itl_ms": 37.92,
+  "p99_itl_ms": 65.06,
+  "wall_time_s": 434.3533706665039,
+  "return_code": 0
+}

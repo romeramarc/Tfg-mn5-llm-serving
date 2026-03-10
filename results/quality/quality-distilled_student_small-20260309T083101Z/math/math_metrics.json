@@ -1,0 +1,11 @@
+{
+  "total_examples": 500,
+  "scorable_examples": 465,
+  "unscorable_examples": 35,
+  "correct": 204,
+  "incorrect": 261,
+  "accuracy": 0.43871,
+  "accuracy_pct": 43.87,
+  "benchmark": "math",
+  "model": "results/distill/merged-qwen2.5-1.5b"
+}
