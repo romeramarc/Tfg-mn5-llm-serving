@@ -3,7 +3,7 @@
 # SLURM job — Distillation Step 1: Generate teacher outputs
 #   Starts vLLM teacher → collects completions from TRAIN splits
 #   (GSM8K train + MATH train) → saves JSONL.
-#   ~15 000 prompts × greedy decode ≈ 3-4 h on 1×H100.
+#   ~15 000 prompts × greedy decode ≈ 4-6 h on 1×H100.
 # ─────────────────────────────────────────────────────────────
 #SBATCH --job-name=distill-gen
 #SBATCH --output=logs/distill-gen-%j.out
@@ -16,7 +16,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --exclusive
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 
 set -euo pipefail
 

@@ -24,7 +24,7 @@ benchmarks:
       Answer:
 
   math:
-    enabled: false                       # lighteval/MATH removed from Hub; no reliable replacement available
+    enabled: true                        # hendrycks/competition_math (7 subjects, ~7 500 train items)
     dataset_name: "hendrycks/competition_math"
     dataset_split: "train"
     subset_size: null
@@ -80,7 +80,7 @@ training:
   # LoRA (PEFT) settings
   lora:
     r: 64
-    lora_alpha: 16
+    lora_alpha: 64
     lora_dropout: 0.05
     target_modules: ["q_proj", "k_proj", "v_proj", "o_proj",
                      "gate_proj", "up_proj", "down_proj"]
@@ -96,3 +96,17 @@ training:
     eval_steps: 50                       # evaluation frequency
     load_best_model_at_end: true         # restore best checkpoint at end
     report_to: "none"
+
+# ── Per-model training overrides ─────────────────────────
+# Keys under each model name override the base 'training' section.
+# Nested dicts (e.g. lora) are merged, not replaced.
+model_overrides:
+  "Qwen/Qwen2.5-7B-Instruct":
+    num_train_epochs: 2
+    learning_rate: 5.0e-5
+    weight_decay: 0.01
+  "Qwen/Qwen2.5-1.5B-Instruct":
+    num_train_epochs: 3
+    learning_rate: 2.0e-4
+    lora:
+      lora_alpha: 128

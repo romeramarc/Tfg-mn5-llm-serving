@@ -160,14 +160,26 @@ def run(
     snapshot_configs([config_path], run_dir)
     save_metadata(collect_metadata(seed, cfg), run_dir)
 
+    # ── Apply model-specific overrides (e.g. different lr for 7B vs 1.5B) ──
+    model_overrides = cfg.get("model_overrides", {}).get(student_model, {})
+    if model_overrides:
+        logger.info("Applying model-specific overrides",
+                     extra={"model": student_model,
+                            "overrides": str(model_overrides)})
+        for k, v in model_overrides.items():
+            if isinstance(v, dict) and isinstance(tcfg.get(k), dict):
+                tcfg[k].update(v)
+            else:
+                tcfg[k] = v
+
     # ── Lazy imports (heavy) ────────────────────────────────
     import torch
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        DataCollatorForLanguageModeling,
         Trainer,
         TrainingArguments,
+        default_data_collator,
     )
     from peft import LoraConfig, get_peft_model, TaskType
 
@@ -273,10 +285,6 @@ def run(
         gradient_checkpointing_kwargs={"use_reentrant": False},
     )
 
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokeniser, mlm=False,
-    )
-
     # ── Callbacks ────────────────────────────────────────────
     callbacks = []
     if load_best and val_ds is not None:
@@ -294,7 +302,7 @@ def run(
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=val_ds,
-        data_collator=data_collator,
+        data_collator=default_data_collator,
         callbacks=callbacks,
     )
 
@@ -303,6 +311,13 @@ def run(
                        "val_samples": len(val_ds) if val_ds else 0,
                        "epochs": tcfg.get("num_train_epochs", 3)})
     trainer.train()
+
+    # Save training log (loss curves, eval metrics per step)
+    if trainer.state.log_history:
+        with (run_dir / "training_log.json").open("w") as fh:
+            json.dump(trainer.state.log_history, fh, indent=2)
+        logger.info("Training log saved",
+                     extra={"entries": len(trainer.state.log_history)})
 
     # ── Save final adapter + tokeniser ──────────────────────
     final_dir = run_dir / "final_adapter"

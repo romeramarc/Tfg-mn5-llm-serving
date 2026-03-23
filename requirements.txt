@@ -43,3 +43,6 @@ sympy>=1.12
 
 # Numerical
 numpy>=1.24
+
+# Plotting
+matplotlib>=3.7
