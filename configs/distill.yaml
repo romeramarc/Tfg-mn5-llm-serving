@@ -4,6 +4,13 @@
 # Phase 2: hard-label black-box distillation.
 #   Step 1  generate_teacher_outputs.py  →  teacher_outputs.jsonl
 #   Step 2  train_student_sft.py         →  LoRA adapter
+#
+# Experiment 4 (launch: slurm/launch_distill_v4.sh):
+#   - 7B: GSM8K-first (oversample gsm8k×2), gentler LR, smaller LoRA — reduce
+#     GSM8K regression vs teacher reference.
+#   - 1.5B: stronger LoRA, 5 ep, oversample gsm8k+math×2, gradient clipping
+#     — push GSM8K and MATH vs previous post-KD.
+#   - Training: oversample_benchmarks + max_grad_norm in train_student_sft.py
 # ─────────────────────────────────────────────────────────────
 
 # ── KD benchmark prompts (TRAIN splits — no test-set leakage) ──
@@ -76,6 +83,7 @@ training:
   # Train / validation split for early stopping
   val_ratio: 0.15                        # 15 % held-out for validation
   early_stopping_patience: 3             # stop after 3 eval steps without improvement
+  max_grad_norm: 1.0                    # gradient clipping (stability with higher LR)
 
   # LoRA (PEFT) settings
   lora:
@@ -101,12 +109,44 @@ training:
 # Keys under each model name override the base 'training' section.
 # Nested dicts (e.g. lora) are merged, not replaced.
 model_overrides:
+  # 7B: prior run regressed GSM8K (85.78 -> 79.83). Strategy — gentler SFT,
+  # smaller LoRA capacity, oversample GSM8K TRAIN rows vs MATH to align with teacher style.
   "Qwen/Qwen2.5-7B-Instruct":
     num_train_epochs: 2
-    learning_rate: 5.0e-5
-    weight_decay: 0.01
-  "Qwen/Qwen2.5-1.5B-Instruct":
-    num_train_epochs: 3
-    learning_rate: 2.0e-4
+    learning_rate: 3.0e-5
+    weight_decay: 0.02
+    warmup_ratio: 0.08
+    max_grad_norm: 1.0
+    early_stopping_patience: 5
+    oversample_benchmarks:
+      gsm8k: 2
+      math: 1
     lora:
-      lora_alpha: 128
+      r: 48
+      lora_alpha: 96
+      lora_dropout: 0.08
+    logging:
+      eval_steps: 35
+      save_steps: 105
+  # 1.5B student: stronger KD (larger LoRA, longer schedule, oversample train rows)
+  # Goal: push GSM8K and MATH vs previous post-KD. +10 pp on both is aspirational;
+  # re-tune lr/epochs if loss diverges or val_loss plateaus early.
+  "Qwen/Qwen2.5-1.5B-Instruct":
+    num_train_epochs: 5
+    learning_rate: 2.5e-4
+    max_grad_norm: 0.8
+    weight_decay: 0.01
+    warmup_ratio: 0.10
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 8
+    early_stopping_patience: 6
+    oversample_benchmarks:
+      gsm8k: 2
+      math: 2
+    lora:
+      r: 96
+      lora_alpha: 160
+      lora_dropout: 0.08
+    logging:
+      eval_steps: 40
+      save_steps: 120

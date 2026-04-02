@@ -59,11 +59,15 @@ def _prepare_dataset(
     dataset_path: str,
     tokeniser,
     max_seq_length: int,
+    oversample_benchmarks: Optional[Dict[str, int]] = None,
 ):
     """Load JSONL teacher outputs, tokenise, and return a HF Dataset.
 
     Labels are set to -100 for prompt tokens so the loss is computed
     **only** on the teacher completion tokens.
+
+    ``oversample_benchmarks``: optional map ``benchmark_name -> repeat_count``
+    (e.g. ``math: 2`` duplicates each MATH row once) to up-weight harder tasks.
     """
     from datasets import Dataset as HFDataset
 
@@ -82,10 +86,33 @@ def _prepare_dataset(
             completion = obj.get("teacher_completion", "")
             if not completion:
                 continue
-            rows.append({"prompt": prompt, "completion": completion})
+            rows.append({
+                "prompt": prompt,
+                "completion": completion,
+                "benchmark": obj.get("benchmark", ""),
+            })
 
     if not rows:
         raise ValueError(f"No valid training samples found in {dataset_path}")
+
+    if oversample_benchmarks:
+        expanded: list[dict] = []
+        for row in rows:
+            b = row.get("benchmark") or "unknown"
+            repeat = max(1, int(oversample_benchmarks.get(b, 1)))
+            for _ in range(repeat):
+                expanded.append({
+                    "prompt": row["prompt"],
+                    "completion": row["completion"],
+                })
+        rows = expanded
+        logger.info(
+            "Oversampling applied",
+            extra={
+                "oversample_benchmarks": oversample_benchmarks,
+                "rows_after": len(rows),
+            },
+        )
 
     logger.info("Loaded training samples",
                 extra={"total_rows": len(rows), "path": dataset_path})
@@ -226,7 +253,13 @@ def run(
         "dataset_path", "results/distill/teacher_outputs.jsonl",
     )
     max_seq_length = tcfg.get("max_seq_length", 2048)
-    ds = _prepare_dataset(dataset_path, tokeniser, max_seq_length)
+    oversample = tcfg.get("oversample_benchmarks")
+    ds = _prepare_dataset(
+        dataset_path,
+        tokeniser,
+        max_seq_length,
+        oversample_benchmarks=oversample,
+    )
     if max_samples is not None and max_samples > 0 and max_samples < len(ds):
         ds = ds.select(range(max_samples))
         logger.info("Smoke-test mode: dataset truncated",
@@ -269,6 +302,7 @@ def run(
         fp16=use_fp16,
         bf16=use_bf16,
         gradient_checkpointing=tcfg.get("gradient_checkpointing", True),
+        max_grad_norm=tcfg.get("max_grad_norm", 1.0),
         logging_steps=log_cfg.get("logging_steps", 10),
         save_strategy=log_cfg.get("save_strategy", "steps"),
         save_steps=log_cfg.get("save_steps", 200),

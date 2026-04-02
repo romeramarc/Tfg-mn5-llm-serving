@@ -21,6 +21,8 @@
 #
 # Usage:
 #   bash slurm/launch_distill_v2.sh
+#
+# Newer iteration (Exp.4 tuned hparams + oversampling): slurm/launch_distill_v4.sh
 # ─────────────────────────────────────────────────────────────
 
 set -euo pipefail

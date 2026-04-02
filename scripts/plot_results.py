@@ -10,13 +10,13 @@ Produces four figures:
   3. quality_vs_latency.pdf   — Scatter: latency (TPOT) vs accuracy
   4. all_models_overview.pdf  — Bar chart of all model configurations
 
-Usage (LOCAL — after pulling results from BSC):
+Usage (LOCAL — after ``collect_all_results.py`` and pulling from BSC):
+    python scripts/collect_all_results.py
+    python scripts/plot_results.py --from-summary results/summary_all_models.csv --output plots/
     python scripts/plot_results.py
-    python scripts/plot_results.py --input results/summary.csv --output plots/
+    python scripts/plot_results.py --input custom.csv --output plots/
 
-If --input is not given, the script uses the embedded data from the most
-recent definitive experiments.  Update the MODELS list below after each
-new experiment run.
+If no ``--from-summary`` / ``--input``, uses the embedded MODELS list below.
 """
 
 from __future__ import annotations
@@ -151,6 +151,68 @@ def load_csv(path: str) -> List[Dict[str, Any]]:
                     m[k] = float(v)
                 except (ValueError, TypeError):
                     m[k] = v
+            models.append(m)
+    return models
+
+
+# Roles produced by scripts/collect_all_results.py → plot MODELS schema
+_SUMMARY_ROLE_MAP: Dict[str, Dict[str, Any]] = {
+    "teacher": {
+        "name": "Teacher 14B", "short": "14B", "state": "baseline",
+        "params": 14, "version": "",
+    },
+    "student_mid": {
+        "name": "Student 7B", "short": "7B", "state": "pre-KD",
+        "params": 7, "version": "",
+    },
+    "student_small": {
+        "name": "Student 1.5B", "short": "1.5B", "state": "pre-KD",
+        "params": 1.5, "version": "",
+    },
+    "distilled_student_mid": {
+        "name": "7B post-KD", "short": "7B KD", "state": "post-KD",
+        "params": 7, "version": "v2",
+    },
+    "distilled_student_small": {
+        "name": "1.5B post-KD", "short": "1.5B KD", "state": "post-KD",
+        "params": 1.5, "version": "v2",
+    },
+}
+
+
+def load_summary_all_models(path: Path) -> List[Dict[str, Any]]:
+    """Map ``results/summary_all_models.csv`` to the MODELS list schema."""
+    models: List[Dict[str, Any]] = []
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            role = (row.get("role") or "").strip()
+            if role not in _SUMMARY_ROLE_MAP:
+                continue
+            gsm_raw, math_raw = row.get("gsm8k_acc"), row.get("math_acc")
+            if gsm_raw in (None, "") or math_raw in (None, ""):
+                continue
+            try:
+                gsm8k = float(gsm_raw)
+                math_v = float(math_raw)
+            except (TypeError, ValueError):
+                continue
+            meta = dict(_SUMMARY_ROLE_MAP[role])
+            m: Dict[str, Any] = {
+                **meta,
+                "gsm8k": gsm8k,
+                "math": math_v,
+            }
+            for col, key in [
+                ("request_throughput_rps", "throughput_rps"),
+                ("output_throughput_tps", "throughput_tps"),
+                ("mean_tpot_ms", "tpot_ms"),
+            ]:
+                v = row.get(col)
+                if v not in (None, ""):
+                    try:
+                        m[key] = float(v)
+                    except (TypeError, ValueError):
+                        pass
             models.append(m)
     return models
 
@@ -400,16 +462,17 @@ def plot_all_models(models: List[Dict], out: Path) -> None:
 # ═══════════════════════════════════════════════════════════════
 
 def plot_system_metrics(models: List[Dict], out: Path) -> None:
-    """Horizontal bar chart of throughput and latency for each model."""
+    """Horizontal bar charts: req/s, tok/s (output), TPOT — same model order."""
     valid = [m for m in models if m.get("throughput_rps") is not None]
     if not valid:
         print("  [SKIP] system_metrics — no throughput data")
         return
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
 
     names = [m.get("short", m["name"]) for m in valid]
-    tput = [m["throughput_rps"] for m in valid]
+    tput_rps = [m["throughput_rps"] for m in valid]
+    tput_tps = [m.get("throughput_tps") for m in valid]
     tpot = [m["tpot_ms"] for m in valid]
     y = np.arange(len(names))
 
@@ -422,21 +485,33 @@ def plot_system_metrics(models: List[Dict], out: Path) -> None:
         else:
             colors.append(COLOR["1.5B_pre"] if m["state"] == "pre-KD" else COLOR["1.5B_post"])
 
-    ax1.barh(y, tput, color=colors, edgecolor="white", height=0.6)
+    ax1.barh(y, tput_rps, color=colors, edgecolor="white", height=0.6)
     ax1.set_yticks(y)
     ax1.set_yticklabels(names)
     ax1.set_xlabel("Throughput (req/s)")
-    ax1.set_title("Throughput", fontweight="bold")
-    for i, v in enumerate(tput):
+    ax1.set_title("Requests / s", fontweight="bold")
+    for i, v in enumerate(tput_rps):
         ax1.text(v + 0.5, i, f"{v:.1f}", va="center", fontsize=9)
 
-    ax2.barh(y, tpot, color=colors, edgecolor="white", height=0.6)
-    ax2.set_yticks(y)
-    ax2.set_yticklabels(names)
-    ax2.set_xlabel("TPOT (ms) — lower is better")
-    ax2.set_title("Latency (TPOT)", fontweight="bold")
+    if all(x is not None for x in tput_tps):
+        ax2.barh(y, tput_tps, color=colors, edgecolor="white", height=0.6)
+        ax2.set_yticks(y)
+        ax2.set_yticklabels(names)
+        ax2.set_xlabel("Output throughput (tok/s)")
+        ax2.set_title("Tokens / s", fontweight="bold")
+        for i, v in enumerate(tput_tps):
+            ax2.text(v + 50, i, f"{v:.0f}", va="center", fontsize=9)
+    else:
+        ax2.text(0.5, 0.5, "No tok/s in data", ha="center", transform=ax2.transAxes)
+        ax2.axis("off")
+
+    ax3.barh(y, tpot, color=colors, edgecolor="white", height=0.6)
+    ax3.set_yticks(y)
+    ax3.set_yticklabels(names)
+    ax3.set_xlabel("TPOT (ms) — lower is better")
+    ax3.set_title("Latency (TPOT)", fontweight="bold")
     for i, v in enumerate(tpot):
-        ax2.text(v + 0.5, i, f"{v:.1f}", va="center", fontsize=9)
+        ax3.text(v + 0.5, i, f"{v:.1f}", va="center", fontsize=9)
 
     fig.suptitle("System Performance Metrics", fontweight="bold", fontsize=14)
     plt.tight_layout()
@@ -458,6 +533,9 @@ def main() -> None:
     parser.add_argument("--input", default=None,
                         help="CSV file with model data (columns: name,short,params,"
                              "state,version,gsm8k,math,throughput_rps,...)")
+    parser.add_argument("--from-summary", dest="from_summary", default=None,
+                        metavar="CSV",
+                        help="Use collect_all_results.py output (e.g. results/summary_all_models.csv)")
     parser.add_argument("--output", default="plots",
                         help="Output directory for plots (default: plots/)")
     args = parser.parse_args()
@@ -465,7 +543,11 @@ def main() -> None:
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
 
-    if args.input:
+    if args.from_summary:
+        sp = Path(args.from_summary)
+        models = load_summary_all_models(sp)
+        print(f"Loaded {len(models)} models from summary CSV {sp}")
+    elif args.input:
         models = load_csv(args.input)
         print(f"Loaded {len(models)} models from {args.input}")
     else:

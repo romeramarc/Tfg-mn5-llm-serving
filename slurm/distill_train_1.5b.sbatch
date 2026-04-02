@@ -15,7 +15,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --exclusive
-#SBATCH --time=06:00:00
+#SBATCH --time=14:00:00
 
 set -euo pipefail
 
@@ -43,6 +43,7 @@ if [[ ! -f "${DATASET}" ]]; then
     exit 1
 fi
 echo "Dataset lines: $(wc -l < "${DATASET}")"
+echo "1.5B overrides: see model_overrides in configs/distill.yaml (5 ep, LoRA r=96, oversample gsm8k+math)"
 
 # ── Train ───────────────────────────────────────────────────
 python -m distill.train_student_sft \
