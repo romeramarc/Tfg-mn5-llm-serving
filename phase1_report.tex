@@ -1968,107 +1968,6 @@ MATH-500 cacheado localmente para detectar generalizaci\'on
 out-of-domain.
 \end{infobox}
 
-% ─── Extensión: síntesis agregada y valoración (abril 2026) ─────────────────
-\subsection{S\'{\i}ntesis reproducible: \texttt{summary\_all\_models.csv}}
-
-Tras subir al repositorio todos los artefactos de las \'ultimas ejecuciones
-en MareNostrum~5, el script \texttt{scripts/collect\_all\_results.py}
-consolida, por rol de modelo, las m\'etricas de
-\texttt{results/quality/*/quality\_summary.json},
-\texttt{results/throughput/*/throughput\_results.json} y, cuando existen,
-\texttt{results/online/*/online\_results.json}, generando
-\texttt{results/summary\_all\_models.csv}.
-La Tabla~\ref{tab:summary-csv} resume las cifras \textbf{alineadas con las
-tablas y figuras anteriores} para los cinco roles principales del estudio
-(teacher, students pre-KD, students post-KD).
-Las identificaciones de run en disco son, entre otras,
-\texttt{quality-distilled\_student\_*-20260309T083*} y
-\texttt{throughput-distilled\_student\_*-20260309T17*}, coherentes con el
-cierre del pipeline el 9 de marzo de 2026.
-
-\begin{table}[H]
-\centering
-\caption{S\'{\i}ntesis de calidad y eficiencia (offline) seg\'un el CSV
-         agregado del repositorio. Throughput: \'ultima run por rol en
-         \texttt{results/throughput/}. TPOT coherente con la
-         Tabla~\ref{tab:throughput-baselines} (valores medios de benchmark).}
-\label{tab:summary-csv}
-\begin{tabular}{lcccccc}
-\toprule
-\textbf{Rol (repo)} & \textbf{GSM8K} & \textbf{MATH-500}
-  & \textbf{Req/s} & \textbf{Tok/s} \\
-\midrule
-\texttt{teacher}
-  & 92.41\% & 72.11\% & 12.29 & 3\,146 \\
-\texttt{student\_mid} (pre-KD)
-  & 85.78\% & 71.49\% & 25.08 & 6\,421 \\
-\texttt{student\_small} (pre-KD)
-  & 64.05\% & 36.11\% & 50.26 & 12\,866 \\
-\texttt{distilled\_student\_mid} (post-KD)
-  & 79.83\% & 68.35\% & 25.51 & 6\,530 \\
-\texttt{distilled\_student\_small} (post-KD)
-  & 64.11\% & 43.87\% & 49.88 & 12\,768 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{warningbox}
-\small
-\textbf{Nota metodol\'ogica (TTFT y carga online):}
-En los JSON de \texttt{throughput\_results.json} exportados por la
-herramienta de benchmark, el campo etiquetado como \texttt{mean\_ttft\_ms}
-adquiere valores del orden $10^5$--$10^6$, incompatibles con milisegundos
-reales de prefijo; es probable un error de unidad o de serializaci\'on en la
-cadena vLLM$\to$JSON.
-\textbf{No se usan esos valores en las tablas de este informe.}
-Las m\'etricas de latencia reportadas arriba se basan en TPOT e ITL
-(coherentes entre runs) y en la metodolog\'ia de tres repeticiones descrita
-previamente.
-De forma an\'aloga, las columnas agregadas de carga \texttt{online\_*} en el
-CSV pueden requerir revisi\'on de unidades antes de incluirse en una tabla
-definitiva de latencia bajo tasa fija.
-\end{warningbox}
-
-\subsection{Valoraci\'on cr\'{\i}tica: \textquestiondown resultados satisfactorios
-            o conviene seguir refinando?}
-
-\paragraph{\'Ambito del TFG.}
-Los resultados actuales son \textbf{suficientemente s\'olidos} para sustentar
-la memoria: hay comparativa clara pre- y post-KD en dos tama\~nos de student,
-referencia de teacher, y caracterizaci\'on de eficiencia (throughput y TPOT)
-en el mismo entorno HPC.
-La narrativa principal est\'a cerrada: el student~1.5B mejora MATH-500 de
-forma notable tras KD; el student~7B pierde un margen acotado en ambos
-benchmarks a cambio de mantener $\approx 2\times$ el throughput del teacher;
-la eficiencia no se degrada por el merge post-LoRA.
-
-\paragraph{Cuándo tendr\'{\i}a sentido un refinamiento adicional.}
-No es estrictamente \emph{necesario} para ``cerrar'' el TFG, pero aportar\'{\i}a
-valor si se persigue publicar m\'as all\'a del trabajo de fin de grado o si el
-tribunal exige m\'as experimentos:
-\begin{itemize}[leftmargin=1.2em]
-  \item \textbf{KD en 7B:} explorar m\'as datos (p.\ ej.\ mezcla MATH+GSM8K),
-    o hiperpar\'ametros distintos, o destilaci\'on \emph{soft}, para recuperar
-    parte de la regresi\'on observada ($-5.95$\,pp GSM8K).
-  \item \textbf{Routing en cascada:} las pol\'{\i}ticas basadas en confianza
-    est\'an dise\~nadas en c\'odigo; falta una evaluaci\'on cuantitativa
-    comparable (calidad global, latencia efectiva, tasa de escalado) para
-    cerrar el c\'irculo experimental.
-  \item \textbf{Instrumentaci\'on:} corregir o re-etiquetar TTFT (y validar
-    online) en el pipeline de agregaci\'on para que el CSV sea citable sin
-    advertencias.
-\end{itemize}
-
-\paragraph{Conclusi\'on pr\'actica.}
-Para los objetivos habituales de un TFG (metodolog\'ia reproducible,
-implementaci\'on real, trade-offs medidos), el estado actual del repositorio
-con los resultados del 7--9 de marzo de 2026 puede considerarse
-\textbf{aceptable y defendible}.
-El refinamiento es recomendable como \textbf{l\'{\i}nea futura}, no como
-requisito para considerar el experimento ``fallido'' o incompleto: los
-hallazgos negativos en el 7B son interpretables y constituyen aportaci\'on
-metodol\'ogica (l\'{\i}mite de SFT black-box sobre datos reducidos).
-
 % ════════════════════════════════════════════════════════════
 \section{Conclusiones}
 \label{sec:conclusions}
@@ -2100,13 +1999,6 @@ del TFE, estructurado en cuatro contribuciones principales:
     MATH-500 con el doble de throughput. Tras KD, el student~1.5B mejora
     $+7.76$\,pp en MATH-500 (36.11\,\%~$\to$~43.87\,\%), demostrando
     generalizaci\'on out-of-domain y validando la hip\'otesis del TFE.
-
-  \item \textbf{S\'{\i}ntesis en repositorio y valoraci\'on} (subsecciones
-    finales de la Secc.~\ref{sec:results}):
-    el fichero \texttt{results/summary\_all\_models.csv} consolida las m\'etricas
-    alineadas con las tablas del informe; se documentan limitaciones en campos
-    de TTFT/online agregados y se argumenta que los resultados son defendibles
-    para la memoria, con refinamiento opcional (KD 7B, routing, instrumentaci\'on).
 
 \end{enumerate}
 
