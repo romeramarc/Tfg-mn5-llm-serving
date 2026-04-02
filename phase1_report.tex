@@ -1574,6 +1574,8 @@ de eficiencia, frente a las $2 \times 1{,}000 = 2{,}000$ del pipeline
 preliminar.
 
 % ════════════════════════════════════════════════════════════
+
+% ────────────────────────────────────────────────────────────
 \section{Reproducibilidad}
 \label{sec:reproducibility}
 
@@ -1641,140 +1643,482 @@ y 37123022 son los entrenamientos preliminares exitosos. Los jobs
 problemas de configuraci\'on SLURM. Los jobs 37344851--37344853 son
 la cadena definitiva actualmente en ejecuci\'on.
 
-% ════════════════════════════════════════════════════════════
-\section{Estado actual y resultados esperados}
-\label{sec:status}
+% ════════════════════════════════════════════════════════════
+\section{Resultados experimentales definitivos}
+\label{sec:results}
 
-A fecha de este informe (6 de marzo de 2026), la Fase~1 del pipeline
-definitivo se encuentra \textbf{en ejecuci\'on activa} en el nodo
-\texttt{as04r3b24} de MareNostrum~5. Las fases 2 y 3 est\'an en cola
-esperando su dependencia.
+La ejecuci\'on del pipeline definitivo en MareNostrum~5 ha producido los
+resultados cuantitativos completos, obtenidos con metodolog\'ia
+rigurosa: 10\,000~peticiones, 200~warmup, semilla fija (\texttt{seed=42})
+y 3~repeticiones. Los jobs de baselines (37475567--37475572) completaron el
+\textbf{7 de marzo de 2026}. Los jobs de post-evaluaci\'on post-KD
+(37554282--37554283) completaron el \textbf{9 de marzo de 2026}, cerrando
+circuit el pipeline completo de tres fases.
+
+% ─── Calidad ────────────────────────────────────────────────────────────────
+\subsection{Calidad: comparativa de los modelos base}
+
+Los tres modelos se evaluaron sobre \textbf{GSM8K} (1\,319 problemas de
+razonamiento aritm\'etico) y \textbf{MATH-500} (problemas de competici\'on
+matem\'atica). La Tabla~\ref{tab:quality-baselines} y la
+Figura~\ref{fig:quality-baseline} presentan los resultados definitivos.
 
 \begin{table}[H]
 \centering
-\caption{Estado de los jobs a 6 de marzo de 2026.}
-\label{tab:job-status-current}
-\begin{tabular}{@{}llllll@{}}
+\caption{Calidad definitiva de los modelos base. Run 37475567--37475569,
+         7 de marzo de 2026.}
+\label{tab:quality-baselines}
+\begin{tabular}{lcccc}
 \toprule
-\textbf{Job ID} & \textbf{Fase} & \textbf{Estado} & \textbf{Tiempo}
-  & \textbf{Nodo} & \textbf{Nota} \\
+\textbf{Modelo} & \textbf{Params} & \textbf{GSM8K} & \textbf{MATH-500} & \textbf{Media} \\
 \midrule
-\rowcolor{okbg}
-37344851 & Fase~1 (baselines) & \textbf{RUNNING} & 9h+ & as04r3b24
-  & En ejecuci\'on \\
-37344852 & Fase~2 (distill)   & PENDING & ---  & ---
-  & Dependency (espera Fase~1) \\
-37344853 & Fase~3 (post-eval) & PENDING & ---  & ---
-  & Dependency (espera Fase~2) \\
+Qwen2.5-Instruct (teacher) & 14B  & 92.41\% & 72.11\% & 82.26\% \\
+Qwen2.5-Instruct (student) & 7B   & 85.78\% & 71.49\% & 78.64\% \\
+Qwen2.5-Instruct (student) & 1.5B & 64.05\% & 36.11\% & 50.08\% \\
+\midrule
+\multicolumn{2}{l}{\footnotesize $\Delta$ student 7B vs.\ teacher}
+  & $-6.63$\,pp & $-0.62$\,pp & \\
+\multicolumn{2}{l}{\footnotesize $\Delta$ student 1.5B vs.\ teacher}
+  & $-28.36$\,pp & $-36.00$\,pp & \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Incidencia SLURM: espera prolongada}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar=4pt,
+    bar width=22pt,
+    width=0.88\textwidth, height=8.5cm,
+    symbolic x coords={Teacher 14B, Student 7B, Student 1.5B},
+    xtick=data,
+    xticklabel style={font=\small},
+    ymin=0, ymax=108,
+    ytick={0,20,40,60,80,100},
+    ymajorgrids=true,
+    grid style={dashed, gray!30},
+    ylabel={Accuracy (\%)},
+    legend style={at={(0.98,0.98)}, anchor=north east, font=\small},
+    legend cell align=left,
+    nodes near coords,
+    nodes near coords align={vertical},
+    every node near coord/.append style={font=\scriptsize},
+    enlarge x limits=0.25,
+]
+\addplot[fill=teacher, fill opacity=0.85, draw=teacher!70!black] coordinates {
+    (Teacher 14B, 92.41) (Student 7B, 85.78) (Student 1.5B, 64.05)
+};
+\addplot[fill=orange!80, fill opacity=0.85, draw=orange!60!black] coordinates {
+    (Teacher 14B, 72.11) (Student 7B, 71.49) (Student 1.5B, 36.11)
+};
+\legend{GSM8K, MATH-500}
+\end{axis}
+\end{tikzpicture}
+\caption{Comparativa de accuracy en GSM8K y MATH-500 para los modelos base
+(sin destilaci\'on). El student~7B es casi indistinguible del teacher en
+MATH-500 ($-0.62$\,pp). El student~1.5B acusa m\'as en razonamiento
+complejo ($-36.00$\,pp en MATH-500).}
+\label{fig:quality-baseline}
+\end{figure}
 
-Los tres jobs se lanzaron el 5 de marzo por la ma\~nana y permanecieron
-en estado \textbf{PENDING (reason: Priority)} durante m\'as de 6 horas
-sin ser asignados a ning\'un nodo. La investigaci\'on determin\'o que la
-causa era la \textbf{saturaci\'on grupal de la QoS \texttt{acc\_bsccs}}:
+% ─── Post-KD quality ────────────────────────────────────────────────────────
+\subsubsection*{Calidad post-destilaci\'on}
 
-\begin{itemize}
-  \item El comando \texttt{sacctmgr show assoc account=bsc98} confirm\'o
-    que la cuenta tiene autorizaci\'on v\'alida para \texttt{acc\_bsccs}.
-  \item Sin embargo, la informaci\'on de la QoS mostraba
-    \texttt{GrpJobs=N(0)}, indicando que los slots del grupo QoS
-    estaban completamente ocupados por otros usuarios/cuentas.
-  \item La partici\'on \texttt{acc} ten\'ia 35 nodos H100 f\'isicamente
-    disponibles, pero el QoS no permit\'ia asignar m\'as jobs.
-\end{itemize}
+Tras la destilaci\'on por imitaci\'on de outputs (SFT sobre 2\,991 ejemplos
+generados por el teacher a partir del TRAIN split de GSM8K), los adaptadores
+LoRA fueron mergeados con los pesos base para producir los modelos
+\texttt{merged-qwen2.5-7b} y \texttt{merged-qwen2.5-1.5b}. La
+Tabla~\ref{tab:quality-postKD} compara la calidad antes y despu\'es de KD.
 
-Finalmente, los slots se liberaron y el job 37344851 comenz\'o su
-ejecuci\'on tras $\sim$9 horas de espera.
+\begin{table}[H]
+\centering
+\caption{Calidad pre- y post-destilaci\'on. Evaluaci\'on post-KD: run
+         37554282--37554283, 9 de marzo de 2026.}
+\label{tab:quality-postKD}
+\begin{tabular}{llccc}
+\toprule
+\textbf{Modelo} & \textbf{Estado} & \textbf{GSM8K} & \textbf{MATH-500} & \textbf{Media} \\
+\midrule
+Qwen2.5-14B-Instruct & Teacher (ref.) & 92.41\% & 72.11\% & 82.26\% \\
+\midrule
+Qwen2.5-7B-Instruct  & Pre-KD   & 85.78\% & 71.49\% & 78.64\% \\
+Qwen2.5-7B-Instruct  & Post-KD  & 79.83\% & 68.35\% & 74.09\% \\
+\multicolumn{2}{l}{\footnotesize $\Delta$ KD 7B}
+  & $-5.95$\,pp & $-3.14$\,pp & \\
+\midrule
+Qwen2.5-1.5B-Instruct & Pre-KD  & 64.05\% & 36.11\% & 50.08\% \\
+Qwen2.5-1.5B-Instruct & Post-KD & 64.11\% & 43.87\% & 53.99\% \\
+\multicolumn{2}{l}{\footnotesize $\Delta$ KD 1.5B}
+  & $+0.06$\,pp & $\mathbf{+7.76}$\,pp & \\
+\bottomrule
+\end{tabular}
+\end{table}
 
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar=3pt,
+    bar width=14pt,
+    width=0.90\textwidth, height=9cm,
+    symbolic x coords={Teacher 14B, 7B Pre-KD, 7B Post-KD, 1.5B Pre-KD, 1.5B Post-KD},
+    xtick=data,
+    xticklabel style={font=\small, rotate=20, anchor=east},
+    ymin=0, ymax=108,
+    ytick={0,20,40,60,80,100},
+    ymajorgrids=true,
+    grid style={dashed, gray!30},
+    ylabel={Accuracy (\%)},
+    legend style={at={(0.98,0.98)}, anchor=north east, font=\small},
+    legend cell align=left,
+    nodes near coords,
+    nodes near coords align={vertical},
+    every node near coord/.append style={font=\scriptsize},
+    enlarge x limits=0.12,
+]
+\addplot[fill=teacher, fill opacity=0.85, draw=teacher!70!black] coordinates {
+    (Teacher 14B, 92.41) (7B Pre-KD, 85.78) (7B Post-KD, 79.83)
+    (1.5B Pre-KD, 64.05) (1.5B Post-KD, 64.11)
+};
+\addplot[fill=orange!80, fill opacity=0.85, draw=orange!60!black] coordinates {
+    (Teacher 14B, 72.11) (7B Pre-KD, 71.49) (7B Post-KD, 68.35)
+    (1.5B Pre-KD, 36.11) (1.5B Post-KD, 43.87)
+};
+\legend{GSM8K, MATH-500}
+\end{axis}
+\end{tikzpicture}
+\caption{Impacto de la destilaci\'on en calidad. El student~1.5B mejora
+$\mathbf{+7.76}$\,pp en MATH-500, demostrando generalizaci\'on
+fuera del dominio de entrenamiento (GSM8K$\to$MATH). El student~7B
+experimenta una leve regresi\'on (fine-tuning sobre datos de menor
+diversidad que su preentrenamiento).}
+\label{fig:quality-postKD}
+\end{figure}
+
+% ─── Eficiencia ─────────────────────────────────────────────────────────────
+\subsection{Eficiencia: throughput y latencia}
+
+La Tabla~\ref{tab:throughput-baselines} recoge las m\'etricas de eficiencia
+definitivas (media de 3 repeticiones con 10\,000 peticiones y 200 warmup).
+Las Figuras~\ref{fig:throughput} y~\ref{fig:latency} visualizan las
+ganancias al reducir el tama\~no del modelo.
+
+\begin{table}[H]
+\centering
+\caption{Throughput y latencia definitivos --- todos los modelos
+         (media de 3 repeticiones, 10\,000 peticiones + 200 warmup).}
+\label{tab:throughput-baselines}
+\begin{tabular}{llrrrr}
+\toprule
+\textbf{Modelo} & \textbf{Estado} & \textbf{Req/s} & \textbf{Tok/s} & \textbf{TPOT (ms)} & \textbf{P99 (ms)} \\
+\midrule
+Teacher 14B  & baseline & 12.29 & 3\,146  & 71.01 & 104.52 \\
+\midrule
+Student 7B   & pre-KD   & 25.08 & 6\,421  & 37.76 & 38.57  \\
+Student 7B   & post-KD  & 25.58 & 6\,549  & 37.82 & 38.45  \\
+\midrule
+Student 1.5B & pre-KD   & 50.26 & 12\,866 & 18.59 & 19.34  \\
+Student 1.5B & post-KD  & 49.86 & 12\,765 & 18.81 & 20.09  \\
+\midrule
+\multicolumn{2}{l}{\footnotesize Ratio post-KD 7B / teacher}
+  & $2.08\times$ & & $1.88\times$ menor & \\
+\multicolumn{2}{l}{\footnotesize Ratio post-KD 1.5B / teacher}
+  & $4.06\times$ & & $3.78\times$ menor & \\
+\bottomrule
+\end{tabular}
+\end{table}
 \begin{infobox}
-\textbf{Lecci\'on aprendida:} En MareNostrum~5, el tiempo de espera en
-cola depende no solo de la disponibilidad f\'isica de nodos, sino
-tambi\'en de los l\'imites grupales de la QoS asignada. Para trabajos
-urgentes, considerar particiones alternativas como \texttt{gpp}.
+\small
+\textbf{Throughput post-KD:} Los modelos destilados conservan pr\'acticamente
+el mismo throughput que antes de la destilaci\'on ($<$1\,\% de diferencia),
+como era de esperar: el merge del adaptador LoRA no cambia la
+arquitectura del modelo ni su coste de inferencia.
 \end{infobox}
 
-\subsection{Qu\'e est\'a completado}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    xbar,
+    bar width=22pt,
+    width=0.82\textwidth, height=5.5cm,
+    symbolic y coords={Teacher 14B, Student 7B, Student 1.5B},
+    ytick=data,
+    yticklabel style={font=\small},
+    xmin=0, xmax=62,
+    xtick={0,10,20,30,40,50,60},
+    xlabel={Peticiones por segundo --- req/s (mayor es mejor)},
+    nodes near coords,
+    nodes near coords align={horizontal},
+    every node near coord/.append style={font=\small},
+    xmajorgrids=true,
+    grid style={dashed, gray!30},
+]
+\addplot[fill=midstud, fill opacity=0.82, draw=midstud!70!black] coordinates {
+    (50.26, Student 1.5B)
+    (25.08, Student 7B)
+    (12.29, Teacher 14B)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{Throughput en peticiones por segundo. El student~1.5B multiplica
+por $\mathbf{4.09\times}$ la capacidad del teacher (12.29 $\to$ 50.26
+req/s). El student~7B duplica el throughput ($2.04\times$).}
+\label{fig:throughput}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    xbar,
+    bar width=22pt,
+    width=0.82\textwidth, height=5.5cm,
+    symbolic y coords={Teacher 14B, Student 7B, Student 1.5B},
+    ytick=data,
+    yticklabel style={font=\small},
+    xmin=0, xmax=120,
+    xtick={0,20,40,60,80,100,120},
+    xlabel={TPOT --- ms por token generado (menor es mejor)},
+    nodes near coords,
+    nodes near coords align={horizontal},
+    every node near coord/.append style={font=\small},
+    xmajorgrids=true,
+    grid style={dashed, gray!30},
+]
+\addplot[fill=teacher, fill opacity=0.82, draw=teacher!70!black] coordinates {
+    (71.01, Teacher 14B)
+    (37.76, Student 7B)
+    (18.59, Student 1.5B)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{TPOT (Time Per Output Token) en milisegundos. El student~1.5B
+reduce la latencia en un $\mathbf{73.8\,\%}$ respecto al teacher
+(71.01\,ms $\to$ 18.59\,ms).}
+\label{fig:latency}
+\end{figure}
+
+% ─── Análisis ───────────────────────────────────────────────────────────────
+\subsection{An\'alisis: compromiso calidad--eficiencia}
+
+Con todos los resultados disponibles, el an\'alisis del pipeline completo
+revela tres hallazgos principales:
 
 \begin{itemize}
-  \item Todo el c\'odigo del pipeline (bench, eval, distill, serving,
-    routing, utils, configs).
-  \item La auditor\'ia metodol\'ogica y todas las correcciones.
-  \item Los scripts SLURM definitivos y su validaci\'on de lanzamiento.
-  \item Los resultados preliminares (orientativos).
-  \item La Fase~1 est\'a en \textbf{ejecuci\'on activa} (job 37344851,
-    nodo as04r3b24).
+
+  \item \textbf{Student 7B pre-KD} --- mejor equilibrio calidad/eficiencia
+    de los modelos base:
+    retiene el $\mathbf{98.03\,\%}$ de la precisi\'on del teacher en
+    MATH-500 (71.49\,\% vs.\ 72.11\,\%) mientras duplica el throughput
+    ($2.04\times$) y reduce el TPOT a la mitad ($1.88\times$ menor).
+
+  \item \textbf{Student 1.5B pre-KD} --- m\'axima eficiencia:
+    $4.09\times$ m\'as throughput y $3.83\times$ menor TPOT que el teacher,
+    a coste de $-28.36$\,pp en GSM8K y $-36.00$\,pp en MATH-500.
+
+  \item \textbf{Impacto real de la destilaci\'on (resultados definitivos)}:
 \end{itemize}
 
-\subsection{Qu\'e est\'a pendiente}
+\begin{table}[H]
+\centering
+\caption{Impacto neto de la destilaci\'on KD en calidad.}
+\label{tab:kd-impact}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Modelo} & \textbf{$\Delta$ GSM8K} & \textbf{$\Delta$ MATH-500}
+  & \textbf{Throughput} & \textbf{Coste TPOT} \\
+\midrule
+Qwen2.5-7B-Instruct  & $-5.95$\,pp & $-3.14$\,pp & $\approx$const. & $\approx$const. \\
+Qwen2.5-1.5B-Instruct & $+0.06$\,pp & $\mathbf{+7.76}$\,pp & $\approx$const. & $\approx$const. \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{itemize}
-  \item \textbf{Finalizaci\'on} de la Fase~1 (baselines definitivos con
-    10k peticiones, warmup y 3 repeticiones) --- actualmente en curso.
-  \item Ejecuci\'on de la Fase~2 (destilaci\'on con TRAIN splits y
-    validaci\'on).
-  \item Ejecuci\'on de la Fase~3 (evaluaci\'on de modelos destilados).
+  \item \textbf{Student 1.5B post-KD:} la destilaci\'on produce una mejora
+    significativa en MATH-500 ($+7.76$\,pp: 36.11\,\%~$\to$~43.87\,\%),
+    demostrando \emph{generalizaci\'on fuera del dominio de entrenamiento}:
+    el modelo fue entrenado con outputs de GSM8K TRAIN, pero generaliza
+    a problemas de competici\'on de MATH-500. El throughput permanece
+    inalterado ($4.06\times$ sobre el teacher).
+
+  \item \textbf{Student 7B post-KD:} experimenta una leve regresi\'on en
+    ambos benchmarks ($-5.95$\,pp GSM8K, $-3.14$\,pp MATH-500). El modelo
+    7B ya era muy competente antes de la KD (85.78\,\% / 71.49\,\%),
+    y el fine-tuning sobre 2\,991 ejemplos de GSM8K introduce una ligera
+    especializaci\'on que puede reducir la diversidad de razonamiento
+    adquirida en el preentrenamiento. El throughput se mantiene
+    ($2.08\times$ sobre el teacher).
 \end{itemize}
 
-\subsection{Resultados que se espera obtener}
+\begin{infobox}
+\textbf{Conclusi\'on clave:} La destilaci\'on beneficia especialmente al
+modelo m\'as peque\~no (1.5B), donde la capacidad base es limitada y el
+teacher aporta un supervision signal valioso. Para el modelo 7B, que ya
+alcanza una calidad cercana al teacher sin KD, el beneficio es marginal
+o ligeramente negativo, sugiriendo que la configuraci\'on de entrenamiento
+(n\'umero de ejemplos, \texttt{lr}, \'epocas) est\'a m\'as pensada para
+el 1.5B que para el 7B.\\[4pt]
+\textbf{Dataset de destilaci\'on:} Se usaron 2\,991 ejemplos del
+TRAIN split de GSM8K (\texttt{lighteval/MATH} fue eliminado de
+HuggingFace Hub durante la ejecuci\'on). La evaluaci\'on post-KD incluye
+MATH-500 cacheado localmente para detectar generalizaci\'on
+out-of-domain.
+\end{infobox}
 
-Una vez completado el pipeline, dispondremos de:
+% ─── Extensión: síntesis agregada y valoración (abril 2026) ─────────────────
+\subsection{S\'{\i}ntesis reproducible: \texttt{summary\_all\_models.csv}}
 
-\begin{enumerate}
-  \item \textbf{L\'ineas base definitivas} de calidad para los 3
-    modelos (sin cambios esperados respecto a los preliminares, ya que
-    Quality no depend\'ia del split).
-  \item \textbf{M\'etricas de eficiencia robustas} con media y
-    desviaci\'on est\'andar de 3 repeticiones, eliminando el sesgo del
-    warmup.
-  \item \textbf{Resultados post-KD sin data leakage} que validar\'an o
-    matizar\'an las mejoras observadas en los preliminares
-    ($+10.64$\,pp en MATH-500 para el 1.5B).
-  \item \textbf{Routing benchmark} del teacher para explorar sistemas
-    h\'ibridos teacher-student.
-\end{enumerate}
+Tras subir al repositorio todos los artefactos de las \'ultimas ejecuciones
+en MareNostrum~5, el script \texttt{scripts/collect\_all\_results.py}
+consolida, por rol de modelo, las m\'etricas de
+\texttt{results/quality/*/quality\_summary.json},
+\texttt{results/throughput/*/throughput\_results.json} y, cuando existen,
+\texttt{results/online/*/online\_results.json}, generando
+\texttt{results/summary\_all\_models.csv}.
+La Tabla~\ref{tab:summary-csv} resume las cifras \textbf{alineadas con las
+tablas y figuras anteriores} para los cinco roles principales del estudio
+(teacher, students pre-KD, students post-KD).
+Las identificaciones de run en disco son, entre otras,
+\texttt{quality-distilled\_student\_*-20260309T083*} y
+\texttt{throughput-distilled\_student\_*-20260309T17*}, coherentes con el
+cierre del pipeline el 9 de marzo de 2026.
 
-% ════════════════════════════════════════════════════════════
+\begin{table}[H]
+\centering
+\caption{S\'{\i}ntesis de calidad y eficiencia (offline) seg\'un el CSV
+         agregado del repositorio. Throughput: \'ultima run por rol en
+         \texttt{results/throughput/}. TPOT coherente con la
+         Tabla~\ref{tab:throughput-baselines} (valores medios de benchmark).}
+\label{tab:summary-csv}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Rol (repo)} & \textbf{GSM8K} & \textbf{MATH-500}
+  & \textbf{Req/s} & \textbf{Tok/s} \\
+\midrule
+\texttt{teacher}
+  & 92.41\% & 72.11\% & 12.29 & 3\,146 \\
+\texttt{student\_mid} (pre-KD)
+  & 85.78\% & 71.49\% & 25.08 & 6\,421 \\
+\texttt{student\_small} (pre-KD)
+  & 64.05\% & 36.11\% & 50.26 & 12\,866 \\
+\texttt{distilled\_student\_mid} (post-KD)
+  & 79.83\% & 68.35\% & 25.51 & 6\,530 \\
+\texttt{distilled\_student\_small} (post-KD)
+  & 64.11\% & 43.87\% & 49.88 & 12\,768 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{warningbox}
+\small
+\textbf{Nota metodol\'ogica (TTFT y carga online):}
+En los JSON de \texttt{throughput\_results.json} exportados por la
+herramienta de benchmark, el campo etiquetado como \texttt{mean\_ttft\_ms}
+adquiere valores del orden $10^5$--$10^6$, incompatibles con milisegundos
+reales de prefijo; es probable un error de unidad o de serializaci\'on en la
+cadena vLLM$\to$JSON.
+\textbf{No se usan esos valores en las tablas de este informe.}
+Las m\'etricas de latencia reportadas arriba se basan en TPOT e ITL
+(coherentes entre runs) y en la metodolog\'ia de tres repeticiones descrita
+previamente.
+De forma an\'aloga, las columnas agregadas de carga \texttt{online\_*} en el
+CSV pueden requerir revisi\'on de unidades antes de incluirse en una tabla
+definitiva de latencia bajo tasa fija.
+\end{warningbox}
+
+\subsection{Valoraci\'on cr\'{\i}tica: \textquestiondown resultados satisfactorios
+            o conviene seguir refinando?}
+
+\paragraph{\'Ambito del TFG.}
+Los resultados actuales son \textbf{suficientemente s\'olidos} para sustentar
+la memoria: hay comparativa clara pre- y post-KD en dos tama\~nos de student,
+referencia de teacher, y caracterizaci\'on de eficiencia (throughput y TPOT)
+en el mismo entorno HPC.
+La narrativa principal est\'a cerrada: el student~1.5B mejora MATH-500 de
+forma notable tras KD; el student~7B pierde un margen acotado en ambos
+benchmarks a cambio de mantener $\approx 2\times$ el throughput del teacher;
+la eficiencia no se degrada por el merge post-LoRA.
+
+\paragraph{Cuándo tendr\'{\i}a sentido un refinamiento adicional.}
+No es estrictamente \emph{necesario} para ``cerrar'' el TFG, pero aportar\'{\i}a
+valor si se persigue publicar m\'as all\'a del trabajo de fin de grado o si el
+tribunal exige m\'as experimentos:
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{KD en 7B:} explorar m\'as datos (p.\ ej.\ mezcla MATH+GSM8K),
+    o hiperpar\'ametros distintos, o destilaci\'on \emph{soft}, para recuperar
+    parte de la regresi\'on observada ($-5.95$\,pp GSM8K).
+  \item \textbf{Routing en cascada:} las pol\'{\i}ticas basadas en confianza
+    est\'an dise\~nadas en c\'odigo; falta una evaluaci\'on cuantitativa
+    comparable (calidad global, latencia efectiva, tasa de escalado) para
+    cerrar el c\'irculo experimental.
+  \item \textbf{Instrumentaci\'on:} corregir o re-etiquetar TTFT (y validar
+    online) en el pipeline de agregaci\'on para que el CSV sea citable sin
+    advertencias.
+\end{itemize}
+
+\paragraph{Conclusi\'on pr\'actica.}
+Para los objetivos habituales de un TFG (metodolog\'ia reproducible,
+implementaci\'on real, trade-offs medidos), el estado actual del repositorio
+con los resultados del 7--9 de marzo de 2026 puede considerarse
+\textbf{aceptable y defendible}.
+El refinamiento es recomendable como \textbf{l\'{\i}nea futura}, no como
+requisito para considerar el experimento ``fallido'' o incompleto: los
+hallazgos negativos en el 7B son interpretables y constituyen aportaci\'on
+metodol\'ogica (l\'{\i}mite de SFT black-box sobre datos reducidos).
+
+% ════════════════════════════════════════════════════════════
 \section{Conclusiones}
 \label{sec:conclusions}
 
-Este informe documenta el trabajo experimental completo del TFE hasta
-la fecha, estructurado en cuatro bloques:
+Este informe documenta el trabajo experimental completo de la primera fase
+del TFE, estructurado en cuatro contribuciones principales:
 
 \begin{enumerate}
+
   \item \textbf{Experimentos preliminares} (Secc.~\ref{sec:preliminary}):
-    primera iteraci\'on con resultados orientativos. El student de 1.5B
-    mostr\'o una mejora de $+10.64$\,pp en MATH-500 tras la destilaci\'on,
-    mientras que en eficiencia ofrece $4.14\times$ m\'as throughput y
-    $6.7\times$ menos latencia que el teacher. Estos resultados est\'an
-    marcados como preliminares debido a limitaciones metodol\'ogicas.
+    primera iteraci\'on exploratoria con resultados orientativos. El
+    student~1.5B mostr\'o $+10.64$\,pp en MATH-500 tras destilaci\'on y
+    $4.14\times$ m\'as throughput que el teacher. Resultados marcados como
+    preliminares debido a las limitaciones metodol\'ogicas identificadas.
 
   \item \textbf{Auditor\'ia metodol\'ogica} (Secc.~\ref{sec:audit}):
-    identificaci\'on de 6 problemas cr\'iticos (data leakage, muestra
-    insuficiente, sin warmup, sin validaci\'on, una repetici\'on, sin
-    determinismo GPU) y dise\~no de las correcciones para cada uno.
+    identificaci\'on y correcci\'on de 6 problemas cr\'iticos: data leakage,
+    muestra insuficiente, ausencia de warmup, ausencia de validaci\'on,
+    una sola repetici\'on, y sin determinismo GPU.
 
   \item \textbf{Pipeline definitivo} (Secc.~\ref{sec:definitive}):
-    sistema riguroso con 10\,000 peticiones + 200 warmup, TRAIN splits
-    para KD ($\sim$15\,000 items), validaci\'on 85/15 con early stopping,
-    3 repeticiones, y 36 benchmark runs en total.
+    redise\~no riguroso con 10\,000 peticiones + 200 warmup, TRAIN~splits
+    para KD (7\,473 ejemplos GSM8K), validaci\'on 85/15 con early stopping,
+    3 repeticiones y trazabilidad completa por ejecuci\'on.
 
-  \item \textbf{Estado actual} (6 de marzo de 2026): la Fase~1 est\'a
-    en ejecuci\'on activa en el nodo \texttt{as04r3b24} (H100). Las
-    fases 2 y 3 est\'an en cola SLURM con dependencia
-    \texttt{afterok}. Se document\'o una incidencia de espera
-    prolongada ($\sim$9 horas PENDING) por saturaci\'on de la QoS
-    \texttt{acc\_bsccs}.
+  \item \textbf{Resultados definitivos} (Secc.~\ref{sec:results}):
+    pipeline completo cerrado el 9 de marzo de 2026.
+    El student~7B pre-KD retiene el 98.03\,\% de la calidad del teacher en
+    MATH-500 con el doble de throughput. Tras KD, el student~1.5B mejora
+    $+7.76$\,pp en MATH-500 (36.11\,\%~$\to$~43.87\,\%), demostrando
+    generalizaci\'on out-of-domain y validando la hip\'otesis del TFE.
+
+  \item \textbf{S\'{\i}ntesis en repositorio y valoraci\'on} (subsecciones
+    finales de la Secc.~\ref{sec:results}):
+    el fichero \texttt{results/summary\_all\_models.csv} consolida las m\'etricas
+    alineadas con las tablas del informe; se documentan limitaciones en campos
+    de TTFT/online agregados y se argumenta que los resultados son defendibles
+    para la memoria, con refinamiento opcional (KD 7B, routing, instrumentaci\'on).
+
 \end{enumerate}
 
 La hip\'otesis del TFE --- que la destilaci\'on black-box permite a
 modelos peque\~nos recuperar una fracci\'on significativa de la calidad
-del teacher sin sacrificar eficiencia --- est\'a respaldada de forma
-orientativa por los resultados preliminares. Los resultados definitivos,
-obtenidos con metodolog\'ia rigurosa, confirmar\'an o matizar\'an estas
-conclusiones.
+del teacher sin sacrificar eficiencia --- queda \textbf{parcialmente
+validada}. Para el student~1.5B, la KD produce una mejora real y
+mesurable en generalizaci\'on matem\'atica ($+7.76$\,pp en MATH-500)
+manteniendo el throughput ($4.06\times$ sobre el teacher). Para el
+student~7B, que ya alcanza el $98.03\,\%$ de la calidad del teacher sin
+KD, la destilaci\'on sobre los 2\,991 ejemplos de GSM8K no aporta mejora
+y produce una leve regresi\'on, sugiriendo que el beneficio de la KD
+es inversamente proporcional a la capacidad base del modelo estudiante.
 
 \end{document}

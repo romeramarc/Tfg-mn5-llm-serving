@@ -1,0 +1,164 @@
+% ─────────────────────────────────────────────────────────────────────────────
+%  Abstract page — Bachelor's Thesis (TFG)
+%  Knowledge Distillation and Efficient Deployment of Language Models
+%  in High-Performance Computing Environments
+%  Marc Romera · BSC · UPC · 2026
+%  Compile:  pdflatex abstract.tex
+% ─────────────────────────────────────────────────────────────────────────────
+
+\documentclass[11pt, a4paper]{article}
+
+% ── Encoding & language ───────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+% ── Fonts & typography ────────────────────────────────────────────────────────
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ── Layout ───────────────────────────────────────────────────────────────────
+\usepackage[
+  a4paper,
+  top    = 2.0cm,
+  bottom = 1.8cm,
+  left   = 3.0cm,
+  right  = 3.0cm
+]{geometry}
+
+% ── Spacing ───────────────────────────────────────────────────────────────────
+\usepackage{setspace}
+\usepackage{parskip}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+
+% ── Color ────────────────────────────────────────────────────────────────────
+\usepackage[dvipsnames]{xcolor}
+\definecolor{thesisblue}{HTML}{1B3A6B}
+\definecolor{darkgray}{HTML}{333333}
+\definecolor{medgray}{HTML}{888888}
+
+% ── Rules & misc ─────────────────────────────────────────────────────────────
+\usepackage[hidelinks]{hyperref}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+\pagestyle{empty}
+
+% ════════════════════════════════════════════════════════════════════════════
+%  HEADER BLOCK
+% ════════════════════════════════════════════════════════════════════════════
+
+{\color{thesisblue}\rule{\linewidth}{2.4pt}}
+
+\vspace{0.4cm}
+
+% ── Thesis type label ────────────────────────────────────────────────────────
+\begin{center}
+  {\small\color{medgray}\textsc{Bachelor's Thesis in Computer Science}}
+\end{center}
+
+\vspace{0.25cm}
+
+% ── Title ────────────────────────────────────────────────────────────────────
+\begin{center}
+  {\color{thesisblue}
+   \fontsize{14.5}{18}\selectfont\bfseries
+   Knowledge Distillation and Efficient Deployment of Language Models\\[4pt]
+   in High-Performance Computing Environments}
+\end{center}
+
+\vspace{0.25cm}
+
+% ── Author / institution / supervisor ────────────────────────────────────────
+\begin{center}
+  {\small\color{darkgray}
+    \textbf{Marc Romera}\\[3pt]
+    Barcelona Supercomputing Center (BSC) \quad
+    Universitat Polit\`ecnica de Catalunya (UPC)\\[3pt]
+    Barcelona, March 2026}
+\end{center}
+
+\vspace{0.3cm}
+{\color{medgray}\rule{\linewidth}{0.5pt}}
+
+% ════════════════════════════════════════════════════════════════════════════
+%  ABSTRACT
+% ════════════════════════════════════════════════════════════════════════════
+
+\vspace{0.3cm}
+
+\begin{center}
+  {\color{thesisblue}\large\bfseries Abstract}
+\end{center}
+
+\vspace{0.15cm}
+
+\begin{singlespace}
+\color{darkgray}\small
+
+The computational cost of serving large language models at scale represents
+a significant barrier to their wider adoption.
+A central motivation of this thesis is that request complexity varies
+considerably in practice, and many queries can be adequately resolved by
+smaller, more efficient models.
+This suggests an opportunity to design inference systems that dynamically
+assign each request to the smallest model capable of meeting a defined
+quality standard, reducing average serving cost while aiming to preserve
+output quality.
+
+This thesis designs, implements, and evaluates such a system, built around
+a hierarchy of instruction tuned models from the Qwen2.5 family (14B, 7B,
+and 1.5B parameters) and deployed on MareNostrum~5 at the Barcelona
+Supercomputing Center using SLURM-orchestrated NVIDIA H100 GPUs and vLLM
+with OpenAI compatible endpoints.
+Three serving policies are studied under a common experimental framework.
+A baseline policy routes all requests to the most capable model.
+A forced cascade attempts each request with the smallest model and escalates
+progressively until a quality criterion is satisfied.
+A confidence based cascade uses output log-probability signals to estimate
+which minimum model is likely to meet the quality threshold and routes the
+request accordingly, reducing unnecessary escalation.
+In parallel, knowledge distillation via supervised fine tuning with LoRA
+adapters is applied to narrow the capability gap between the student models
+and the teacher, using teacher-generated reasoning traces on mathematical
+tasks as training supervision.
+
+Quality is assessed on GSM8K and MATH-500; system efficiency is
+characterised through throughput and latency measurements conducted under
+reproducible, controlled conditions on MareNostrum~5.
+Together, the implemented system and evaluation framework provide a
+reproducible basis for studying distillation and adaptive routing strategies
+across the quality-efficiency trade-off in large language model serving at
+HPC scale.
+
+\end{singlespace}
+
+% ════════════════════════════════════════════════════════════════════════════
+%  KEYWORDS
+% ════════════════════════════════════════════════════════════════════════════
+
+\vspace{0.3cm}
+{\color{medgray}\rule{\linewidth}{0.5pt}}
+\vspace{0.2cm}
+
+{\small\color{darkgray}
+  \textbf{\color{thesisblue}Keywords}\enspace
+  \textit{%
+    knowledge distillation,
+    large language models,
+    high-performance computing,
+    efficient inference,
+    vLLM,
+    LoRA,
+    throughput,
+    latency,
+    MareNostrum~5,
+    quality--efficiency tradeoff%
+  }
+}
+
+\vspace{0.3cm}
+{\color{thesisblue}\rule{\linewidth}{2.4pt}}
+
+\end{document}

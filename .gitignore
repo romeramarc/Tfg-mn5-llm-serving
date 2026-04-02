@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Local / secrets
+.env
+.venv/
+venv/
+
+# Accidental pip / shell junk
+=3.7
+
+# Logs ruidosos diarios (ajusta si quieres ignorar más)
+logs/202*.log
+
+# Large model weights — not suitable for normal GitHub (use Git LFS or keep on BSC only)
+results/distill/merged-qwen2.5-*/
+**/adapter_model.safetensors
+**/*.safetensors
+**/model-*.safetensors
+
+# HuggingFace cache if ever under repo
+.cache/
