@@ -14,4 +14,4 @@
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-exec bash "${ROOT}/slurm/launch_distill_v4.sh"
+exec bash "${ROOT}/slurm/launch_distill_v4.sh" "$@"

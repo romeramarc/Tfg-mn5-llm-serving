@@ -12,9 +12,8 @@
 #SBATCH --qos=acc_bsccs
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=20
 #SBATCH --gres=gpu:1
-#SBATCH --exclusive
 #SBATCH --time=14:00:00
 
 set -euo pipefail

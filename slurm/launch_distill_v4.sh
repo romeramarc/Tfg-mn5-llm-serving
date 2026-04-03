@@ -38,6 +38,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+WAIT_STAGE1=1
+if [[ "${1:-}" == "--async" ]]; then
+	WAIT_STAGE1=0
+fi
+
 echo "══════════════════════════════════════════════════════════"
 echo "  KD pipeline — Exp. 4 (prioridad GSM8K + calidad, feedback profe)"
 echo "══════════════════════════════════════════════════════════"
@@ -45,17 +50,36 @@ echo "  UTC time:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "  Git HEAD:   $(git rev-parse --short HEAD 2>/dev/null || echo 'n/a')"
 echo "  Config:     configs/distill.yaml → model_overrides (7B/1.5B)"
 echo "  Jobs:       gen → train 7B + 1.5B → posteval cada uno"
+if [[ ${WAIT_STAGE1} -eq 1 ]]; then
+	echo "  Mode:       SAFE (wait for distill-gen success before submitting train/posteval)"
+else
+	echo "  Mode:       ASYNC (full dependency chain submission)"
+fi
 echo "══════════════════════════════════════════════════════════"
 echo ""
 
-JOB_DG=$(sbatch --parsable slurm/distill_generate.sbatch)
-echo "  [1/5] distill-gen   : Job ${JOB_DG}  [ 8h]  (immediate)"
+echo "Running preflight checks (step 1)..."
+python -m distill.preflight --step 1
 
-JOB_T7=$(sbatch --parsable --dependency=afterok:${JOB_DG} slurm/distill_train_7b.sbatch)
-echo "  [2/5] train-7b      : Job ${JOB_T7}  [12h]  (after ${JOB_DG})"
+if [[ ${WAIT_STAGE1} -eq 1 ]]; then
+		JOB_DG=$(sbatch --parsable --wait slurm/distill_generate.sbatch)
+		echo "  [1/5] distill-gen   : Job ${JOB_DG}  [12h]  (completed OK)"
 
-JOB_T1=$(sbatch --parsable --dependency=afterok:${JOB_DG} slurm/distill_train_1.5b.sbatch)
-echo "  [3/5] train-1.5b    : Job ${JOB_T1}  [14h]  (after ${JOB_DG})"
+		JOB_T7=$(sbatch --parsable slurm/distill_train_7b.sbatch)
+		echo "  [2/5] train-7b      : Job ${JOB_T7}  [12h]"
+
+		JOB_T1=$(sbatch --parsable slurm/distill_train_1.5b.sbatch)
+		echo "  [3/5] train-1.5b    : Job ${JOB_T1}  [14h]"
+else
+		JOB_DG=$(sbatch --parsable slurm/distill_generate.sbatch)
+		echo "  [1/5] distill-gen   : Job ${JOB_DG}  [12h]  (immediate)"
+
+		JOB_T7=$(sbatch --parsable --dependency=afterok:${JOB_DG} slurm/distill_train_7b.sbatch)
+		echo "  [2/5] train-7b      : Job ${JOB_T7}  [12h]  (after ${JOB_DG})"
+
+		JOB_T1=$(sbatch --parsable --dependency=afterok:${JOB_DG} slurm/distill_train_1.5b.sbatch)
+		echo "  [3/5] train-1.5b    : Job ${JOB_T1}  [14h]  (after ${JOB_DG})"
+fi
 
 JOB_P7=$(sbatch --parsable --dependency=afterok:${JOB_T7} slurm/posteval_7b.sbatch)
 echo "  [4/5] posteval-7b   : Job ${JOB_P7}  [18h]  (after ${JOB_T7})"
@@ -73,4 +97,9 @@ echo "    └── ${JOB_T1} distill-1.5b → ${JOB_P1} posteval-1.5b"
 echo ""
 echo "  Monitor:  squeue -u \$USER"
 echo "  Logs:     tail -f logs/distill-gen-${JOB_DG}.out"
+if [[ ${WAIT_STAGE1} -eq 1 ]]; then
+	echo "  Note:     SAFE mode used; distill-gen already validated before stage 2/3 submit"
+else
+	echo "  Note:     ASYNC mode used; if distill-gen fails, downstream jobs stay unsatisfied"
+fi
 echo "══════════════════════════════════════════════════════════"

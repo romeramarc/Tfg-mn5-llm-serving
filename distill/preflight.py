@@ -60,25 +60,28 @@ def check_python_imports() -> None:
 
 
 def check_datasets() -> None:
-    """Download a tiny slice of each benchmark to confirm HF datasets work."""
-    section("HuggingFace datasets (5-sample probe)")
+    """Probe only KD TRAIN datasets used by distillation generation."""
+    section("HuggingFace datasets for KD (train-split probe)")
     from datasets import load_dataset  # noqa: PLC0415
 
-    checks = [
-        ("openai/gsm8k",              "main",          "test"),
-        ("HuggingFaceH4/MATH-500",    None,            "test"),
-        ("allenai/ai2_arc",           "ARC-Challenge", "test"),
+    # GSM8K train
+    try:
+        ds = load_dataset("openai/gsm8k", "main", split="train[:5]")
+        ok(f"openai/gsm8k [main train]  →  {len(ds)} samples, columns={list(ds.features)}")
+    except Exception as e:
+        fail(f"openai/gsm8k [main train]: {e}")
+
+    # hendrycks/competition_math train (all subjects used by generation script)
+    subjects = [
+        "algebra", "counting_and_probability", "geometry",
+        "intermediate_algebra", "number_theory", "prealgebra", "precalculus",
     ]
-    for repo, cfg_name, split in checks:
-        label = repo if cfg_name is None else f"{repo} [{cfg_name}]"
+    for subj in subjects:
         try:
-            kw = {"split": f"{split}[:5]"}
-            if cfg_name:
-                kw["name"] = cfg_name
-            ds = load_dataset(repo, **kw)
-            ok(f"{label}  →  {len(ds)} samples, columns={list(ds.features)}")
+            ds = load_dataset("hendrycks/competition_math", subj, split="train[:1]")
+            ok(f"hendrycks/competition_math [{subj} train]  →  {len(ds)} sample")
         except Exception as e:
-            fail(f"{label}: {e}")
+            fail(f"hendrycks/competition_math [{subj} train]: {e}")
 
 
 def check_generate_smoke() -> None:
@@ -87,8 +90,8 @@ def check_generate_smoke() -> None:
     try:
         from utils.config_loader import load_yaml  # noqa: PLC0415
         from distill.generate_teacher_outputs import collect_all_prompts  # noqa: PLC0415
-        eval_cfg = load_yaml("configs/eval.yaml")
-        prompts = collect_all_prompts(eval_cfg)
+        distill_cfg = load_yaml("configs/distill.yaml")
+        prompts = collect_all_prompts(distill_cfg)
         by_bench: dict[str, int] = {}
         for p in prompts:
             by_bench[p["benchmark"]] = by_bench.get(p["benchmark"], 0) + 1
@@ -159,6 +162,10 @@ def check_jsonl_dataset(path: str = "results/distill/teacher_outputs.jsonl") -> 
         b = r.get("benchmark", "?")
         by_bench[b] = by_bench.get(b, 0) + 1
     ok(f"Benchmark breakdown: {by_bench}")
+
+    for bench in ("gsm8k", "math"):
+        if by_bench.get(bench, 0) == 0:
+            fail(f"No valid samples for benchmark='{bench}' in {path}")
 
 
 def check_adapter(pattern: str, student: str = "7B") -> None:

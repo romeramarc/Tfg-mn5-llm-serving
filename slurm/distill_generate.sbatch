@@ -13,10 +13,9 @@
 #SBATCH --qos=acc_bsccs
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=20
 #SBATCH --gres=gpu:1
-#SBATCH --exclusive
-#SBATCH --time=08:00:00
+#SBATCH --time=12:00:00
 
 set -euo pipefail
 
@@ -24,6 +23,14 @@ set -euo pipefail
 cd /gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving
 source env/setup_env.sh
 mkdir -p logs results/distill
+
+cleanup() {
+    if [[ -n "${SERVER_PID:-}" ]]; then
+        kill "${SERVER_PID}" 2>/dev/null || true
+        wait "${SERVER_PID}" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
 
 MODEL="Qwen/Qwen2.5-14B-Instruct"
 
@@ -60,6 +67,13 @@ echo "--- [3/3] Generating teacher outputs ---"
 python -m distill.generate_teacher_outputs \
     --config configs/distill.yaml
 echo "Teacher generation done."
+
+if [[ ! -s "results/distill/teacher_outputs.jsonl" ]]; then
+    echo "ERROR: results/distill/teacher_outputs.jsonl missing or empty"
+    exit 1
+fi
+
+echo "Teacher dataset lines: $(wc -l < results/distill/teacher_outputs.jsonl)"
 
 # ── Stop server ─────────────────────────────────────────────
 kill "${SERVER_PID}" 2>/dev/null || true
