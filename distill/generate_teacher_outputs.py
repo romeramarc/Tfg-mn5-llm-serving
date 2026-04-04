@@ -95,7 +95,7 @@ def _collect_gsm8k_prompts(cfg: dict) -> List[Dict[str, Any]]:
 def _collect_math_prompts(cfg: dict) -> List[Dict[str, Any]]:
     """Collect prompts from MATH **train** set (avoids test-set leakage).
 
-    Uses ``hendrycks/competition_math`` train split (~7500 items) by default.
+    Uses ``EleutherAI/hendrycks_math`` train split (~7500 items) by default.
     All 7 subject configs are concatenated to reproduce the full MATH dataset
     (``lighteval/MATH`` was removed from the Hub).
     The eval-only ``HuggingFaceH4/MATH-500`` test split is reserved
@@ -107,9 +107,9 @@ def _collect_math_prompts(cfg: dict) -> List[Dict[str, Any]]:
     if not bench.get("enabled", True):
         return []
 
-    dataset_name = bench.get("dataset_name", "hendrycks/competition_math")
+    dataset_name = bench.get("dataset_name", "EleutherAI/hendrycks_math")
     dataset_split = bench.get("dataset_split", "train")
-    if dataset_name == "hendrycks/competition_math":
+    if dataset_name in {"hendrycks/competition_math", "EleutherAI/hendrycks_math"}:
         # No top-level config — load and concatenate all 7 subjects
         _SUBJECTS = [
             "algebra", "counting_and_probability", "geometry",

@@ -32,7 +32,7 @@ benchmarks:
 
   math:
     enabled: true                        # hendrycks/competition_math (7 subjects, ~7 500 train items)
-    dataset_name: "hendrycks/competition_math"
+    dataset_name: "EleutherAI/hendrycks_math"
     dataset_split: "train"
     subset_size: null
     prompt_template: |

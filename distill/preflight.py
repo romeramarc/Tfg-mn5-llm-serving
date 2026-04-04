@@ -59,29 +59,59 @@ def check_python_imports() -> None:
             fail(f"{pkg} not importable — run: pip install {pkg}  ({e})")
 
 
-def check_datasets() -> None:
-    """Probe only KD TRAIN datasets used by distillation generation."""
+def check_datasets(config_path: str = "configs/distill.yaml") -> None:
+    """Probe only KD TRAIN datasets enabled in distill config."""
     section("HuggingFace datasets for KD (train-split probe)")
     from datasets import load_dataset  # noqa: PLC0415
+    from utils.config_loader import load_yaml  # noqa: PLC0415
+
+    cfg = load_yaml(config_path)
+    benches = cfg.get("benchmarks", {})
 
     # GSM8K train
-    try:
-        ds = load_dataset("openai/gsm8k", "main", split="train[:5]")
-        ok(f"openai/gsm8k [main train]  →  {len(ds)} samples, columns={list(ds.features)}")
-    except Exception as e:
-        fail(f"openai/gsm8k [main train]: {e}")
-
-    # hendrycks/competition_math train (all subjects used by generation script)
-    subjects = [
-        "algebra", "counting_and_probability", "geometry",
-        "intermediate_algebra", "number_theory", "prealgebra", "precalculus",
-    ]
-    for subj in subjects:
+    gsm_cfg = benches.get("gsm8k", {})
+    if gsm_cfg.get("enabled", True):
         try:
-            ds = load_dataset("hendrycks/competition_math", subj, split="train[:1]")
-            ok(f"hendrycks/competition_math [{subj} train]  →  {len(ds)} sample")
+            ds = load_dataset(
+                gsm_cfg.get("dataset_name", "openai/gsm8k"),
+                "main",
+                split=f"{gsm_cfg.get('dataset_split', 'train')}[:5]",
+            )
+            ok(
+                f"{gsm_cfg.get('dataset_name', 'openai/gsm8k')} [main {gsm_cfg.get('dataset_split', 'train')}]"
+                f"  →  {len(ds)} samples, columns={list(ds.features)}"
+            )
         except Exception as e:
-            fail(f"hendrycks/competition_math [{subj} train]: {e}")
+            fail(f"GSM8K probe failed: {e}")
+    else:
+        warn("GSM8K disabled in config; skipping probe")
+
+    # MATH train
+    math_cfg = benches.get("math", {})
+    if math_cfg.get("enabled", True):
+        dataset_name = math_cfg.get("dataset_name", "EleutherAI/hendrycks_math")
+        dataset_split = math_cfg.get("dataset_split", "train")
+        subjects = [
+            "algebra", "counting_and_probability", "geometry",
+            "intermediate_algebra", "number_theory", "prealgebra", "precalculus",
+        ]
+        if dataset_name in {"hendrycks/competition_math", "EleutherAI/hendrycks_math"}:
+            for subj in subjects:
+                try:
+                    ds = load_dataset(dataset_name, subj, split=f"{dataset_split}[:1]")
+                    ok(f"{dataset_name} [{subj} {dataset_split}]  →  {len(ds)} sample")
+                except Exception as e:
+                    fail(f"{dataset_name} [{subj} {dataset_split}]: {e}")
+        else:
+            try:
+                ds = load_dataset(dataset_name, split=f"{dataset_split}[:5]")
+                ok(
+                    f"{dataset_name} [{dataset_split}]  →  {len(ds)} samples, columns={list(ds.features)}"
+                )
+            except Exception as e:
+                fail(f"{dataset_name} [{dataset_split}]: {e}")
+    else:
+        warn("MATH disabled in config; skipping probe")
 
 
 def check_generate_smoke() -> None:
@@ -121,7 +151,10 @@ def check_teacher_server(base_url: str = "http://localhost:8000") -> None:
              "       Start the teacher vLLM server before running step 1.")
 
 
-def check_jsonl_dataset(path: str = "results/distill/teacher_outputs.jsonl") -> None:
+def check_jsonl_dataset(
+    path: str = "results/distill/teacher_outputs.jsonl",
+    required_benchmarks: tuple[str, ...] = ("gsm8k", "math"),
+) -> None:
     """Verify teacher_outputs.jsonl exists and has valid records."""
     section(f"Teacher JSONL dataset ({path})")
     p = Path(path)
@@ -163,7 +196,7 @@ def check_jsonl_dataset(path: str = "results/distill/teacher_outputs.jsonl") -> 
         by_bench[b] = by_bench.get(b, 0) + 1
     ok(f"Benchmark breakdown: {by_bench}")
 
-    for bench in ("gsm8k", "math"):
+    for bench in required_benchmarks:
         if by_bench.get(bench, 0) == 0:
             fail(f"No valid samples for benchmark='{bench}' in {path}")
 
@@ -203,7 +236,7 @@ def check_adapter(pattern: str, student: str = "7B") -> None:
 def step1(config: str, check_server: bool) -> None:
     """Validate everything needed before sbatch distill_generate.sbatch."""
     check_python_imports()
-    check_datasets()
+    check_datasets(config)
     check_generate_smoke()
     if check_server:
         from utils.config_loader import load_yaml  # noqa: PLC0415
@@ -222,7 +255,11 @@ def step2(config: str) -> None:
     cfg = load_yaml(config)
     ds_path = cfg.get("training", {}).get(
         "dataset_path", "results/distill/teacher_outputs.jsonl")
-    check_jsonl_dataset(ds_path)
+    benches = cfg.get("benchmarks", {})
+    required = tuple(
+        name for name, bcfg in benches.items() if bcfg.get("enabled", True)
+    )
+    check_jsonl_dataset(ds_path, required_benchmarks=required)
 
 
 def step3_7b() -> None:
