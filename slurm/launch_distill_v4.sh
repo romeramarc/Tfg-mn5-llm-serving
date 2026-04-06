@@ -44,7 +44,9 @@ if [[ ! -f env/setup_env.sh ]]; then
 fi
 
 echo "Bootstrapping environment for launcher preflight..."
-source env/setup_env.sh
+if ! source env/setup_env.sh; then
+	echo "WARN: env/setup_env.sh returned non-zero on login node; continuing with current shell environment"
+fi
 
 WAIT_STAGE1=1
 if [[ "${1:-}" == "--async" ]]; then
