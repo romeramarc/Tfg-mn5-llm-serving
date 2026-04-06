@@ -38,6 +38,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+if [[ ! -f env/setup_env.sh ]]; then
+	echo "ERROR: env/setup_env.sh not found"
+	exit 1
+fi
+
+echo "Bootstrapping environment for launcher preflight..."
+source env/setup_env.sh
+
 WAIT_STAGE1=1
 if [[ "${1:-}" == "--async" ]]; then
 	WAIT_STAGE1=0
@@ -59,7 +67,7 @@ echo "════════════════════════�
 echo ""
 
 echo "Running preflight checks (step 1)..."
-python -m distill.preflight --step 1 --simulate-offline
+python -m distill.preflight --step 1 --simulate-offline --config configs/distill.yaml
 
 if [[ ${WAIT_STAGE1} -eq 1 ]]; then
 		JOB_DG=$(sbatch --parsable --wait slurm/distill_generate.sbatch)
