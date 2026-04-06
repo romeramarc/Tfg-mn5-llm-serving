@@ -59,11 +59,11 @@ echo "════════════════════════�
 echo ""
 
 echo "Running preflight checks (step 1)..."
-python -m distill.preflight --step 1
+python -m distill.preflight --step 1 --simulate-offline
 
 if [[ ${WAIT_STAGE1} -eq 1 ]]; then
 		JOB_DG=$(sbatch --parsable --wait slurm/distill_generate.sbatch)
-		echo "  [1/5] distill-gen   : Job ${JOB_DG}  [12h]  (completed OK)"
+		echo "  [1/5] distill-gen   : Job ${JOB_DG}  [16h]  (completed OK)"
 
 		JOB_T7=$(sbatch --parsable slurm/distill_train_7b.sbatch)
 		echo "  [2/5] train-7b      : Job ${JOB_T7}  [12h]"
@@ -72,7 +72,7 @@ if [[ ${WAIT_STAGE1} -eq 1 ]]; then
 		echo "  [3/5] train-1.5b    : Job ${JOB_T1}  [14h]"
 else
 		JOB_DG=$(sbatch --parsable slurm/distill_generate.sbatch)
-		echo "  [1/5] distill-gen   : Job ${JOB_DG}  [12h]  (immediate)"
+		echo "  [1/5] distill-gen   : Job ${JOB_DG}  [16h]  (immediate)"
 
 		JOB_T7=$(sbatch --parsable --dependency=afterok:${JOB_DG} slurm/distill_train_7b.sbatch)
 		echo "  [2/5] train-7b      : Job ${JOB_T7}  [12h]  (after ${JOB_DG})"

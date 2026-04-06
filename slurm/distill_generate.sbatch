@@ -15,9 +15,20 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
 #SBATCH --gres=gpu:1
-#SBATCH --time=12:00:00
+#SBATCH --time=16:00:00
 
 set -euo pipefail
+
+on_error() {
+    local exit_code=$?
+    echo ""
+    echo "ERROR: distill_generate.sbatch failed"
+    echo "  Exit code: ${exit_code}"
+    echo "  Line:      ${BASH_LINENO[0]}"
+    echo "  Command:   ${BASH_COMMAND}"
+    echo ""
+}
+trap on_error ERR
 
 # ── Environment ───────────────────────────────────────────
 cd /gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving
@@ -43,9 +54,15 @@ echo " Date:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "========================================="
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
+# ── [0/4] In-node preflight (offline-safe) ─────────────────
+echo ""
+echo "--- [0/4] Running in-node preflight (offline-safe) ---"
+python -m distill.preflight --step 1 --config configs/distill.yaml
+echo "In-node preflight OK."
+
 # ── [1/3] Start vLLM teacher server ─────────────────────────
 echo ""
-echo "--- [1/3] Starting teacher server ---"
+echo "--- [1/4] Starting teacher server ---"
 python -m serving.start_server \
     --config configs/serving.yaml \
     --models configs/models.yaml \
@@ -55,7 +72,7 @@ echo "Server PID: ${SERVER_PID}"
 
 # ── [2/3] Wait for /health ──────────────────────────────────
 echo ""
-echo "--- [2/3] Waiting for /health (up to 10 min) ---"
+echo "--- [2/4] Waiting for /health (up to 10 min) ---"
 python -m serving.healthcheck \
     --url "http://localhost:8000" \
     --retries 120 --interval 5
@@ -63,7 +80,7 @@ echo "Server is healthy."
 
 # ── [3/3] Generate teacher outputs ──────────────────────────
 echo ""
-echo "--- [3/3] Generating teacher outputs ---"
+echo "--- [3/4] Generating teacher outputs ---"
 python -m distill.generate_teacher_outputs \
     --config configs/distill.yaml
 echo "Teacher generation done."
@@ -74,6 +91,12 @@ if [[ ! -s "results/distill/teacher_outputs.jsonl" ]]; then
 fi
 
 echo "Teacher dataset lines: $(wc -l < results/distill/teacher_outputs.jsonl)"
+
+# ── [4/4] Validate generated dataset semantics ──────────────
+echo ""
+echo "--- [4/4] Validating generated JSONL for training ---"
+python -m distill.preflight --step 2 --config configs/distill.yaml
+echo "Generated JSONL validated."
 
 # ── Stop server ─────────────────────────────────────────────
 kill "${SERVER_PID}" 2>/dev/null || true

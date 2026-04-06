@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -136,6 +138,49 @@ def check_generate_smoke() -> None:
         fail(f"collect_all_prompts raised: {e}")
 
 
+def check_teacher_model_cache(config_path: str = "configs/distill.yaml") -> None:
+    """Verify teacher model weights exist in local HF cache (offline-safe)."""
+    section("Teacher model cache")
+    from huggingface_hub import snapshot_download  # noqa: PLC0415
+    from utils.config_loader import load_yaml  # noqa: PLC0415
+
+    cfg = load_yaml(config_path)
+    model = cfg.get("generation", {}).get("teacher_model", "Qwen/Qwen2.5-14B-Instruct")
+    try:
+        local_path = snapshot_download(repo_id=model, local_files_only=True)
+        ok(f"{model} cached at: {local_path}")
+    except Exception as e:
+        fail(
+            f"Teacher model not found in local HF cache: {model}\n"
+            f"       Cache check error: {e}\n"
+            "       Prime cache on a login node first (internet), then rerun preflight."
+        )
+
+
+@contextmanager
+def offline_mode(enabled: bool):
+    """Temporarily force offline mode to mimic compute-node constraints."""
+    if not enabled:
+        yield
+        return
+
+    old_hf = os.environ.get("HF_HUB_OFFLINE")
+    old_tf = os.environ.get("TRANSFORMERS_OFFLINE")
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    try:
+        yield
+    finally:
+        if old_hf is None:
+            os.environ.pop("HF_HUB_OFFLINE", None)
+        else:
+            os.environ["HF_HUB_OFFLINE"] = old_hf
+        if old_tf is None:
+            os.environ.pop("TRANSFORMERS_OFFLINE", None)
+        else:
+            os.environ["TRANSFORMERS_OFFLINE"] = old_tf
+
+
 def check_teacher_server(base_url: str = "http://localhost:8000") -> None:
     """Ping the teacher vLLM server /health endpoint."""
     section(f"Teacher server health ({base_url})")
@@ -233,11 +278,16 @@ def check_adapter(pattern: str, student: str = "7B") -> None:
 
 # ── per-step flows ────────────────────────────────────────────────────────────
 
-def step1(config: str, check_server: bool) -> None:
+def step1(config: str, check_server: bool, simulate_offline: bool = False) -> None:
     """Validate everything needed before sbatch distill_generate.sbatch."""
     check_python_imports()
-    check_datasets(config)
-    check_generate_smoke()
+    if simulate_offline:
+        section("Mode")
+        warn("Simulating compute-node offline mode (HF_HUB_OFFLINE=1)")
+    with offline_mode(simulate_offline):
+        check_datasets(config)
+        check_generate_smoke()
+        check_teacher_model_cache(config)
     if check_server:
         from utils.config_loader import load_yaml  # noqa: PLC0415
         cfg = load_yaml(config)
@@ -293,10 +343,13 @@ Examples:
     parser.add_argument("--config", default="configs/distill.yaml")
     parser.add_argument("--check-server", action="store_true",
                         help="Also ping the teacher vLLM /health endpoint (step 1)")
+    parser.add_argument("--simulate-offline", action="store_true",
+                        help="Force HF/Transformers offline flags during dataset/model checks")
     args = parser.parse_args()
 
     if args.step in ("1", "all"):
-        step1(args.config, check_server=args.check_server)
+        step1(args.config, check_server=args.check_server,
+              simulate_offline=args.simulate_offline)
     if args.step in ("2", "all"):
         step2(args.config)
     if args.step in ("3", "all"):
