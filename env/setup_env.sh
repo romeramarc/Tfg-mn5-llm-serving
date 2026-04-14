@@ -117,6 +117,8 @@ echo "────────────────────────�
 # Print GPU information if available
 if command -v nvidia-smi &>/dev/null; then
     echo ""
-    nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
+    if ! nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv; then
+        echo "WARNING: nvidia-smi unavailable on this node (expected on some login nodes)."
+    fi
     echo ""
 fi
