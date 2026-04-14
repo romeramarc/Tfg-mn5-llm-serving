@@ -1,0 +1,64 @@
+# -----------------------------------------------------------------
+# routing_phase2.yaml - Fixed cascade experiment (1.5B -> 7B -> 14B)
+# -----------------------------------------------------------------
+# This config is the recommended phase-2 setup for strict comparability
+# against teacher-only baseline:
+# - same prompt source / decoding controls
+# - explicit three-tier escalation order
+# - per-request attempt traces in results/routing/
+# -----------------------------------------------------------------
+
+endpoints:
+  teacher:
+    base_url: "http://localhost:8000"
+    model: "Qwen/Qwen2.5-14B-Instruct"
+
+  student_mid:
+    base_url: "http://localhost:8001"
+    model: "Qwen/Qwen2.5-7B-Instruct"
+
+  student_small:
+    base_url: "http://localhost:8002"
+    model: "Qwen/Qwen2.5-1.5B-Instruct"
+
+  # Legacy alias kept for backward compatibility with older policies.
+  student:
+    base_url: "http://localhost:8001"
+    model: "Qwen/Qwen2.5-7B-Instruct"
+
+active_policy: "cascade_three_tier"
+
+policies:
+  cascade_three_tier:
+    logprobs_top_k: 5
+    fallback_method: "entropy"    # entropy | max_logprob
+
+    # Stage acceptance thresholds
+    small_confidence_threshold: 0.45
+    mid_confidence_threshold: 0.60
+
+    # Per-stage timeout budgets
+    small_timeout_ms: 2500
+    mid_timeout_ms: 4000
+    teacher_timeout_ms: 120000
+
+  # Kept to allow quick A/B runs from same config file.
+  always_teacher:
+    description: "Route every request to the teacher model."
+
+  confidence:
+    logprobs_top_k: 5
+    confidence_threshold: 0.70
+    fallback_method: "entropy"
+
+  cascading:
+    student_timeout_ms: 3000
+
+experiment:
+  prompts_file: "configs/prompts.jsonl"
+  num_requests: 200
+  concurrency: 16
+  max_tokens: 256
+  temperature: 0.0
+  seed: 42
+  results_dir: "results/routing"

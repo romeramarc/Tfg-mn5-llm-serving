@@ -343,13 +343,15 @@ sbatch slurm/distill.sbatch
 
 ## 11. Routing Policies (Phase-2)
 
-The routing layer currently implements three strategies:
+The routing layer currently implements four strategies:
 
 **Policy A — Always Teacher.** Every request is dispatched to the teacher model. This serves as the quality upper bound and the latency/cost upper bound.
 
 **Policy B — Cascading Escalation.** The student receives the request first. If the student times out or returns an error, the request is escalated to the teacher. The student timeout is configurable via `routing.yaml → policies → cascading → student_timeout_ms`.
 
 **Policy C — Confidence-Based Routing.** The student is queried with `logprobs` enabled. A confidence score is computed from the returned log-probability distribution (using either the max-logprob or entropy method). If confidence falls below the threshold, the request is re-sent to the teacher. When logprobs are unavailable, a heuristic fallback based on lexical hedging detection is used.
+
+**Policy D — Fixed Three-Tier Cascade.** Requests follow a strict path: `student_small (1.5B) -> student_mid (7B) -> teacher (14B)`. Stage-1 and stage-2 acceptance are confidence-threshold based. Failures or low confidence escalate to the next stage. This is the recommended phase-2 policy for direct comparability with teacher-only and single-model baselines.
 
 Run a routing experiment with:
 
@@ -358,6 +360,38 @@ python -m routing.router --config configs/routing.yaml
 ```
 
 Results include per-request records with selected model, latency, routing decision, and confidence score, saved as JSON and CSV in `results/routing/<timestamp>/`.
+
+For quality evaluation through the same routing policy (offline benchmarks):
+
+```bash
+python -m routing.cascade_quality \
+    --eval-config configs/eval.yaml \
+    --routing-config configs/routing_phase2.yaml \
+    --role cascade_phase2
+```
+
+This produces benchmark-level outputs under `results/quality/quality-cascade_phase2-<timestamp>/` using the same extraction and scoring logic as `eval/run_quality.py`, plus per-attempt routing traces for each evaluated example.
+
+### 11.1 BSC Launch Workflow (Recommended)
+
+For MareNostrum 5, use dedicated server jobs per role and a separate evaluator job:
+
+```bash
+python scripts/preflight_phase2_cascade.py
+bash slurm/launch_cascade_phase2.sh
+```
+
+What this does:
+
+- clears stale endpoint files from previous runs,
+- launches three role servers (`teacher`, `student_mid`, `student_small`) via `slurm/server_role_phase2.sbatch`,
+- propagates the current repository path as `PROJECT_DIR` to all jobs,
+- publishes endpoint URLs to `results/routing/endpoints/*.url`,
+- starts `slurm/eval_cascade_phase2.sbatch` after servers are running,
+- generates a runtime routing config with real node hostnames (no localhost assumptions),
+- runs both online routing and offline quality evaluation.
+
+When evaluation finishes, stop server jobs (the launcher prints the exact `scancel` command).
 
 ## 12. Reproducibility Protocol
 

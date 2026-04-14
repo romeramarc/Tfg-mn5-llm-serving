@@ -5,12 +5,18 @@
 endpoints:
   teacher:
     base_url: "http://localhost:8000"
-    model: "Qwen/Qwen2.5-72B-Instruct"
+    model: "Qwen/Qwen2.5-14B-Instruct"
   student:
     base_url: "http://localhost:8001"
     model: "Qwen/Qwen2.5-7B-Instruct"
+  student_mid:
+    base_url: "http://localhost:8001"
+    model: "Qwen/Qwen2.5-7B-Instruct"
+  student_small:
+    base_url: "http://localhost:8002"
+    model: "Qwen/Qwen2.5-1.5B-Instruct"
 
-# Active policy: always_teacher | cascading | confidence
+# Active policy: always_teacher | cascading | confidence | cascade_three_tier
 active_policy: "confidence"
 
 policies:
@@ -33,9 +39,23 @@ policies:
     confidence_threshold: 0.70
     fallback_method: "entropy"   # entropy | max_logprob
 
+  cascade_three_tier:
+    description: >
+      Fixed cascade for phase 2: student_small (1.5B) ->
+      student_mid (7B) -> teacher (14B).  Each student stage
+      can accept the response based on confidence thresholds.
+    logprobs_top_k: 5
+    fallback_method: "entropy"   # entropy | max_logprob
+    small_confidence_threshold: 0.45
+    mid_confidence_threshold: 0.60
+    small_timeout_ms: 2500
+    mid_timeout_ms: 4000
+    teacher_timeout_ms: 120000
+
 experiment:
   prompts_file: "configs/prompts.jsonl"
   num_requests: 200
+  concurrency: 16
   max_tokens: 256
   temperature: 0.0
   seed: 42
