@@ -19,7 +19,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --time=12:00:00
+#SBATCH --time=15:00:00
 #SBATCH --exclusive
 
 set -euo pipefail
