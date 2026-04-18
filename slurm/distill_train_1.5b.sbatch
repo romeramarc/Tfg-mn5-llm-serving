@@ -23,8 +23,16 @@ cd /gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving
 source env/setup_env.sh
 mkdir -p logs
 
+DISTILL_CONFIG="${DISTILL_CONFIG:-configs/distill.yaml}"
+
 STUDENT="Qwen/Qwen2.5-1.5B-Instruct"
-DATASET="results/distill/teacher_outputs.jsonl"
+DATASET=$(python - <<EOF
+from utils.config_loader import load_yaml
+
+cfg = load_yaml("${DISTILL_CONFIG}")
+print(cfg.get("training", {}).get("dataset_path", "results/distill/teacher_outputs.jsonl"))
+EOF
+)
 
 echo "========================================="
 echo " Distillation Step 2: LoRA SFT"
@@ -33,6 +41,7 @@ echo " Dataset: ${DATASET}"
 echo " Job ID:  ${SLURM_JOB_ID}"
 echo " Node:    $(hostname)"
 echo " Date:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo " Config:  ${DISTILL_CONFIG}"
 echo "========================================="
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
@@ -42,11 +51,14 @@ if [[ ! -f "${DATASET}" ]]; then
     exit 1
 fi
 echo "Dataset lines: $(wc -l < "${DATASET}")"
-echo "1.5B overrides: see model_overrides in configs/distill.yaml (5 ep, LoRA r=96, oversample gsm8k+math)"
+echo "1.5B training recipe loaded from: ${DISTILL_CONFIG}"
+
+# Optional safety check for the configured training dataset
+python -m distill.preflight --step 2 --config "${DISTILL_CONFIG}"
 
 # ── Train ───────────────────────────────────────────────────
 python -m distill.train_student_sft \
-    --config configs/distill.yaml \
+    --config "${DISTILL_CONFIG}" \
     --student "${STUDENT}"
 
 # ── Final GPU/VRAM snapshot ──────────────────────────────────

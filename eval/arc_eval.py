@@ -224,11 +224,17 @@ def run_arc(cfg: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
 
     # ── Per-category breakdown ─────────────────────────────
     from collections import defaultdict as _dd  # already imported at top-level
-    breakdown: Dict[str, Dict[str, int]] = defaultdict(lambda: {"correct": 0, "total": 0})
+    breakdown: Dict[str, Dict[str, int]] = defaultdict(
+        lambda: {"correct": 0, "scorable": 0, "unscorable": 0, "total": 0}
+    )
     for r in results:
         cat = r.get("category") or "arc-challenge"
-        breakdown[cat]["total"]   += 1
-        breakdown[cat]["correct"] += int(bool(r.get("correct")))
+        breakdown[cat]["total"] += 1
+        if r.get("scorable", True):
+            breakdown[cat]["scorable"] += 1
+            breakdown[cat]["correct"] += int(bool(r.get("correct")))
+        else:
+            breakdown[cat]["unscorable"] += 1
 
     # ── Global metrics ─────────────────────────────────────
     metrics = compute_accuracy(results)
@@ -258,9 +264,11 @@ def run_arc(cfg: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
         {
             "category": cat,
             "correct":  v["correct"],
+            "scorable": v["scorable"],
+            "unscorable": v["unscorable"],
             "total":    v["total"],
-            "accuracy_pct": round(100.0 * v["correct"] / v["total"], 2)
-            if v["total"] > 0 else None,
+            "accuracy_pct": round(100.0 * v["correct"] / v["scorable"], 2)
+            if v["scorable"] > 0 else None,
         }
         for cat, v in sorted(breakdown.items())
     ]

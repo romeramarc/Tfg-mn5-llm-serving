@@ -1,0 +1,106 @@
+# distill_1p5b_focus.yaml
+# -------------------------------------------------------------
+# Dedicated distillation recipe for improving Qwen2.5-1.5B.
+# Primary target: measurable gains on GSM8K scorable accuracy.
+# Secondary target: retain/improve MATH scorable accuracy.
+#
+# Key ideas:
+# 1) Keep only high-quality teacher supervision for gsm8k/math
+#    (teacher-correct rows only).
+# 2) Oversample GSM8K during SFT.
+# 3) Use a conservative LR schedule to reduce overfitting to format.
+# -------------------------------------------------------------
+
+benchmarks:
+  gsm8k:
+    enabled: true
+    dataset_name: "openai/gsm8k"
+    dataset_split: "train"
+    subset_size: null
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+
+  math:
+    enabled: true
+    dataset_name: "EleutherAI/hendrycks_math"
+    dataset_split: "train"
+    subset_size: null
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+
+generation:
+  teacher_base_url: "http://localhost:8000"
+  teacher_model: "Qwen/Qwen2.5-14B-Instruct"
+  eval_config: "configs/eval.yaml"
+  extra_prompts_file: null
+  output_file: "results/distill/teacher_outputs_1p5b_focus.jsonl"
+
+  max_tokens: 896
+  temperature: 0.0
+  top_p: 1.0
+  batch_size: 32
+  timeout_seconds: 180
+  seed: 42
+
+  quality_filter:
+    enabled: true
+    default_policy: "all"
+    benchmark_policies:
+      gsm8k: "correct_only"
+      math: "correct_only"
+    min_kept_per_benchmark: 500
+
+training:
+  student_model: "Qwen/Qwen2.5-1.5B-Instruct"
+  dataset_path: "results/distill/teacher_outputs_1p5b_focus.jsonl"
+  output_dir: "results/distill"
+
+  num_train_epochs: 4
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 8
+  learning_rate: 1.2e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.10
+  weight_decay: 0.01
+  max_seq_length: 2048
+  fp16: false
+  bf16: true
+  gradient_checkpointing: true
+  seed: 42
+
+  val_ratio: 0.15
+  early_stopping_patience: 6
+  max_grad_norm: 0.8
+
+  oversample_benchmarks:
+    gsm8k: 5
+    math: 1
+
+  lora:
+    r: 96
+    lora_alpha: 160
+    lora_dropout: 0.08
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj",
+                     "gate_proj", "up_proj", "down_proj"]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+
+  logging:
+    logging_steps: 10
+    save_strategy: "steps"
+    save_steps: 120
+    eval_strategy: "steps"
+    eval_steps: 40
+    load_best_model_at_end: true
+    report_to: "none"

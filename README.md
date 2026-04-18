@@ -341,6 +341,28 @@ Both stages can be chained automatically via the SLURM template:
 sbatch slurm/distill.sbatch
 ```
 
+### 10.3 1.5B-Focused Quality Recipe (Recommended for measurable gains)
+
+If you want to optimise specifically for the distilled 1.5B student, use the
+dedicated config and launcher:
+
+```bash
+bash slurm/launch_distill_1p5b_focus.sh
+```
+
+By default this launcher uses `configs/distill_1p5b_focus.yaml`, which adds:
+
+- quality-filtered KD data (`generation.quality_filter`) so only high-quality
+    teacher supervision is kept for GSM8K/MATH,
+- stronger GSM8K emphasis during SFT (`oversample_benchmarks`),
+- a dedicated teacher-output dataset path to keep this run auditable.
+
+You can override the config file at launch time:
+
+```bash
+DISTILL_CONFIG=configs/distill_1p5b_focus.yaml bash slurm/launch_distill_1p5b_focus.sh
+```
+
 ## 11. Routing Policies (Phase-2)
 
 The routing layer currently implements four strategies:

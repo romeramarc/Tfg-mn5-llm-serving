@@ -14,8 +14,8 @@ Use the same controls as phase-1 quality and efficiency runs:
   - online/service metrics in `results/routing/...`
 - Same seed handling and metadata capture (`set_seed`, config snapshots, `run_meta.json`).
 - Same aggregation semantics:
-  - `accuracy_total` via `correct / total_examples`
-  - `accuracy_scorable` and `unscorable_examples` preserved for diagnostics.
+  - `accuracy_pct` measured on scorable examples: `correct / scorable_examples`
+  - `total_examples` and `unscorable_examples` preserved for diagnostics.
 
 ## 2) Technical Cascade Design
 

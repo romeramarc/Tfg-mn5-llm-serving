@@ -35,6 +35,15 @@ cd /gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving
 source env/setup_env.sh
 mkdir -p logs results/distill
 
+DISTILL_CONFIG="${DISTILL_CONFIG:-configs/distill.yaml}"
+DISTILL_OUTPUT=$(python - <<EOF
+from utils.config_loader import load_yaml
+
+cfg = load_yaml("${DISTILL_CONFIG}")
+print(cfg.get("generation", {}).get("output_file", "results/distill/teacher_outputs.jsonl"))
+EOF
+)
+
 cleanup() {
     if [[ -n "${SERVER_PID:-}" ]]; then
         kill "${SERVER_PID}" 2>/dev/null || true
@@ -51,13 +60,15 @@ echo " Model:  ${MODEL}"
 echo " Job ID: ${SLURM_JOB_ID}"
 echo " Node:   $(hostname)"
 echo " Date:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo " Config: ${DISTILL_CONFIG}"
+echo " Output: ${DISTILL_OUTPUT}"
 echo "========================================="
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 # ── [0/4] In-node preflight (offline-safe) ─────────────────
 echo ""
 echo "--- [0/4] Running in-node preflight (offline-safe) ---"
-python -m distill.preflight --step 1 --config configs/distill.yaml
+python -m distill.preflight --step 1 --config "${DISTILL_CONFIG}"
 echo "In-node preflight OK."
 
 # ── [1/3] Start vLLM teacher server ─────────────────────────
@@ -82,20 +93,20 @@ echo "Server is healthy."
 echo ""
 echo "--- [3/4] Generating teacher outputs ---"
 python -m distill.generate_teacher_outputs \
-    --config configs/distill.yaml
+    --config "${DISTILL_CONFIG}"
 echo "Teacher generation done."
 
-if [[ ! -s "results/distill/teacher_outputs.jsonl" ]]; then
-    echo "ERROR: results/distill/teacher_outputs.jsonl missing or empty"
+if [[ ! -s "${DISTILL_OUTPUT}" ]]; then
+    echo "ERROR: ${DISTILL_OUTPUT} missing or empty"
     exit 1
 fi
 
-echo "Teacher dataset lines: $(wc -l < results/distill/teacher_outputs.jsonl)"
+echo "Teacher dataset lines: $(wc -l < "${DISTILL_OUTPUT}")"
 
 # ── [4/4] Validate generated dataset semantics ──────────────
 echo ""
 echo "--- [4/4] Validating generated JSONL for training ---"
-python -m distill.preflight --step 2 --config configs/distill.yaml
+python -m distill.preflight --step 2 --config "${DISTILL_CONFIG}"
 echo "Generated JSONL validated."
 
 # ── Stop server ─────────────────────────────────────────────
@@ -114,5 +125,5 @@ echo "..."
 echo ""
 echo "========================================="
 echo " Teacher outputs saved to:"
-echo " results/distill/teacher_outputs.jsonl"
+echo " ${DISTILL_OUTPUT}"
 echo "========================================="

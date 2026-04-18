@@ -5,6 +5,8 @@ Query the teacher model via its OpenAI-compatible ``/v1/completions``
 endpoint and persist (prompt, response, metadata) triples as JSONL.
 
 The output file becomes the training dataset for the student SFT step.
+Optionally, records can be quality-filtered (e.g. keep only teacher-correct
+answers per benchmark) before writing the training JSONL.
 
 **Train/test separation:**  Prompts are sourced from the **train** splits
 of each benchmark (GSM8K train, MATH train) to prevent data leakage.
@@ -46,6 +48,12 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from distill.dataset_utils import write_jsonl
+from eval.scoring import (
+    extract_boxed_answer,
+    extract_numeric_answer,
+    math_answer_match,
+    numeric_match,
+)
 from utils.config_loader import load_yaml
 from utils.logging import setup_logging, get_logger
 from utils.reproducibility import (
@@ -78,12 +86,15 @@ def _collect_gsm8k_prompts(cfg: dict) -> List[Dict[str, Any]]:
         "Solve the following math problem step by step.\n"
         "Put your final numeric answer after ####.\n\n"
         "Question: {question}\n\nAnswer:")
+    answer_pattern = bench.get("answer_extraction_pattern", r"####\s*([\-\d,\.]+)")
     prompts = []
     for i, row in enumerate(ds):
+        reference_answer = extract_numeric_answer(str(row.get("answer", "")), answer_pattern)
         prompts.append({
             "id": f"gsm8k-{i}",
             "benchmark": "gsm8k",
             "prompt": template.format(question=row["question"]),
+            "reference_answer": reference_answer,
         })
     subset = bench.get("subset_size")
     if subset and subset > 0:
@@ -127,10 +138,13 @@ def _collect_math_prompts(cfg: dict) -> List[Dict[str, Any]]:
         "Problem: {problem}\n\nSolution:")
     prompts = []
     for i, row in enumerate(ds):
+        reference_answer = extract_boxed_answer(str(row.get("solution", "")))
         prompts.append({
             "id": f"math-{i}",
             "benchmark": "math",
             "prompt": template.format(problem=row["problem"]),
+            "reference_answer": reference_answer,
+            "reference_is_boxed": bool(reference_answer),
         })
     subset = bench.get("subset_size")
     if subset and subset > 0:
@@ -315,6 +329,9 @@ async def _generate_all(
             "finish_reason": res["finish_reason"],
             "error": res["error"],
         }
+        for key, value in item.items():
+            if key not in {"id", "benchmark", "prompt"}:
+                record[key] = value
         results.append(record)
 
     async with httpx.AsyncClient() as client:
@@ -322,6 +339,113 @@ async def _generate_all(
         await asyncio.gather(*tasks)
 
     return results
+
+
+def _gsm8k_answer_pattern(cfg: Dict[str, Any]) -> str:
+    bench = cfg.get("benchmarks", {}).get("gsm8k", {})
+    return str(bench.get("answer_extraction_pattern", r"####\s*([\-\d,\.]+)"))
+
+
+def _annotate_teacher_quality(results: List[Dict[str, Any]], cfg: Dict[str, Any]) -> None:
+    """Annotate each record with teacher_scorable/teacher_correct when possible."""
+    gsm8k_pattern = _gsm8k_answer_pattern(cfg)
+
+    for row in results:
+        row["teacher_predicted_answer"] = None
+        row["teacher_scorable"] = None
+        row["teacher_correct"] = None
+
+        if row.get("error") is not None:
+            continue
+
+        completion = str(row.get("teacher_completion") or "")
+        benchmark = str(row.get("benchmark") or "")
+        reference = row.get("reference_answer")
+        if reference is None:
+            continue
+
+        if benchmark == "gsm8k":
+            predicted = extract_numeric_answer(completion, gsm8k_pattern)
+            scorable = predicted is not None
+            correct = bool(predicted is not None and numeric_match(predicted, str(reference)))
+            row["teacher_predicted_answer"] = predicted
+            row["teacher_scorable"] = scorable
+            row["teacher_correct"] = correct
+            continue
+
+        if benchmark == "math":
+            predicted = extract_boxed_answer(completion)
+            scorable = predicted is not None
+            correct = bool(predicted is not None and math_answer_match(predicted, str(reference)))
+            row["teacher_predicted_answer"] = predicted
+            row["teacher_scorable"] = scorable
+            row["teacher_correct"] = correct
+
+
+def _resolve_quality_policy(filter_cfg: Dict[str, Any], benchmark: str) -> str:
+    """Return the policy for a benchmark: all | scorable | correct_only."""
+    default_policy = str(filter_cfg.get("default_policy", "all"))
+    per_benchmark = filter_cfg.get("benchmark_policies", {}) or {}
+    policy = str(per_benchmark.get(benchmark, default_policy))
+    if policy not in {"all", "scorable", "correct_only"}:
+        logger.warning(
+            "Unknown quality-filter policy; falling back to 'all'",
+            extra={"benchmark": benchmark, "policy": policy},
+        )
+        return "all"
+    return policy
+
+
+def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Filter teacher outputs according to generation.quality_filter settings."""
+    filter_cfg = cfg.get("generation", {}).get("quality_filter", {}) or {}
+    if not filter_cfg.get("enabled", False):
+        return results
+
+    min_kept = max(1, int(filter_cfg.get("min_kept_per_benchmark", 1)))
+    valid_by_benchmark: Dict[str, List[Dict[str, Any]]] = {}
+    filtered: List[Dict[str, Any]] = []
+
+    for row in results:
+        if row.get("error") is not None or not row.get("teacher_completion"):
+            continue
+
+        benchmark = str(row.get("benchmark") or "unknown")
+        valid_by_benchmark.setdefault(benchmark, []).append(row)
+        policy = _resolve_quality_policy(filter_cfg, benchmark)
+
+        keep = False
+        if policy == "all":
+            keep = True
+        elif policy == "scorable":
+            keep = bool(row.get("teacher_scorable"))
+        elif policy == "correct_only":
+            keep = bool(row.get("teacher_correct"))
+
+        if keep:
+            filtered.append(row)
+
+    kept_keys = {(r.get("id"), r.get("benchmark")) for r in filtered}
+    for benchmark, valid_rows in valid_by_benchmark.items():
+        kept_count = sum(1 for r in valid_rows if (r.get("id"), r.get("benchmark")) in kept_keys)
+        if kept_count >= min_kept:
+            continue
+
+        logger.warning(
+            "Quality filter kept too few rows for benchmark; backfilling best-effort.",
+            extra={"benchmark": benchmark, "kept": kept_count, "min_kept": min_kept},
+        )
+        for row in valid_rows:
+            key = (row.get("id"), row.get("benchmark"))
+            if key in kept_keys:
+                continue
+            filtered.append(row)
+            kept_keys.add(key)
+            kept_count += 1
+            if kept_count >= min_kept:
+                break
+
+    return filtered
 
 
 # ── Public entry-point ──────────────────────────────────────
@@ -362,6 +486,8 @@ def run(config_path: str = "configs/distill.yaml",
                  extra={"num_prompts": len(prompts)})
 
     results = asyncio.run(_generate_all(prompts, cfg))
+    _annotate_teacher_quality(results, cfg)
+    filtered_results = _apply_quality_filter(results, cfg)
 
     # Stats
     ok = [r for r in results if r["error"] is None]
@@ -372,26 +498,56 @@ def run(config_path: str = "configs/distill.yaml",
     if failed > 0:
         logger.warning(f"{failed} prompts failed — stored with error field")
 
-    # Save — always write all results (including errors) for auditing
+    filter_cfg = cfg.get("generation", {}).get("quality_filter", {}) or {}
+    if filter_cfg.get("enabled", False):
+        logger.info(
+            "Quality filter applied",
+            extra={
+                "kept": len(filtered_results),
+                "dropped": len(results) - len(filtered_results),
+                "default_policy": filter_cfg.get("default_policy", "all"),
+                "benchmark_policies": filter_cfg.get("benchmark_policies", {}),
+            },
+        )
+        output_rows = filtered_results
+    else:
+        output_rows = results
+
+    # Save output rows and always persist full audit trace.
     out_path = Path(gen.get("output_file",
                             "results/distill/teacher_outputs.jsonl"))
-    write_jsonl(results, out_path)
-    write_jsonl(results, run_dir / "teacher_outputs.jsonl")
+    write_jsonl(output_rows, out_path)
+    write_jsonl(output_rows, run_dir / "teacher_outputs.jsonl")
+    write_jsonl(results, run_dir / "teacher_outputs_all.jsonl")
 
     # Summary stats
     summary = {
         "total_prompts": len(results),
         "successful": len(ok),
         "failed": failed,
+        "kept_after_filter": len(output_rows),
         "by_benchmark": {},
     }
+    kept_keys = {(r.get("id"), r.get("benchmark")) for r in output_rows}
     for r in results:
         b = r["benchmark"]
         if b not in summary["by_benchmark"]:
-            summary["by_benchmark"][b] = {"total": 0, "ok": 0}
+            summary["by_benchmark"][b] = {
+                "total": 0,
+                "ok": 0,
+                "teacher_scorable": 0,
+                "teacher_correct": 0,
+                "kept": 0,
+            }
         summary["by_benchmark"][b]["total"] += 1
         if r["error"] is None:
             summary["by_benchmark"][b]["ok"] += 1
+        if bool(r.get("teacher_scorable")):
+            summary["by_benchmark"][b]["teacher_scorable"] += 1
+        if bool(r.get("teacher_correct")):
+            summary["by_benchmark"][b]["teacher_correct"] += 1
+        if (r.get("id"), r.get("benchmark")) in kept_keys:
+            summary["by_benchmark"][b]["kept"] += 1
 
     with (run_dir / "generation_summary.json").open("w") as fh:
         json.dump(summary, fh, indent=2)

@@ -66,7 +66,18 @@ def collect_quality(results_dir: Path) -> Dict[str, Dict[str, Any]]:
                 bname = bench.get("benchmark", "unknown")
                 entry[f"{bname}_acc"] = bench.get("accuracy_pct", bench.get("accuracy", 0) * 100)
                 entry[f"{bname}_correct"] = bench.get("correct", 0)
-                entry[f"{bname}_total"] = bench.get("scorable_examples", 0)
+                total_examples = bench.get(
+                    "total_examples",
+                    bench.get("scorable_examples", 0) + bench.get("unscorable_examples", 0),
+                )
+                scorable_examples = bench.get("scorable_examples", total_examples)
+                unscorable_examples = bench.get(
+                    "unscorable_examples",
+                    max(0, total_examples - scorable_examples),
+                )
+                entry[f"{bname}_total"] = total_examples
+                entry[f"{bname}_scorable"] = scorable_examples
+                entry[f"{bname}_unscorable"] = unscorable_examples
                 entry["model"] = bench.get("model", "")
 
         role_metrics[role] = entry
