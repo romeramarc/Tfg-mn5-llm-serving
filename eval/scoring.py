@@ -12,6 +12,7 @@ Responsibilities
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import math
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,18 +20,132 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # ── Numeric answer extraction (GSM8K style) ────────────────
 
+_NUMERIC_TOKEN_RE = re.compile(
+    r"[-+]?\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?",
+    flags=re.IGNORECASE,
+)
+
+
+def _canonicalise_numeric_token(raw: str) -> Optional[str]:
+    """Normalise a numeric token to a canonical string.
+
+    Rules:
+    - remove currency symbols and separators (e.g. "$43,500" -> "43500")
+    - drop trailing percent sign for extraction (matching handles value semantics)
+    - collapse trailing .0 when the value is integral
+    """
+    if raw is None:
+        return None
+
+    s = raw.strip()
+    if not s:
+        return None
+
+    s = s.replace("$", "")
+    s = s.replace(",", "")
+    s = s.replace(" ", "")
+    s = s.rstrip(".?!;:")
+    if s.endswith("%"):
+        s = s[:-1]
+    if s.startswith("+"):
+        s = s[1:]
+
+    if not re.fullmatch(r"-?\d+(?:\.\d+)?", s):
+        return None
+
+    try:
+        dec = Decimal(s)
+    except InvalidOperation:
+        return None
+
+    if dec == dec.to_integral_value():
+        return str(int(dec))
+
+    norm = format(dec.normalize(), "f")
+    if norm == "-0":
+        return "0"
+    return norm
+
+
+def _extract_last_numeric_from_pattern(text: str, pattern: str) -> Optional[str]:
+    """Apply a regex pattern and canonicalise the last captured value."""
+    try:
+        matches = re.findall(pattern, text)
+    except re.error:
+        return None
+
+    if not matches:
+        return None
+
+    candidate = matches[-1]
+    if isinstance(candidate, tuple):
+        candidate = next((m for m in reversed(candidate) if m), "")
+    return _canonicalise_numeric_token(str(candidate))
+
+
+def _extract_with_priority_patterns(text: str) -> Optional[str]:
+    """Robust final-answer extraction with explicit-context priority."""
+    patterns = [
+        r"####\s*([-+]?\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?)",
+        r"\\boxed\{\s*([-+]?\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?)\s*\}",
+        r"(?:final\s+answer|final\s+result)\s*(?:is|=|:)?\s*([-+]?\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?)",
+        r"(?:therefore|thus|hence)[^\n]{0,80}?(?:answer\s*(?:is|=|:)?\s*)?([-+]?\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?)",
+        r"(?:the\s+)?answer\s*(?:is|=|:)\s*([-+]?\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?)",
+    ]
+
+    for pattern in patterns:
+        m = re.findall(pattern, text, flags=re.IGNORECASE)
+        if not m:
+            continue
+        extracted = _canonicalise_numeric_token(str(m[-1]))
+        if extracted is not None:
+            return extracted
+
+    return None
+
+
+def _extract_from_short_final_line(text: str) -> Optional[str]:
+    """Conservative fallback: numeric-only final line in the tail of output."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return None
+
+    for line in reversed(lines[-3:]):
+        tokens = _NUMERIC_TOKEN_RE.findall(line)
+        if len(tokens) != 1:
+            continue
+        # Avoid pulling numbers from long reasoning lines.
+        alpha_words = len(re.findall(r"[A-Za-z]+", line))
+        if alpha_words > 3:
+            continue
+        parsed = _canonicalise_numeric_token(tokens[0])
+        if parsed is not None:
+            return parsed
+
+    return None
+
 def extract_numeric_answer(text: str, pattern: str) -> Optional[str]:
     """Extract a numeric answer from *text* using *pattern*.
 
     The regex must contain one capturing group whose content is the
-    answer string.  The match is taken from the **last** occurrence
-    (models often restate the answer at the end).
+    answer string. Extraction now prioritises explicit final-answer
+    markers before falling back to the provided pattern.
     """
-    matches = re.findall(pattern, text)
-    if not matches:
+    if not text:
         return None
-    raw = matches[-1].strip()
-    return raw
+
+    # 1) Prefer explicit final-answer contexts.
+    parsed = _extract_with_priority_patterns(text)
+    if parsed is not None:
+        return parsed
+
+    # 2) Backward-compatible custom pattern from config.
+    parsed = _extract_last_numeric_from_pattern(text, pattern)
+    if parsed is not None:
+        return parsed
+
+    # 3) Conservative tail-line fallback.
+    return _extract_from_short_final_line(text)
 
 
 def normalise_numeric(value: str) -> Optional[float]:
@@ -183,7 +298,9 @@ def compute_accuracy(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     scorable = [r for r in results if r.get("scorable", True)]
     unscorable = total - len(scorable)
     correct = sum(1 for r in scorable if r.get("correct", False))
-    accuracy = correct / len(scorable) if scorable else 0.0
+    accuracy_scorable = correct / len(scorable) if scorable else 0.0
+    accuracy_total = correct / total if total else 0.0
+    unscorable_rate = unscorable / total if total else 0.0
 
     return {
         "total_examples": total,
@@ -191,6 +308,14 @@ def compute_accuracy(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "unscorable_examples": unscorable,
         "correct": correct,
         "incorrect": len(scorable) - correct,
-        "accuracy": round(accuracy, 6),
-        "accuracy_pct": round(accuracy * 100, 2),
+        # Backward-compatible fields (scorable-based accuracy)
+        "accuracy": round(accuracy_scorable, 6),
+        "accuracy_pct": round(accuracy_scorable * 100, 2),
+        # Explicit metrics for honest pre/post comparison
+        "accuracy_scorable": round(accuracy_scorable, 6),
+        "accuracy_scorable_pct": round(accuracy_scorable * 100, 2),
+        "accuracy_total": round(accuracy_total, 6),
+        "accuracy_total_pct": round(accuracy_total * 100, 2),
+        "unscorable_rate": round(unscorable_rate, 6),
+        "unscorable_rate_pct": round(unscorable_rate * 100, 2),
     }

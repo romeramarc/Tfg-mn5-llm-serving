@@ -64,7 +64,27 @@ def collect_quality(results_dir: Path) -> Dict[str, Dict[str, Any]]:
         if isinstance(data, list):
             for bench in data:
                 bname = bench.get("benchmark", "unknown")
-                entry[f"{bname}_acc"] = bench.get("accuracy_pct", bench.get("accuracy", 0) * 100)
+                scorable_pct = bench.get(
+                    "accuracy_scorable_pct",
+                    bench.get("accuracy_pct", bench.get("accuracy", 0) * 100),
+                )
+                total_pct = bench.get(
+                    "accuracy_total_pct",
+                    None,
+                )
+                unscorable_rate_pct = bench.get(
+                    "unscorable_rate_pct",
+                    None,
+                )
+
+                # Backward-compatible key (historically scorable-based).
+                entry[f"{bname}_acc"] = scorable_pct
+                # Explicit quality keys for honest comparisons.
+                entry[f"{bname}_acc_scorable"] = scorable_pct
+                if total_pct is not None:
+                    entry[f"{bname}_acc_total"] = total_pct
+                if unscorable_rate_pct is not None:
+                    entry[f"{bname}_unscorable_rate_pct"] = unscorable_rate_pct
                 entry[f"{bname}_correct"] = bench.get("correct", 0)
                 total_examples = bench.get(
                     "total_examples",

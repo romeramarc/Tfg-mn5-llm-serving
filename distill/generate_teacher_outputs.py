@@ -40,10 +40,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from collections import Counter
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -288,6 +289,210 @@ async def _query_teacher(
         }
 
 
+def _clean_completion_for_length(text: str) -> str:
+    """Normalise whitespace to compare candidate completion lengths."""
+    return " ".join(text.split())
+
+
+def _pick_consensus_target(
+    samples: List[Dict[str, Any]],
+    consensus_value: Optional[str],
+    strategy: str,
+) -> Tuple[Optional[int], str]:
+    """Choose a target completion among sampled teacher outputs."""
+    indexed = list(enumerate(samples))
+
+    if consensus_value is not None:
+        candidates = [
+            (idx, s)
+            for idx, s in indexed
+            if s.get("completion") and s.get("predicted_answer") == consensus_value
+        ]
+    else:
+        candidates = [(idx, s) for idx, s in indexed if s.get("completion")]
+
+    if not candidates:
+        return None, "none_available"
+
+    if strategy not in {"shortest_clean", "first"}:
+        strategy = "shortest_clean"
+
+    if strategy == "first":
+        return candidates[0][0], "first"
+
+    best_idx, _ = min(
+        candidates,
+        key=lambda it: (
+            len(_clean_completion_for_length(str(it[1].get("completion") or ""))),
+            len(str(it[1].get("completion") or "")),
+            it[0],
+        ),
+    )
+    return best_idx, "shortest_clean"
+
+
+async def _generate_single_record(
+    client: httpx.AsyncClient,
+    item: Dict[str, Any],
+    url: str,
+    model: str,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    timeout: float,
+    gen_params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Generate one teacher completion (default path for non-GSM8K consensus)."""
+    res = await _query_teacher(
+        client, url, item["prompt"], model, max_tokens, temperature, top_p, timeout,
+    )
+    record = {
+        "id": item["id"],
+        "benchmark": item["benchmark"],
+        "prompt": item["prompt"],
+        "teacher_completion": res["teacher_completion"],
+        "teacher_model": model,
+        "generation_parameters": gen_params,
+        "latency_ms": res["latency_ms"],
+        "finish_reason": res["finish_reason"],
+        "error": res["error"],
+        "teacher_accepted_for_kd": True,
+    }
+    for key, value in item.items():
+        if key not in {"id", "benchmark", "prompt"}:
+            record[key] = value
+    return record
+
+
+async def _generate_gsm8k_consensus_record(
+    client: httpx.AsyncClient,
+    item: Dict[str, Any],
+    cfg: Dict[str, Any],
+    url: str,
+    model: str,
+    timeout: float,
+    base_gen_params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Generate multiple teacher samples for GSM8K and derive consensus target."""
+    gen = cfg.get("generation", {})
+    scfg = gen.get("gsm8k_self_consistency", {}) or {}
+
+    num_samples = max(1, int(scfg.get("num_samples", 5)))
+    min_consensus = max(1, int(scfg.get("min_consensus", 3)))
+    sample_temperature = float(scfg.get("sample_temperature", 0.6))
+    sample_top_p = float(scfg.get("sample_top_p", 0.95))
+    sample_max_tokens = int(scfg.get("sample_max_tokens", gen.get("max_tokens", 1024)))
+    require_consensus_correct = bool(scfg.get("require_consensus_correct", True))
+    target_selection = str(scfg.get("target_selection", "shortest_clean"))
+
+    answer_pattern = _gsm8k_answer_pattern(cfg)
+    teacher_samples: List[Dict[str, Any]] = []
+
+    for sample_idx in range(num_samples):
+        res = await _query_teacher(
+            client,
+            url,
+            item["prompt"],
+            model,
+            sample_max_tokens,
+            sample_temperature,
+            sample_top_p,
+            timeout,
+        )
+        completion = str(res.get("teacher_completion") or "")
+        predicted = None
+        if completion and res.get("error") is None:
+            predicted = extract_numeric_answer(completion, answer_pattern)
+        teacher_samples.append({
+            "sample_index": sample_idx,
+            "completion": completion,
+            "predicted_answer": predicted,
+            "latency_ms": res.get("latency_ms"),
+            "finish_reason": res.get("finish_reason"),
+            "error": res.get("error"),
+        })
+
+    counts = Counter(
+        str(s["predicted_answer"])
+        for s in teacher_samples
+        if s.get("predicted_answer") is not None
+    )
+    consensus_value: Optional[str] = None
+    consensus_size = 0
+    if counts:
+        consensus_value, consensus_size = counts.most_common(1)[0]
+
+    consensus_reached = bool(consensus_value is not None and consensus_size >= min_consensus)
+    reference = item.get("reference_answer")
+    consensus_correct = bool(
+        consensus_reached
+        and reference is not None
+        and consensus_value is not None
+        and numeric_match(consensus_value, str(reference))
+    )
+    accepted_for_kd = consensus_correct if require_consensus_correct else consensus_reached
+
+    selected_idx, selected_by = _pick_consensus_target(
+        teacher_samples, consensus_value, target_selection,
+    )
+    selected_completion = None
+    selected_predicted = None
+    selected_finish_reason = None
+    selected_latency = None
+    if selected_idx is not None:
+        chosen = teacher_samples[selected_idx]
+        selected_completion = chosen.get("completion")
+        selected_predicted = chosen.get("predicted_answer")
+        selected_finish_reason = chosen.get("finish_reason")
+        selected_latency = chosen.get("latency_ms")
+
+    record_error = None
+    if selected_completion is None:
+        record_error = "all_teacher_samples_failed"
+
+    record = {
+        "id": item["id"],
+        "benchmark": item["benchmark"],
+        "prompt": item["prompt"],
+        "teacher_completion": selected_completion,
+        "teacher_model": model,
+        "generation_parameters": {
+            **base_gen_params,
+            "self_consistency": {
+                "enabled": True,
+                "num_samples": num_samples,
+                "min_consensus": min_consensus,
+                "sample_temperature": sample_temperature,
+                "sample_top_p": sample_top_p,
+                "sample_max_tokens": sample_max_tokens,
+                "target_selection": target_selection,
+            },
+        },
+        "latency_ms": selected_latency,
+        "finish_reason": selected_finish_reason,
+        "error": record_error,
+        "teacher_samples": teacher_samples,
+        "teacher_sampled_completions": [s.get("completion") for s in teacher_samples],
+        "teacher_extracted_candidates": [s.get("predicted_answer") for s in teacher_samples],
+        "teacher_consensus_counts": dict(counts),
+        "teacher_consensus_value": consensus_value,
+        "teacher_consensus_size": consensus_size,
+        "teacher_consensus_reached": consensus_reached,
+        "teacher_consensus_min_required": min_consensus,
+        "teacher_consensus_correct": consensus_correct,
+        "teacher_accepted_for_kd": accepted_for_kd,
+        "teacher_selected_sample_index": selected_idx,
+        "teacher_selected_by": selected_by,
+        "teacher_predicted_answer": consensus_value if consensus_value is not None else selected_predicted,
+        "teacher_scorable": consensus_reached,
+        "teacher_correct": consensus_correct,
+    }
+    for key, value in item.items():
+        if key not in {"id", "benchmark", "prompt"}:
+            record[key] = value
+    return record
+
+
 async def _generate_all(
     prompts: List[Dict[str, Any]],
     cfg: Dict[str, Any],
@@ -297,11 +502,14 @@ async def _generate_all(
     base_url = gen.get("teacher_base_url", "http://localhost:8000")
     url = f"{base_url.rstrip('/')}/v1/completions"
     model = gen.get("teacher_model", "")
-    max_tokens = gen.get("max_tokens", 1024)
-    temperature = gen.get("temperature", 0.0)
-    top_p = gen.get("top_p", 1.0)
-    batch_size = gen.get("batch_size", 32)
-    timeout = gen.get("timeout_seconds", 180)
+    max_tokens = int(gen.get("max_tokens", 1024))
+    temperature = float(gen.get("temperature", 0.0))
+    top_p = float(gen.get("top_p", 1.0))
+    batch_size = int(gen.get("batch_size", 32))
+    timeout = float(gen.get("timeout_seconds", 180))
+
+    gsm8k_consensus_cfg = gen.get("gsm8k_self_consistency", {}) or {}
+    gsm8k_consensus_enabled = bool(gsm8k_consensus_cfg.get("enabled", False))
 
     gen_params = {
         "temperature": temperature,
@@ -314,24 +522,28 @@ async def _generate_all(
 
     async def _bounded(item: Dict[str, Any]) -> None:
         async with sem:
-            res = await _query_teacher(
-                client, url, item["prompt"], model,
-                max_tokens, temperature, top_p, timeout,
-            )
-        record = {
-            "id": item["id"],
-            "benchmark": item["benchmark"],
-            "prompt": item["prompt"],
-            "teacher_completion": res["teacher_completion"],
-            "teacher_model": model,
-            "generation_parameters": gen_params,
-            "latency_ms": res["latency_ms"],
-            "finish_reason": res["finish_reason"],
-            "error": res["error"],
-        }
-        for key, value in item.items():
-            if key not in {"id", "benchmark", "prompt"}:
-                record[key] = value
+            if item.get("benchmark") == "gsm8k" and gsm8k_consensus_enabled:
+                record = await _generate_gsm8k_consensus_record(
+                    client,
+                    item,
+                    cfg,
+                    url,
+                    model,
+                    timeout,
+                    gen_params,
+                )
+            else:
+                record = await _generate_single_record(
+                    client,
+                    item,
+                    url,
+                    model,
+                    max_tokens,
+                    temperature,
+                    top_p,
+                    timeout,
+                    gen_params,
+                )
         results.append(record)
 
     async with httpx.AsyncClient() as client:
@@ -351,9 +563,13 @@ def _annotate_teacher_quality(results: List[Dict[str, Any]], cfg: Dict[str, Any]
     gsm8k_pattern = _gsm8k_answer_pattern(cfg)
 
     for row in results:
-        row["teacher_predicted_answer"] = None
-        row["teacher_scorable"] = None
-        row["teacher_correct"] = None
+        row.setdefault("teacher_predicted_answer", None)
+        row.setdefault("teacher_scorable", None)
+        row.setdefault("teacher_correct", None)
+
+        # Keep precomputed consensus labels when present.
+        if row.get("teacher_scorable") is not None and row.get("teacher_correct") is not None:
+            continue
 
         if row.get("error") is not None:
             continue
@@ -399,8 +615,8 @@ def _resolve_quality_policy(filter_cfg: Dict[str, Any], benchmark: str) -> str:
 def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Filter teacher outputs according to generation.quality_filter settings."""
     filter_cfg = cfg.get("generation", {}).get("quality_filter", {}) or {}
-    if not filter_cfg.get("enabled", False):
-        return results
+    filter_enabled = bool(filter_cfg.get("enabled", False))
+    respect_teacher_acceptance = bool(filter_cfg.get("respect_teacher_acceptance", True))
 
     min_kept = max(1, int(filter_cfg.get("min_kept_per_benchmark", 1)))
     valid_by_benchmark: Dict[str, List[Dict[str, Any]]] = {}
@@ -410,8 +626,16 @@ def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) ->
         if row.get("error") is not None or not row.get("teacher_completion"):
             continue
 
+        if respect_teacher_acceptance and row.get("teacher_accepted_for_kd") is False:
+            continue
+
         benchmark = str(row.get("benchmark") or "unknown")
         valid_by_benchmark.setdefault(benchmark, []).append(row)
+
+        if not filter_enabled:
+            filtered.append(row)
+            continue
+
         policy = _resolve_quality_policy(filter_cfg, benchmark)
 
         keep = False
@@ -426,6 +650,10 @@ def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) ->
             filtered.append(row)
 
     kept_keys = {(r.get("id"), r.get("benchmark")) for r in filtered}
+
+    if not filter_enabled:
+        return filtered
+
     for benchmark, valid_rows in valid_by_benchmark.items():
         kept_count = sum(1 for r in valid_rows if (r.get("id"), r.get("benchmark")) in kept_keys)
         if kept_count >= min_kept:
@@ -439,6 +667,8 @@ def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) ->
             key = (row.get("id"), row.get("benchmark"))
             if key in kept_keys:
                 continue
+            if respect_teacher_acceptance and row.get("teacher_accepted_for_kd") is False:
+                continue
             filtered.append(row)
             kept_keys.add(key)
             kept_count += 1
@@ -446,6 +676,60 @@ def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) ->
                 break
 
     return filtered
+
+
+def _write_gsm8k_consensus_audit(
+    results: List[Dict[str, Any]],
+    cfg: Dict[str, Any],
+    run_dir: Path,
+) -> None:
+    """Persist consensus diagnostics and previews for auditability."""
+    gen = cfg.get("generation", {})
+    scfg = gen.get("gsm8k_self_consistency", {}) or {}
+    if not bool(scfg.get("enabled", False)):
+        return
+
+    gsm_rows = [r for r in results if r.get("benchmark") == "gsm8k"]
+    if not gsm_rows:
+        return
+
+    size_hist: Dict[str, int] = {}
+    accepted = 0
+    reached = 0
+    correct = 0
+    for row in gsm_rows:
+        size = int(row.get("teacher_consensus_size") or 0)
+        size_hist[str(size)] = size_hist.get(str(size), 0) + 1
+        if bool(row.get("teacher_consensus_reached")):
+            reached += 1
+        if bool(row.get("teacher_consensus_correct")):
+            correct += 1
+        if bool(row.get("teacher_accepted_for_kd")):
+            accepted += 1
+
+    audit = {
+        "total_gsm8k_prompts": len(gsm_rows),
+        "consensus_reached": reached,
+        "consensus_correct": correct,
+        "accepted_for_kd": accepted,
+        "consensus_size_histogram": size_hist,
+        "config": {
+            "num_samples": int(scfg.get("num_samples", 5)),
+            "min_consensus": int(scfg.get("min_consensus", 3)),
+            "sample_temperature": float(scfg.get("sample_temperature", 0.6)),
+            "sample_top_p": float(scfg.get("sample_top_p", 0.95)),
+            "require_consensus_correct": bool(scfg.get("require_consensus_correct", True)),
+            "target_selection": str(scfg.get("target_selection", "shortest_clean")),
+        },
+    }
+    with (run_dir / "gsm8k_consensus_summary.json").open("w", encoding="utf-8") as fh:
+        json.dump(audit, fh, indent=2)
+
+    preview_n = max(1, int(scfg.get("preview_examples", 25)))
+    accepted_rows = [r for r in gsm_rows if bool(r.get("teacher_accepted_for_kd"))][:preview_n]
+    rejected_rows = [r for r in gsm_rows if not bool(r.get("teacher_accepted_for_kd"))][:preview_n]
+    write_jsonl(accepted_rows, run_dir / "gsm8k_consensus_preview_accepted.jsonl")
+    write_jsonl(rejected_rows, run_dir / "gsm8k_consensus_preview_rejected.jsonl")
 
 
 # ── Public entry-point ──────────────────────────────────────
@@ -519,6 +803,7 @@ def run(config_path: str = "configs/distill.yaml",
     write_jsonl(output_rows, out_path)
     write_jsonl(output_rows, run_dir / "teacher_outputs.jsonl")
     write_jsonl(results, run_dir / "teacher_outputs_all.jsonl")
+    _write_gsm8k_consensus_audit(results, cfg, run_dir)
 
     # Summary stats
     summary = {
@@ -538,6 +823,9 @@ def run(config_path: str = "configs/distill.yaml",
                 "teacher_scorable": 0,
                 "teacher_correct": 0,
                 "kept": 0,
+                "consensus_reached": 0,
+                "consensus_correct": 0,
+                "accepted_for_kd": 0,
             }
         summary["by_benchmark"][b]["total"] += 1
         if r["error"] is None:
@@ -546,6 +834,12 @@ def run(config_path: str = "configs/distill.yaml",
             summary["by_benchmark"][b]["teacher_scorable"] += 1
         if bool(r.get("teacher_correct")):
             summary["by_benchmark"][b]["teacher_correct"] += 1
+        if bool(r.get("teacher_consensus_reached")):
+            summary["by_benchmark"][b]["consensus_reached"] += 1
+        if bool(r.get("teacher_consensus_correct")):
+            summary["by_benchmark"][b]["consensus_correct"] += 1
+        if bool(r.get("teacher_accepted_for_kd", True)):
+            summary["by_benchmark"][b]["accepted_for_kd"] += 1
         if (r.get("id"), r.get("benchmark")) in kept_keys:
             summary["by_benchmark"][b]["kept"] += 1
 

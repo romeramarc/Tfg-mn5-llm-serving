@@ -36,6 +36,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -82,6 +83,8 @@ def _prepare_dataset(
             obj = json.loads(line)
             if obj.get("error") is not None:
                 continue  # skip failed teacher queries
+            if obj.get("teacher_accepted_for_kd") is False:
+                continue
             prompt = obj.get("prompt", "")
             completion = obj.get("teacher_completion", "")
             if not completion:
@@ -158,26 +161,83 @@ def _prepare_dataset(
     return ds
 
 
+def _resolve_path_or_glob(path_or_pattern: str) -> str:
+    """Resolve a concrete path from an explicit path or a glob pattern."""
+    if any(ch in path_or_pattern for ch in "*?["):
+        matches = sorted(glob.glob(path_or_pattern), reverse=True)
+        if not matches:
+            raise FileNotFoundError(
+                f"No files matched init adapter pattern: {path_or_pattern}"
+            )
+        return matches[0]
+    return path_or_pattern
+
+
 def run(
     config_path: str = "configs/distill.yaml",
     student_override: Optional[str] = None,
+    dataset_override: Optional[str] = None,
+    stage2_residual: bool = False,
     max_samples: Optional[int] = None,
 ) -> Path:
     cfg = load_yaml(config_path)
-    tcfg = cfg.get("training", {})
-    seed = tcfg.get("seed", 42)
+    tcfg = dict(cfg.get("training", {}))
+    residual_cfg = cfg.get("residual_distillation", {}) or {}
+    stage2_cfg = residual_cfg.get("stage2_training", {}) or {}
+
+    if stage2_residual and stage2_cfg and not bool(stage2_cfg.get("enabled", True)):
+        raise ValueError(
+            "--stage2-residual was requested but residual_distillation.stage2_training.enabled=false"
+        )
+
+    # Allow CLI override of the student model; stage2 may provide its own default.
+    default_student = tcfg.get("student_model", "")
+    if stage2_residual:
+        default_student = stage2_cfg.get("student_model", default_student)
+
+    student_model = student_override or default_student
+    if not student_model:
+        raise ValueError(
+            "No student model specified. Set training.student_model in config or pass --student."
+        )
+
+    # ── Apply model-specific overrides (e.g. different lr for 7B vs 1.5B) ──
+    model_overrides = cfg.get("model_overrides", {}).get(student_model, {})
+    if model_overrides:
+        logger.info(
+            "Applying model-specific overrides",
+            extra={"model": student_model, "overrides": str(model_overrides)},
+        )
+        for k, v in model_overrides.items():
+            if isinstance(v, dict) and isinstance(tcfg.get(k), dict):
+                merged = dict(tcfg.get(k, {}))
+                merged.update(v)
+                tcfg[k] = merged
+            else:
+                tcfg[k] = v
+
+    # Stage-2 residual training keeps the core pipeline but uses explicit,
+    # auditable overrides from the residual_distillation section.
+    if stage2_residual and stage2_cfg:
+        for k, v in stage2_cfg.items():
+            if k in {"enabled", "dataset_path", "student_model", "init_adapter_path"}:
+                continue
+            if isinstance(v, dict) and isinstance(tcfg.get(k), dict):
+                merged = dict(tcfg.get(k, {}))
+                merged.update(v)
+                tcfg[k] = merged
+            else:
+                tcfg[k] = v
+
+    seed = int(tcfg.get("seed", 42))
     set_seed(seed)
     setup_logging()
-
-    # Allow CLI override of the student model
-    student_model = student_override or tcfg.get("student_model", "")
-    if not student_model:
-        raise ValueError("No student model specified. Set training.student_model "
-                         "in config or pass --student.")
 
     # Derive a short tag for directory naming
     model_short = student_model.split("/")[-1].lower().replace("-instruct", "")
     tag = f"sft-{model_short}"
+    if stage2_residual:
+        tag = f"{tag}-residual-stage2"
 
     # ── Run directory ───────────────────────────────────────
     run_dir = make_run_dir(
@@ -186,18 +246,6 @@ def run(
     )
     snapshot_configs([config_path], run_dir)
     save_metadata(collect_metadata(seed, cfg), run_dir)
-
-    # ── Apply model-specific overrides (e.g. different lr for 7B vs 1.5B) ──
-    model_overrides = cfg.get("model_overrides", {}).get(student_model, {})
-    if model_overrides:
-        logger.info("Applying model-specific overrides",
-                     extra={"model": student_model,
-                            "overrides": str(model_overrides)})
-        for k, v in model_overrides.items():
-            if isinstance(v, dict) and isinstance(tcfg.get(k), dict):
-                tcfg[k].update(v)
-            else:
-                tcfg[k] = v
 
     # ── Lazy imports (heavy) ────────────────────────────────
     import torch
@@ -208,7 +256,7 @@ def run(
         TrainingArguments,
         default_data_collator,
     )
-    from peft import LoraConfig, get_peft_model, TaskType
+    from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 
     # ── Model + tokeniser ───────────────────────────────────
     logger.info("Loading student model", extra={"model": student_model})
@@ -231,6 +279,19 @@ def run(
         device_map="auto",
     )
 
+    init_adapter_path = None
+    if stage2_residual:
+        init_adapter_path = stage2_cfg.get("init_adapter_path")
+    if init_adapter_path:
+        resolved_adapter = _resolve_path_or_glob(str(init_adapter_path))
+        logger.info(
+            "Loading residual stage initializer adapter",
+            extra={"init_adapter_path": resolved_adapter},
+        )
+        model = PeftModel.from_pretrained(model, resolved_adapter)
+        model = model.merge_and_unload()
+        logger.info("Merged stage initializer adapter into base model")
+
     # ── LoRA ────────────────────────────────────────────────
     lora_cfg = tcfg.get("lora", {})
     peft_config = LoraConfig(
@@ -249,9 +310,11 @@ def run(
     model.print_trainable_parameters()
 
     # ── Dataset ─────────────────────────────────────────────
-    dataset_path = tcfg.get(
+    dataset_path = dataset_override or tcfg.get(
         "dataset_path", "results/distill/teacher_outputs.jsonl",
     )
+    if stage2_residual and not dataset_override:
+        dataset_path = stage2_cfg.get("dataset_path", dataset_path)
     max_seq_length = tcfg.get("max_seq_length", 2048)
     oversample = tcfg.get("oversample_benchmarks")
     ds = _prepare_dataset(
@@ -366,6 +429,8 @@ def run(
         "student_model": student_model,
         "adapter_dir": str(final_dir),
         "dataset_path": dataset_path,
+        "stage2_residual": stage2_residual,
+        "init_adapter_path": init_adapter_path,
         "num_train_samples": len(train_ds),
         "num_val_samples": len(val_ds) if val_ds else 0,
         "val_ratio": val_ratio,
@@ -385,10 +450,20 @@ def main() -> None:
     parser.add_argument("--config", default="configs/distill.yaml")
     parser.add_argument("--student", default=None,
                         help="Override training.student_model (e.g. Qwen/Qwen2.5-1.5B-Instruct)")
+    parser.add_argument("--dataset-path", default=None,
+                        help="Override training.dataset_path at runtime")
+    parser.add_argument("--stage2-residual", action="store_true",
+                        help="Apply residual_distillation.stage2_training overrides")
     parser.add_argument("--max-samples", type=int, default=None,
                         help="Truncate dataset (smoke test). E.g. --max-samples 20")
     args = parser.parse_args()
-    run(args.config, student_override=args.student, max_samples=args.max_samples)
+    run(
+        args.config,
+        student_override=args.student,
+        dataset_override=args.dataset_path,
+        stage2_residual=args.stage2_residual,
+        max_samples=args.max_samples,
+    )
 
 
 if __name__ == "__main__":

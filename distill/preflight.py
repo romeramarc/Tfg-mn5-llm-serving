@@ -298,17 +298,26 @@ def step1(config: str, check_server: bool, simulate_offline: bool = False) -> No
         warn("Skipped (--no-server). Run with --check-server after starting vLLM.")
 
 
-def step2(config: str) -> None:
+def step2(config: str, stage2_residual: bool = False) -> None:
     """Validate everything needed before sbatch distill_train_*.sbatch."""
     check_python_imports()
     from utils.config_loader import load_yaml  # noqa: PLC0415
     cfg = load_yaml(config)
-    ds_path = cfg.get("training", {}).get(
-        "dataset_path", "results/distill/teacher_outputs.jsonl")
-    benches = cfg.get("benchmarks", {})
-    required = tuple(
-        name for name, bcfg in benches.items() if bcfg.get("enabled", True)
-    )
+    if stage2_residual:
+        residual_cfg = cfg.get("residual_distillation", {}) or {}
+        stage2_cfg = residual_cfg.get("stage2_training", {}) or {}
+        ds_path = stage2_cfg.get(
+            "dataset_path",
+            residual_cfg.get("output_file", "results/distill/teacher_outputs_residual_stage2.jsonl"),
+        )
+        required = ("gsm8k",)
+    else:
+        ds_path = cfg.get("training", {}).get(
+            "dataset_path", "results/distill/teacher_outputs.jsonl")
+        benches = cfg.get("benchmarks", {})
+        required = tuple(
+            name for name, bcfg in benches.items() if bcfg.get("enabled", True)
+        )
     check_jsonl_dataset(ds_path, required_benchmarks=required)
 
 
@@ -345,13 +354,15 @@ Examples:
                         help="Also ping the teacher vLLM /health endpoint (step 1)")
     parser.add_argument("--simulate-offline", action="store_true",
                         help="Force HF/Transformers offline flags during dataset/model checks")
+    parser.add_argument("--stage2-residual", action="store_true",
+                        help="For --step 2, validate residual_distillation.stage2_training dataset")
     args = parser.parse_args()
 
     if args.step in ("1", "all"):
         step1(args.config, check_server=args.check_server,
               simulate_offline=args.simulate_offline)
     if args.step in ("2", "all"):
-        step2(args.config)
+        step2(args.config, stage2_residual=args.stage2_residual)
     if args.step in ("3", "all"):
         step3_7b()
         step3_1b5()
