@@ -28,3 +28,6 @@ results/distill/merged-qwen2.5-*/
 
 # HuggingFace cache if ever under repo
 .cache/
+
+# Ignore large teacher outputs
+results/distill/teacher-gen-/teacher_outputs.jsonl

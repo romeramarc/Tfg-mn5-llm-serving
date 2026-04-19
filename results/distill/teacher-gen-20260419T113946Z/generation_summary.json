@@ -1,0 +1,28 @@
+{
+  "total_prompts": 14973,
+  "successful": 14973,
+  "failed": 0,
+  "kept_after_filter": 12134,
+  "by_benchmark": {
+    "gsm8k": {
+      "total": 7473,
+      "ok": 7473,
+      "teacher_scorable": 7408,
+      "teacher_correct": 7201,
+      "kept": 7201,
+      "consensus_reached": 7408,
+      "consensus_correct": 7201,
+      "accepted_for_kd": 7201
+    },
+    "math": {
+      "total": 7500,
+      "ok": 7500,
+      "teacher_scorable": 6450,
+      "teacher_correct": 4933,
+      "kept": 4933,
+      "consensus_reached": 0,
+      "consensus_correct": 0,
+      "accepted_for_kd": 7500
+    }
+  }
+}

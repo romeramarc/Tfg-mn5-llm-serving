@@ -1,0 +1,161 @@
+# distill_1p5b_focus.yaml
+# -------------------------------------------------------------
+# Dedicated distillation recipe for improving Qwen2.5-1.5B.
+# Primary target: measurable gains on GSM8K scorable accuracy.
+# Secondary target: retain/improve MATH scorable accuracy.
+#
+# Key ideas:
+# 1) Keep only high-quality teacher supervision for gsm8k/math
+#    (teacher-correct rows only).
+# 2) Oversample GSM8K during SFT.
+# 3) Use a conservative LR schedule to reduce overfitting to format.
+# -------------------------------------------------------------
+
+benchmarks:
+  gsm8k:
+    enabled: true
+    dataset_name: "openai/gsm8k"
+    dataset_split: "train"
+    subset_size: null
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+
+  math:
+    enabled: true
+    dataset_name: "EleutherAI/hendrycks_math"
+    dataset_split: "train"
+    subset_size: null
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+
+generation:
+  teacher_base_url: "http://localhost:8000"
+  teacher_model: "Qwen/Qwen2.5-14B-Instruct"
+  eval_config: "configs/eval.yaml"
+  extra_prompts_file: null
+  output_file: "results/distill/teacher_outputs_1p5b_focus.jsonl"
+
+  max_tokens: 896
+  temperature: 0.0
+  top_p: 1.0
+  batch_size: 32
+  timeout_seconds: 180
+  seed: 42
+
+  # Robust GSM8K target construction via teacher self-consistency.
+  gsm8k_self_consistency:
+    enabled: true
+    num_samples: 5
+    min_consensus: 3
+    sample_temperature: 0.6
+    sample_top_p: 0.95
+    sample_max_tokens: 896
+    require_consensus_correct: true
+    target_selection: "shortest_clean"
+    preview_examples: 25
+
+  quality_filter:
+    enabled: true
+    default_policy: "all"
+    respect_teacher_acceptance: true
+    benchmark_policies:
+      gsm8k: "all"
+      math: "correct_only"
+    min_kept_per_benchmark: 500
+
+residual_distillation:
+  enabled: true
+
+  # Stage1 dataset to mine residuals from.
+  source_dataset_path: "results/distill/teacher_outputs_1p5b_focus.jsonl"
+  output_file: "results/distill/teacher_outputs_1p5b_focus_residual.jsonl"
+
+  # Student endpoint used to detect residual errors.
+  student_base_url: "http://localhost:8001"
+  student_model: "results/distill/merged-qwen2.5-1.5b-stage1"
+
+  request:
+    max_tokens: 896
+    temperature: 0.0
+    top_p: 1.0
+    batch_size: 16
+    timeout_seconds: 180
+
+  # Stage2 dataset composition (residual-focused but not residual-only).
+  mixing:
+    residual_fraction: 0.70
+    target_size: null
+    seed: 42
+
+  preview_examples: 25
+
+  stage2_training:
+    enabled: true
+    student_model: "Qwen/Qwen2.5-1.5B-Instruct"
+    dataset_path: "results/distill/teacher_outputs_1p5b_focus_residual.jsonl"
+    init_adapter_path: "results/distill/sft-qwen2.5-1.5b-*/final_adapter"
+
+    # Keep stage2 conservative to avoid catastrophic forgetting.
+    num_train_epochs: 1
+    learning_rate: 8.0e-5
+    warmup_ratio: 0.03
+    val_ratio: 0.10
+    early_stopping_patience: 3
+    oversample_benchmarks:
+      gsm8k: 1
+      math: 1
+
+training:
+  student_model: "Qwen/Qwen2.5-1.5B-Instruct"
+  dataset_path: "results/distill/teacher_outputs_1p5b_focus.jsonl"
+  output_dir: "results/distill"
+
+  num_train_epochs: 4
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 8
+  learning_rate: 1.2e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.10
+  weight_decay: 0.01
+  max_seq_length: 2048
+  fp16: false
+  bf16: true
+  gradient_checkpointing: true
+  seed: 42
+
+  val_ratio: 0.15
+  early_stopping_patience: 6
+  max_grad_norm: 0.8
+
+  oversample_benchmarks:
+    gsm8k: 5
+    math: 1
+
+  lora:
+    r: 96
+    lora_alpha: 160
+    lora_dropout: 0.08
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj",
+                     "gate_proj", "up_proj", "down_proj"]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+
+  logging:
+    logging_steps: 10
+    save_strategy: "steps"
+    save_steps: 120
+    eval_strategy: "steps"
+    eval_steps: 40
+    load_best_model_at_end: true
+    report_to: "none"

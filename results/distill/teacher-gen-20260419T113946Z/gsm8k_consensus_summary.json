@@ -1,0 +1,21 @@
+{
+  "total_gsm8k_prompts": 7473,
+  "consensus_reached": 7408,
+  "consensus_correct": 7201,
+  "accepted_for_kd": 7201,
+  "consensus_size_histogram": {
+    "5": 6836,
+    "2": 60,
+    "4": 403,
+    "3": 169,
+    "1": 5
+  },
+  "config": {
+    "num_samples": 5,
+    "min_consensus": 3,
+    "sample_temperature": 0.6,
+    "sample_top_p": 0.95,
+    "require_consensus_correct": true,
+    "target_selection": "shortest_clean"
+  }
+}
