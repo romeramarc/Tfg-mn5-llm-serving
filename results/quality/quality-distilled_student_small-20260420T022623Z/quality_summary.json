@@ -1,0 +1,36 @@
+[
+  {
+    "total_examples": 1319,
+    "scorable_examples": 1272,
+    "unscorable_examples": 47,
+    "correct": 788,
+    "incorrect": 484,
+    "accuracy": 0.619497,
+    "accuracy_pct": 61.95,
+    "accuracy_scorable": 0.619497,
+    "accuracy_scorable_pct": 61.95,
+    "accuracy_total": 0.597422,
+    "accuracy_total_pct": 59.74,
+    "unscorable_rate": 0.035633,
+    "unscorable_rate_pct": 3.56,
+    "benchmark": "gsm8k",
+    "model": "results/distill/merged-qwen2.5-1.5b"
+  },
+  {
+    "total_examples": 500,
+    "scorable_examples": 475,
+    "unscorable_examples": 25,
+    "correct": 163,
+    "incorrect": 312,
+    "accuracy": 0.343158,
+    "accuracy_pct": 34.32,
+    "accuracy_scorable": 0.343158,
+    "accuracy_scorable_pct": 34.32,
+    "accuracy_total": 0.326,
+    "accuracy_total_pct": 32.6,
+    "unscorable_rate": 0.05,
+    "unscorable_rate_pct": 5.0,
+    "benchmark": "math",
+    "model": "results/distill/merged-qwen2.5-1.5b"
+  }
+]

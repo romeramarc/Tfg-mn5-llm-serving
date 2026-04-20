@@ -19,7 +19,13 @@ mkdir -p logs results/quality results/throughput results/online results/distill
 
 SERVER_URL="http://localhost:8000"
 _SERVER_PID=""
-NUM_REPS=3
+NUM_REPS="${NUM_REPS:-3}"
+EVAL_CONFIG="${EVAL_CONFIG:-configs/eval.yaml}"
+SKIP_PERF_BENCH="${SKIP_PERF_BENCH:-0}"
+BASE_MODEL="${BASE_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
+ADAPTER_GLOB="${ADAPTER_GLOB:-results/distill/sft-qwen2.5-1.5b-*/final_adapter}"
+MERGED="${MERGED:-results/distill/merged-qwen2.5-1.5b}"
+EVAL_ROLE="${EVAL_ROLE:-distilled_student_small}"
 
 echo "POSTEVAL 1.5B: Merge + Eval"
 date
@@ -27,32 +33,36 @@ date
 cleanup() { [[ -n "${_SERVER_PID}" ]] && kill "${_SERVER_PID}" 2>/dev/null || true; }
 trap cleanup EXIT
 
-ADAPTER=$(ls -dt results/distill/sft-qwen2.5-1.5b-*/final_adapter 2>/dev/null | head -1)
+ADAPTER=$(ls -dt ${ADAPTER_GLOB} 2>/dev/null | head -1)
 [[ -z "$ADAPTER" ]] && echo "ERROR: No 1.5B adapter" && exit 1
 
-export ADAPTER MERGED="results/distill/merged-qwen2.5-1.5b"
+export BASE_MODEL ADAPTER MERGED
 python3 << 'MERGE'
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch, shutil, os
 
-base = AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct', torch_dtype=torch.bfloat16)
+base = AutoModelForCausalLM.from_pretrained(os.environ['BASE_MODEL'], torch_dtype=torch.bfloat16)
 model = PeftModel.from_pretrained(base, os.environ['ADAPTER'])
 merged = model.merge_and_unload()
 shutil.rmtree(os.environ['MERGED'], ignore_errors=True)
 merged.save_pretrained(os.environ['MERGED'])
-AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct').save_pretrained(os.environ['MERGED'])
+AutoTokenizer.from_pretrained(os.environ['BASE_MODEL']).save_pretrained(os.environ['MERGED'])
 MERGE
 
 python -m vllm.entrypoints.openai.api_server --model "$MERGED" --host 0.0.0.0 --port 8000 --max-model-len 4096 --gpu-memory-utilization 0.90 --dtype auto --seed 42 &
 _SERVER_PID=$!
 python -m serving.healthcheck --url "$SERVER_URL" --retries 120 --interval 5
 
-python -m eval.run_quality --config configs/eval.yaml --model "$MERGED" --role "distilled_student_small"
+python -m eval.run_quality --config "${EVAL_CONFIG}" --model "$MERGED" --role "${EVAL_ROLE}"
 
-for REP in $(seq 1 ${NUM_REPS}); do
-    python -m bench.run_throughput --config configs/benchmark.yaml --model "$MERGED" --role "distilled_student_small"
-    python -m bench.run_online_load --config configs/benchmark.yaml --model "$MERGED" --role "distilled_student_small"
-done
+if [[ "${SKIP_PERF_BENCH}" == "1" ]]; then
+    echo "Skipping throughput/online benchmarks (SKIP_PERF_BENCH=1)"
+else
+    for REP in $(seq 1 ${NUM_REPS}); do
+        python -m bench.run_throughput --config configs/benchmark.yaml --model "$MERGED" --role "${EVAL_ROLE}"
+        python -m bench.run_online_load --config configs/benchmark.yaml --model "$MERGED" --role "${EVAL_ROLE}"
+    done
+fi
 
-echo "✅ posteval-1.5b done"
+echo "posteval-1.5b done"

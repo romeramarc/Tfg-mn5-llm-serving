@@ -1,0 +1,242 @@
+# distill_1p5b_structured_grpo.yaml
+# -------------------------------------------------------------
+# Parallel experiment line:
+# 1) Structured-reasoning teacher distillation with strict final-line contract.
+# 2) Optional GRPO-like short refinement (rewarded by correctness + format).
+#
+# This file does not modify the baseline distill configs.
+# -------------------------------------------------------------
+
+benchmarks:
+  gsm8k:
+    enabled: true
+    dataset_name: "openai/gsm8k"
+    dataset_split: "train"
+    subset_size: null
+    answer_extraction_pattern: "(?m)^####\\s*([\\-\\d,\\.]+)\\s*$"
+    final_line_pattern: "(?m)^####\\s*([\\-\\d,\\.]+)\\s*$"
+    final_answer_parser: "numeric"
+    prompt_template: |
+      You are a careful math tutor.
+      Solve the problem with brief numbered reasoning.
+      The final non-empty line must be exactly: #### <final_numeric_answer>
+      Do not write any text after that final line.
+
+      Question: {question}
+
+      Answer:
+
+  math:
+    enabled: true
+    dataset_name: "EleutherAI/hendrycks_math"
+    dataset_split: "train"
+    subset_size: null
+    final_line_pattern: "(?m)^####\\s*(.+?)\\s*$"
+    final_answer_parser: "final_line"
+    distill_answer_parser: "final_line"
+    prompt_template: |
+      Solve the following mathematics problem with concise step-by-step reasoning.
+      The final non-empty line must be exactly: #### <final_answer_expression>
+      Do not use \boxed{} and do not write anything after the final line.
+
+      Problem: {problem}
+
+      Solution:
+
+generation:
+  teacher_base_url: "http://localhost:8000"
+  teacher_model: "Qwen/Qwen2.5-14B-Instruct"
+  eval_config: "configs/eval.yaml"
+  extra_prompts_file: null
+  output_file: "results/distill/teacher_outputs_1p5b_structured.jsonl"
+  experiment_tag: "1p5b-structured-grpo"
+
+  max_tokens: 896
+  temperature: 0.0
+  top_p: 1.0
+  batch_size: 32
+  timeout_seconds: 180
+  seed: 42
+
+  gsm8k_self_consistency:
+    enabled: true
+    num_samples: 5
+    min_consensus: 3
+    sample_temperature: 0.6
+    sample_top_p: 0.95
+    sample_max_tokens: 896
+    require_consensus_correct: true
+    target_selection: "shortest_clean"
+    preview_examples: 25
+
+  quality_filter:
+    enabled: true
+    default_policy: "correct_only"
+    respect_teacher_acceptance: true
+    benchmark_policies:
+      gsm8k: "correct_only"
+      math: "correct_only"
+    require_final_line: true
+    require_final_line_last: true
+    require_parseable_final_answer: true
+    min_kept_per_benchmark: 500
+
+training:
+  student_model: "Qwen/Qwen2.5-1.5B-Instruct"
+  dataset_path: "results/distill/teacher_outputs_1p5b_structured.jsonl"
+  output_dir: "results/distill"
+  experiment_tag: "structured"
+
+  num_train_epochs: 4
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 8
+  learning_rate: 1.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.08
+  weight_decay: 0.01
+  max_seq_length: 2048
+  fp16: false
+  bf16: true
+  gradient_checkpointing: true
+  seed: 42
+
+  val_ratio: 0.15
+  early_stopping_patience: 6
+  max_grad_norm: 0.8
+
+  oversample_benchmarks:
+    gsm8k: 4
+    math: 2
+
+  lora:
+    r: 96
+    lora_alpha: 160
+    lora_dropout: 0.08
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj",
+                     "gate_proj", "up_proj", "down_proj"]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+
+  logging:
+    logging_steps: 10
+    save_strategy: "steps"
+    save_steps: 120
+    eval_strategy: "steps"
+    eval_steps: 40
+    load_best_model_at_end: true
+    report_to: "none"
+
+# Keep residual disabled in this line; baseline residual flow remains available
+# in distill_1p5b_focus.yaml.
+residual_distillation:
+  enabled: false
+
+grpo_refinement:
+  enabled: true
+  seed: 42
+
+  student_model: "Qwen/Qwen2.5-1.5B-Instruct"
+  init_adapter_path: "results/distill/sft-qwen2.5-1.5b-structured-*/final_adapter"
+
+  # Endpoint for sampling policy outputs before weighted SFT.
+  base_url: "http://localhost:8002"
+  policy_model_path: "results/distill/merged-qwen2.5-1.5b-structured-policy"
+  policy_model_name: "results/distill/merged-qwen2.5-1.5b-structured-policy"
+
+  output_dir: "results/distill"
+  experiment_tag: "structured-grpo"
+
+  output_adapter_glob: "results/distill/sft-qwen2.5-1.5b-structured-grpo-*/final_adapter"
+  merged_output_path: "results/distill/merged-qwen2.5-1.5b-structured-grpo"
+  eval_role: "distilled_student_small_structured_grpo"
+
+  sampling:
+    num_samples_per_prompt: 4
+    max_tokens: 768
+    temperature: 0.7
+    top_p: 0.95
+    timeout_seconds: 180
+    batch_size: 16
+    max_prompts: 3000
+
+  rewards:
+    correctness_weight: 1.0
+    format_weight: 0.4
+    require_final_line_last: true
+
+  group_advantage:
+    epsilon: 1.0e-6
+    clip_min: 0.0
+    min_weight_to_keep: 0.01
+    keep_top_if_all_clipped: true
+
+  benchmarks:
+    gsm8k:
+      enabled: true
+      dataset_name: "openai/gsm8k"
+      dataset_split: "train"
+      subset_size: 1500
+      answer_extraction_pattern: "(?m)^####\\s*([\\-\\d,\\.]+)\\s*$"
+      final_line_pattern: "(?m)^####\\s*([\\-\\d,\\.]+)\\s*$"
+      reward_answer_parser: "numeric"
+      prompt_template: |
+        You are a careful math tutor.
+        Solve the problem with brief numbered reasoning.
+        The final non-empty line must be exactly: #### <final_numeric_answer>
+        Do not write any text after that final line.
+
+        Question: {question}
+
+        Answer:
+
+    math:
+      enabled: true
+      dataset_name: "EleutherAI/hendrycks_math"
+      dataset_split: "train"
+      subset_size: 1500
+      final_line_pattern: "(?m)^####\\s*(.+?)\\s*$"
+      reward_answer_parser: "final_line"
+      prompt_template: |
+        Solve the following mathematics problem with concise step-by-step reasoning.
+        The final non-empty line must be exactly: #### <final_answer_expression>
+        Do not use \boxed{} and do not write anything after the final line.
+
+        Problem: {problem}
+
+        Solution:
+
+  training:
+    num_train_epochs: 1
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 8
+    learning_rate: 5.0e-5
+    lr_scheduler_type: "cosine"
+    warmup_ratio: 0.03
+    weight_decay: 0.0
+    max_seq_length: 2048
+    fp16: false
+    bf16: true
+    gradient_checkpointing: true
+    max_grad_norm: 1.0
+    val_ratio: 0.10
+
+    oversample_benchmarks:
+      gsm8k: 1
+      math: 1
+
+    lora:
+      r: 64
+      lora_alpha: 128
+      lora_dropout: 0.05
+      target_modules: ["q_proj", "k_proj", "v_proj", "o_proj",
+                       "gate_proj", "up_proj", "down_proj"]
+      bias: "none"
+
+    logging:
+      logging_steps: 10
+      save_strategy: "steps"
+      save_steps: 120
+      eval_strategy: "steps"
+      eval_steps: 60
+      load_best_model_at_end: true
+      report_to: "none"

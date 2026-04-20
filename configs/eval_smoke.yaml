@@ -1,0 +1,51 @@
+# eval_smoke.yaml
+# Minimal quality-only smoke configuration for integration checks.
+
+common:
+  base_url: "http://localhost:8000"
+  model: "Qwen/Qwen2.5-1.5B-Instruct"
+  seed: 42
+  results_base_dir: "results/quality"
+  max_tokens: 512
+  temperature: 0.0
+
+benchmarks:
+  gsm8k:
+    enabled: true
+    dataset_name: "openai/gsm8k"
+    dataset_split: "test"
+    subset_size: 20
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+
+  math:
+    enabled: true
+    dataset_name: "HuggingFaceH4/MATH-500"
+    dataset_split: "test"
+    subset_size: 20
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+    answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+
+  arc_challenge:
+    enabled: false
+
+  routerbench:
+    enabled: false
+
+request:
+  timeout_seconds: 120
+  batch_size: 4
+  retry_count: 1
+  retry_delay_seconds: 3

@@ -239,6 +239,14 @@ def run(
     if stage2_residual:
         tag = f"{tag}-residual-stage2"
 
+    experiment_tag = str(tcfg.get("experiment_tag", "")).strip()
+    if stage2_residual:
+        stage2_experiment_tag = str(stage2_cfg.get("experiment_tag", "")).strip()
+        if stage2_experiment_tag:
+            experiment_tag = stage2_experiment_tag
+    if experiment_tag:
+        tag = f"{tag}-{experiment_tag}"
+
     # ── Run directory ───────────────────────────────────────
     run_dir = make_run_dir(
         tcfg.get("output_dir", "results/distill"),

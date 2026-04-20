@@ -26,7 +26,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
-import torch
+
+try:
+    import torch  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - optional dependency in tabular-only workflows
+    torch = None
 
 
 # ── Seed management ─────────────────────────────────────────
@@ -39,14 +43,16 @@ def set_seed(seed: int) -> None:
     """
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+    if torch is not None:
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
 
     # Force cuDNN determinism (slight perf cost, reproducibility gain)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    if torch is not None and hasattr(torch, "backends") and hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 # ── Run directory ───────────────────────────────────────────
@@ -99,8 +105,8 @@ def collect_metadata(seed: int, config: Dict[str, Any]) -> Dict[str, Any]:
         "git_commit": git_commit_hash(),
         "python_version": platform.python_version(),
         "platform": platform.platform(),
-        "torch_version": torch.__version__,
-        "cuda_available": torch.cuda.is_available(),
+        "torch_version": torch.__version__ if torch is not None else "not_installed",
+        "cuda_available": torch.cuda.is_available() if torch is not None else False,
         "config_hash": hashlib.sha256(
             json.dumps(config, sort_keys=True, default=str).encode()
         ).hexdigest()[:12],
@@ -122,7 +128,7 @@ def collect_metadata(seed: int, config: Dict[str, Any]) -> Dict[str, Any]:
             meta[var.lower()] = val
 
     # GPU details — names, VRAM, and driver version
-    if torch.cuda.is_available():
+    if torch is not None and torch.cuda.is_available():
         meta["gpu_count"] = torch.cuda.device_count()
         gpu_info: List[Dict[str, Any]] = []
         for i in range(torch.cuda.device_count()):

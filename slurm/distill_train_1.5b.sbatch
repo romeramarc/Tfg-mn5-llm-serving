@@ -24,6 +24,8 @@ source env/setup_env.sh
 mkdir -p logs
 
 DISTILL_CONFIG="${DISTILL_CONFIG:-configs/distill.yaml}"
+SFT_MAX_SAMPLES="${SFT_MAX_SAMPLES:-}"
+MIN_VALID_SAMPLES="${MIN_VALID_SAMPLES:-}"
 
 STUDENT="Qwen/Qwen2.5-1.5B-Instruct"
 DATASET=$(python - <<EOF
@@ -42,6 +44,9 @@ echo " Job ID:  ${SLURM_JOB_ID}"
 echo " Node:    $(hostname)"
 echo " Date:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo " Config:  ${DISTILL_CONFIG}"
+if [[ -n "${SFT_MAX_SAMPLES}" ]]; then
+    echo " SFT max samples override: ${SFT_MAX_SAMPLES}"
+fi
 echo "========================================="
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
@@ -54,12 +59,18 @@ echo "Dataset lines: $(wc -l < "${DATASET}")"
 echo "1.5B training recipe loaded from: ${DISTILL_CONFIG}"
 
 # Optional safety check for the configured training dataset
-python -m distill.preflight --step 2 --config "${DISTILL_CONFIG}"
+PREFLIGHT_STEP2_ARGS=(--step 2 --config "${DISTILL_CONFIG}")
+if [[ -n "${MIN_VALID_SAMPLES}" ]]; then
+    PREFLIGHT_STEP2_ARGS+=(--min-valid-samples "${MIN_VALID_SAMPLES}")
+fi
+python -m distill.preflight "${PREFLIGHT_STEP2_ARGS[@]}"
 
 # ── Train ───────────────────────────────────────────────────
-python -m distill.train_student_sft \
-    --config "${DISTILL_CONFIG}" \
-    --student "${STUDENT}"
+TRAIN_ARGS=(--config "${DISTILL_CONFIG}" --student "${STUDENT}")
+if [[ -n "${SFT_MAX_SAMPLES}" ]]; then
+    TRAIN_ARGS+=(--max-samples "${SFT_MAX_SAMPLES}")
+fi
+python -m distill.train_student_sft "${TRAIN_ARGS[@]}"
 
 # ── Final GPU/VRAM snapshot ──────────────────────────────────
 echo ""

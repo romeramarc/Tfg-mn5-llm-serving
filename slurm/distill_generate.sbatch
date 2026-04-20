@@ -36,6 +36,8 @@ source env/setup_env.sh
 mkdir -p logs results/distill
 
 DISTILL_CONFIG="${DISTILL_CONFIG:-configs/distill.yaml}"
+TEACHER_MAX_SAMPLES="${TEACHER_MAX_SAMPLES:-}"
+MIN_VALID_SAMPLES="${MIN_VALID_SAMPLES:-}"
 DISTILL_OUTPUT=$(python - <<EOF
 from utils.config_loader import load_yaml
 
@@ -62,6 +64,9 @@ echo " Node:   $(hostname)"
 echo " Date:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo " Config: ${DISTILL_CONFIG}"
 echo " Output: ${DISTILL_OUTPUT}"
+if [[ -n "${TEACHER_MAX_SAMPLES}" ]]; then
+    echo " Teacher max samples override: ${TEACHER_MAX_SAMPLES}"
+fi
 echo "========================================="
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
@@ -92,8 +97,11 @@ echo "Server is healthy."
 # ── [3/3] Generate teacher outputs ──────────────────────────
 echo ""
 echo "--- [3/4] Generating teacher outputs ---"
-python -m distill.generate_teacher_outputs \
-    --config "${DISTILL_CONFIG}"
+GEN_ARGS=(--config "${DISTILL_CONFIG}")
+if [[ -n "${TEACHER_MAX_SAMPLES}" ]]; then
+    GEN_ARGS+=(--max-samples "${TEACHER_MAX_SAMPLES}")
+fi
+python -m distill.generate_teacher_outputs "${GEN_ARGS[@]}"
 echo "Teacher generation done."
 
 if [[ ! -s "${DISTILL_OUTPUT}" ]]; then
@@ -106,7 +114,11 @@ echo "Teacher dataset lines: $(wc -l < "${DISTILL_OUTPUT}")"
 # ── [4/4] Validate generated dataset semantics ──────────────
 echo ""
 echo "--- [4/4] Validating generated JSONL for training ---"
-python -m distill.preflight --step 2 --config "${DISTILL_CONFIG}"
+PREFLIGHT_STEP2_ARGS=(--step 2 --config "${DISTILL_CONFIG}")
+if [[ -n "${MIN_VALID_SAMPLES}" ]]; then
+    PREFLIGHT_STEP2_ARGS+=(--min-valid-samples "${MIN_VALID_SAMPLES}")
+fi
+python -m distill.preflight "${PREFLIGHT_STEP2_ARGS[@]}"
 echo "Generated JSONL validated."
 
 # ── Stop server ─────────────────────────────────────────────

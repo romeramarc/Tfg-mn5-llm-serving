@@ -88,7 +88,8 @@ The serving layer uses vLLM to expose an OpenAI-compatible API endpoint. Benchma
 ├── results/                    Experiment output (timestamped)
 ├── docs/                       Supplementary documentation
 │   ├── index.md                Documentation landing page
-│   └── experiments.md          Metrics reference and interpretation guide
+│   ├── experiments.md          Metrics reference and interpretation guide
+│   └── predictors_consolidation.md  Offline predictor consolidation runbook
 ├── requirements.txt            Python dependencies
 ├── README.md                   This document
 └── RULES.md                    Engineering governance rules

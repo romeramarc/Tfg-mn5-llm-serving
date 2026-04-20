@@ -42,6 +42,7 @@ import argparse
 import asyncio
 from collections import Counter
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -558,6 +559,156 @@ def _gsm8k_answer_pattern(cfg: Dict[str, Any]) -> str:
     return str(bench.get("answer_extraction_pattern", r"####\s*([\-\d,\.]+)"))
 
 
+def _default_final_line_pattern(benchmark: str) -> str:
+    if benchmark == "gsm8k":
+        return r"(?m)^####\s*([\-\d,\.]+)\s*$"
+    return r"(?m)^####\s*(.+?)\s*$"
+
+
+def _final_line_pattern(cfg: Dict[str, Any], benchmark: str) -> str:
+    bench_cfg = cfg.get("benchmarks", {}).get(benchmark, {})
+    return str(bench_cfg.get("final_line_pattern", _default_final_line_pattern(benchmark)))
+
+
+def _final_answer_parser(cfg: Dict[str, Any], benchmark: str) -> str:
+    bench_cfg = cfg.get("benchmarks", {}).get(benchmark, {})
+    parser = bench_cfg.get("final_answer_parser")
+    if parser:
+        return str(parser).lower()
+    if benchmark == "gsm8k":
+        return "numeric"
+    if benchmark == "math":
+        return "boxed"
+    return "final_line"
+
+
+def _extract_final_line_components(text: str, pattern: str) -> Dict[str, Any]:
+    components: Dict[str, Any] = {
+        "reasoning": text.strip() if text else "",
+        "final_line": None,
+        "final_answer_raw": None,
+        "final_line_is_last": False,
+        "has_trailing_text": False,
+    }
+    if not text:
+        return components
+
+    try:
+        matches = list(re.finditer(pattern, text, flags=re.MULTILINE))
+    except re.error:
+        return components
+
+    if not matches:
+        return components
+
+    match = matches[-1]
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    line_end = text.find("\n", match.end())
+    if line_end == -1:
+        line_end = len(text)
+
+    line_text = text[line_start:line_end].strip()
+    components["final_line"] = line_text
+    components["reasoning"] = text[:line_start].rstrip()
+
+    captured: Optional[str] = None
+    if match.lastindex:
+        for idx in range(match.lastindex, 0, -1):
+            group = match.group(idx)
+            if group is not None and str(group).strip():
+                captured = str(group).strip()
+                break
+    if captured is None and line_text:
+        if line_text.startswith("####"):
+            captured = line_text[4:].strip()
+        else:
+            captured = line_text
+    components["final_answer_raw"] = captured
+
+    trailing_region = text[line_end:]
+    components["has_trailing_text"] = bool(trailing_region and trailing_region.strip())
+
+    non_empty_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    last_nonempty = non_empty_lines[-1] if non_empty_lines else ""
+    components["final_line_is_last"] = bool(line_text and last_nonempty == line_text)
+    return components
+
+
+def _extract_math_answer(completion: str, cfg: Dict[str, Any]) -> Optional[str]:
+    bench = cfg.get("benchmarks", {}).get("math", {})
+    parser = str(bench.get("distill_answer_parser", "boxed")).lower()
+
+    if parser == "boxed":
+        return extract_boxed_answer(completion)
+
+    if parser in {"final_line", "hash_line", "line"}:
+        pattern = str(bench.get("final_line_pattern", _default_final_line_pattern("math")))
+        return _extract_final_line_components(completion, pattern).get("final_answer_raw")
+
+    if parser == "numeric":
+        pattern = str(bench.get("answer_extraction_pattern", r"####\s*([\-\d,\.]+)"))
+        return extract_numeric_answer(completion, pattern)
+
+    logger.warning(
+        "Unknown math distill parser; defaulting to boxed",
+        extra={"parser": parser},
+    )
+    return extract_boxed_answer(completion)
+
+
+def _annotate_teacher_structure(results: List[Dict[str, Any]], cfg: Dict[str, Any]) -> None:
+    """Annotate records with final-line structure fields for traceable filtering."""
+    for row in results:
+        row.setdefault("teacher_reasoning", None)
+        row.setdefault("teacher_final_line", None)
+        row.setdefault("teacher_final_answer_raw", None)
+        row.setdefault("teacher_final_answer_parsed", None)
+        row.setdefault("teacher_final_line_parseable", None)
+        row.setdefault("teacher_final_line_is_last", None)
+        row.setdefault("teacher_has_trailing_text", None)
+
+        if row.get("error") is not None:
+            continue
+
+        completion = str(row.get("teacher_completion") or "")
+        if not completion:
+            continue
+
+        benchmark = str(row.get("benchmark") or "")
+        pattern = _final_line_pattern(cfg, benchmark)
+        structure = _extract_final_line_components(completion, pattern)
+
+        row["teacher_reasoning"] = structure.get("reasoning")
+        row["teacher_final_line"] = structure.get("final_line")
+        row["teacher_final_answer_raw"] = structure.get("final_answer_raw")
+        row["teacher_final_line_is_last"] = bool(structure.get("final_line_is_last"))
+        row["teacher_has_trailing_text"] = bool(structure.get("has_trailing_text"))
+
+        parser = _final_answer_parser(cfg, benchmark)
+        parsed_answer: Optional[str] = None
+
+        if parser == "numeric":
+            answer_pattern = str(
+                cfg.get("benchmarks", {}).get(benchmark, {}).get(
+                    "answer_extraction_pattern",
+                    _gsm8k_answer_pattern(cfg),
+                )
+            )
+            final_line_text = str(structure.get("final_line") or "")
+            parsed_answer = extract_numeric_answer(final_line_text, answer_pattern)
+            if parsed_answer is None:
+                parsed_answer = extract_numeric_answer(completion, answer_pattern)
+        elif parser == "boxed":
+            parsed_answer = extract_boxed_answer(completion)
+        elif parser in {"final_line", "hash_line", "line"}:
+            parsed_answer = structure.get("final_answer_raw")
+        else:
+            parsed_answer = structure.get("final_answer_raw")
+
+        row["teacher_final_answer_parsed"] = parsed_answer
+        row["teacher_final_line_parseable"] = bool(parsed_answer is not None and str(parsed_answer).strip())
+
+
 def _annotate_teacher_quality(results: List[Dict[str, Any]], cfg: Dict[str, Any]) -> None:
     """Annotate each record with teacher_scorable/teacher_correct when possible."""
     gsm8k_pattern = _gsm8k_answer_pattern(cfg)
@@ -590,7 +741,7 @@ def _annotate_teacher_quality(results: List[Dict[str, Any]], cfg: Dict[str, Any]
             continue
 
         if benchmark == "math":
-            predicted = extract_boxed_answer(completion)
+            predicted = _extract_math_answer(completion, cfg)
             scorable = predicted is not None
             correct = bool(predicted is not None and math_answer_match(predicted, str(reference)))
             row["teacher_predicted_answer"] = predicted
@@ -617,34 +768,50 @@ def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) ->
     filter_cfg = cfg.get("generation", {}).get("quality_filter", {}) or {}
     filter_enabled = bool(filter_cfg.get("enabled", False))
     respect_teacher_acceptance = bool(filter_cfg.get("respect_teacher_acceptance", True))
+    require_final_line = bool(filter_cfg.get("require_final_line", False))
+    require_final_line_last = bool(filter_cfg.get("require_final_line_last", False))
+    require_parseable_final_answer = bool(filter_cfg.get("require_parseable_final_answer", False))
 
     min_kept = max(1, int(filter_cfg.get("min_kept_per_benchmark", 1)))
-    valid_by_benchmark: Dict[str, List[Dict[str, Any]]] = {}
+    eligible_by_benchmark: Dict[str, List[Dict[str, Any]]] = {}
     filtered: List[Dict[str, Any]] = []
 
     for row in results:
-        if row.get("error") is not None or not row.get("teacher_completion"):
-            continue
+        benchmark = str(row.get("benchmark") or "unknown")
+        policy = _resolve_quality_policy(filter_cfg, benchmark) if filter_enabled else "all"
+
+        reasons: List[str] = []
+        completion = row.get("teacher_completion")
+
+        if row.get("error") is not None:
+            reasons.append("request_error")
+        if not completion:
+            reasons.append("empty_completion")
 
         if respect_teacher_acceptance and row.get("teacher_accepted_for_kd") is False:
-            continue
+            reasons.append("teacher_rejected_for_kd")
 
-        benchmark = str(row.get("benchmark") or "unknown")
-        valid_by_benchmark.setdefault(benchmark, []).append(row)
+        structurally_eligible = not reasons
+        if structurally_eligible:
+            eligible_by_benchmark.setdefault(benchmark, []).append(row)
 
-        if not filter_enabled:
-            filtered.append(row)
-            continue
+        if filter_enabled and structurally_eligible:
+            if require_final_line and not row.get("teacher_final_line"):
+                reasons.append("missing_final_line")
+            if require_final_line_last and row.get("teacher_final_line_is_last") is not True:
+                reasons.append("final_line_not_last")
+            if require_parseable_final_answer and row.get("teacher_final_line_parseable") is not True:
+                reasons.append("unparseable_final_answer")
 
-        policy = _resolve_quality_policy(filter_cfg, benchmark)
+            if policy == "scorable" and not bool(row.get("teacher_scorable")):
+                reasons.append("policy_scorable_failed")
+            elif policy == "correct_only" and not bool(row.get("teacher_correct")):
+                reasons.append("policy_correct_only_failed")
 
-        keep = False
-        if policy == "all":
-            keep = True
-        elif policy == "scorable":
-            keep = bool(row.get("teacher_scorable"))
-        elif policy == "correct_only":
-            keep = bool(row.get("teacher_correct"))
+        keep = len(reasons) == 0
+        row["teacher_filter_policy"] = policy
+        row["teacher_filter_reasons"] = reasons
+        row["teacher_filter_decision"] = "kept" if keep else "dropped"
 
         if keep:
             filtered.append(row)
@@ -654,7 +821,7 @@ def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) ->
     if not filter_enabled:
         return filtered
 
-    for benchmark, valid_rows in valid_by_benchmark.items():
+    for benchmark, valid_rows in eligible_by_benchmark.items():
         kept_count = sum(1 for r in valid_rows if (r.get("id"), r.get("benchmark")) in kept_keys)
         if kept_count >= min_kept:
             continue
@@ -667,10 +834,14 @@ def _apply_quality_filter(results: List[Dict[str, Any]], cfg: Dict[str, Any]) ->
             key = (row.get("id"), row.get("benchmark"))
             if key in kept_keys:
                 continue
-            if respect_teacher_acceptance and row.get("teacher_accepted_for_kd") is False:
-                continue
+
             filtered.append(row)
             kept_keys.add(key)
+            row["teacher_filter_decision"] = "kept_backfill"
+            row_reasons = list(row.get("teacher_filter_reasons") or [])
+            if "backfill_min_kept" not in row_reasons:
+                row_reasons.append("backfill_min_kept")
+            row["teacher_filter_reasons"] = row_reasons
             kept_count += 1
             if kept_count >= min_kept:
                 break
@@ -742,7 +913,12 @@ def run(config_path: str = "configs/distill.yaml",
     set_seed(seed)
     setup_logging()
 
-    run_dir = make_run_dir("results/distill", tag="teacher-gen")
+    experiment_tag = str(gen.get("experiment_tag", "")).strip()
+    run_tag = "teacher-gen"
+    if experiment_tag:
+        run_tag = f"teacher-gen-{experiment_tag}"
+
+    run_dir = make_run_dir("results/distill", tag=run_tag)
     snapshot_configs([config_path, "configs/eval.yaml"], run_dir)
     save_metadata(collect_metadata(seed, cfg), run_dir)
 
@@ -770,6 +946,7 @@ def run(config_path: str = "configs/distill.yaml",
                  extra={"num_prompts": len(prompts)})
 
     results = asyncio.run(_generate_all(prompts, cfg))
+    _annotate_teacher_structure(results, cfg)
     _annotate_teacher_quality(results, cfg)
     filtered_results = _apply_quality_filter(results, cfg)
 
@@ -811,6 +988,8 @@ def run(config_path: str = "configs/distill.yaml",
         "successful": len(ok),
         "failed": failed,
         "kept_after_filter": len(output_rows),
+        "filter_decisions": {},
+        "filter_reason_counts": {},
         "by_benchmark": {},
     }
     kept_keys = {(r.get("id"), r.get("benchmark")) for r in output_rows}
@@ -823,9 +1002,13 @@ def run(config_path: str = "configs/distill.yaml",
                 "teacher_scorable": 0,
                 "teacher_correct": 0,
                 "kept": 0,
+                "dropped": 0,
                 "consensus_reached": 0,
                 "consensus_correct": 0,
                 "accepted_for_kd": 0,
+                "final_line_present": 0,
+                "final_line_parseable": 0,
+                "final_line_is_last": 0,
             }
         summary["by_benchmark"][b]["total"] += 1
         if r["error"] is None:
@@ -840,10 +1023,24 @@ def run(config_path: str = "configs/distill.yaml",
             summary["by_benchmark"][b]["consensus_correct"] += 1
         if bool(r.get("teacher_accepted_for_kd", True)):
             summary["by_benchmark"][b]["accepted_for_kd"] += 1
+        if bool(r.get("teacher_final_line")):
+            summary["by_benchmark"][b]["final_line_present"] += 1
+        if bool(r.get("teacher_final_line_parseable")):
+            summary["by_benchmark"][b]["final_line_parseable"] += 1
+        if bool(r.get("teacher_final_line_is_last")):
+            summary["by_benchmark"][b]["final_line_is_last"] += 1
         if (r.get("id"), r.get("benchmark")) in kept_keys:
             summary["by_benchmark"][b]["kept"] += 1
+        else:
+            summary["by_benchmark"][b]["dropped"] += 1
 
-    with (run_dir / "generation_summary.json").open("w") as fh:
+        decision = str(r.get("teacher_filter_decision") or "unknown")
+        summary["filter_decisions"][decision] = summary["filter_decisions"].get(decision, 0) + 1
+        for reason in r.get("teacher_filter_reasons") or []:
+            key = str(reason)
+            summary["filter_reason_counts"][key] = summary["filter_reason_counts"].get(key, 0) + 1
+
+    with (run_dir / "generation_summary.json").open("w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
 
     return run_dir

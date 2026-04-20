@@ -1,0 +1,245 @@
+{
+  "manifest_version": "predictors-final-rerun-v1",
+  "description": "Turnkey final rerun manifest for offline predictor consolidation",
+  "inputs": {
+    "trace_patterns": [
+      "results/predictors/traces/iter2_real_multimodel_trace.jsonl"
+    ],
+    "trace_model_field": "model_tier",
+    "expected_model_tiers": [
+      "student_small",
+      "student_mid",
+      "teacher"
+    ],
+    "expected_model_registry": {
+      "student_small": "UPDATE_WITH_FINAL_1_5B_MODEL_ID",
+      "student_mid": "UPDATE_WITH_FINAL_MID_MODEL_ID",
+      "teacher": "UPDATE_WITH_FINAL_TEACHER_MODEL_ID"
+    },
+    "expected_benchmarks": [
+      "gsm8k",
+      "math"
+    ],
+    "min_rows_per_benchmark": {
+      "gsm8k": 1000,
+      "math": 300
+    },
+    "min_alignment_ratio": 1.0
+  },
+  "pipeline": {
+    "default_tag": "final_rerun",
+    "cost_policy": "strict_ex_ante",
+    "cost_mode": "latency_ms",
+    "predictor_families": {
+      "quality_ex_ante": [
+        "linear",
+        "random_forest",
+        "gradient_boosting"
+      ],
+      "quality_post_hoc": [
+        "linear",
+        "random_forest",
+        "gradient_boosting"
+      ],
+      "service_cost": [
+        "linear",
+        "random_forest",
+        "gradient_boosting"
+      ]
+    },
+    "selection": {
+      "required_predictors": [
+        "quality_ex_ante",
+        "quality_post_hoc",
+        "service_cost"
+      ],
+      "classification": {
+        "maximize": [
+          "roc_auc",
+          "average_precision"
+        ],
+        "minimize": [
+          "ece_abs",
+          "brier"
+        ]
+      },
+      "regression": {
+        "minimize": [
+          "mae",
+          "rmse"
+        ],
+        "maximize": [
+          "r2"
+        ]
+      }
+    },
+    "smoke_max_rows": 30
+  },
+  "predictor_contracts": {
+    "quality_ex_ante": {
+      "target": "target_correct",
+      "features": [
+        "prompt_char_len",
+        "prompt_word_count",
+        "prompt_unique_word_ratio",
+        "prompt_avg_word_len",
+        "prompt_numeric_token_count",
+        "prompt_symbolic_token_count",
+        "prompt_has_equation_marker",
+        "prompt_has_multiple_choice_marker",
+        "system_queue_depth",
+        "system_queue_depth_missing",
+        "system_pending_requests",
+        "system_pending_requests_missing",
+        "system_throughput_rps_recent",
+        "system_throughput_rps_recent_missing",
+        "system_active_workers",
+        "system_active_workers_missing",
+        "input_tokens",
+        "input_tokens_missing",
+        "request_hour_utc",
+        "request_weekday_utc"
+      ]
+    },
+    "quality_post_hoc": {
+      "target": "target_correct",
+      "features": [
+        "prompt_char_len",
+        "prompt_word_count",
+        "prompt_unique_word_ratio",
+        "prompt_avg_word_len",
+        "prompt_numeric_token_count",
+        "prompt_symbolic_token_count",
+        "prompt_has_equation_marker",
+        "prompt_has_multiple_choice_marker",
+        "system_queue_depth",
+        "system_queue_depth_missing",
+        "system_pending_requests",
+        "system_pending_requests_missing",
+        "system_throughput_rps_recent",
+        "system_throughput_rps_recent_missing",
+        "system_active_workers",
+        "system_active_workers_missing",
+        "input_tokens",
+        "input_tokens_missing",
+        "request_hour_utc",
+        "request_weekday_utc",
+        "response_numeric_token_count",
+        "response_boxed_count",
+        "response_final_marker_count",
+        "response_has_refusal_marker",
+        "output_tokens",
+        "output_tokens_missing",
+        "output_length_chars",
+        "output_length_chars_missing",
+        "avg_logprob",
+        "avg_logprob_missing",
+        "logprob_std",
+        "logprob_std_missing",
+        "entropy_mean",
+        "entropy_mean_missing",
+        "parseable_numeric",
+        "parseable_boxed",
+        "parseable_multiple_choice",
+        "has_final_answer_marker",
+        "latency_ms",
+        "latency_ms_missing",
+        "ttft_ms",
+        "ttft_ms_missing",
+        "output_to_input_token_ratio",
+        "output_to_input_token_ratio_missing"
+      ]
+    },
+    "service_cost": {
+      "target": "target_service_cost",
+      "features_by_cost_policy": {
+        "strict_ex_ante": [
+          "prompt_char_len",
+          "prompt_word_count",
+          "prompt_unique_word_ratio",
+          "prompt_avg_word_len",
+          "prompt_numeric_token_count",
+          "prompt_symbolic_token_count",
+          "prompt_has_equation_marker",
+          "prompt_has_multiple_choice_marker",
+          "system_queue_depth",
+          "system_queue_depth_missing",
+          "system_pending_requests",
+          "system_pending_requests_missing",
+          "system_throughput_rps_recent",
+          "system_throughput_rps_recent_missing",
+          "system_active_workers",
+          "system_active_workers_missing",
+          "input_tokens",
+          "input_tokens_missing",
+          "request_hour_utc",
+          "request_weekday_utc",
+          "request_max_tokens",
+          "request_max_tokens_missing",
+          "request_temperature",
+          "request_temperature_missing"
+        ],
+        "extended_operational": [
+          "prompt_char_len",
+          "prompt_word_count",
+          "prompt_unique_word_ratio",
+          "prompt_avg_word_len",
+          "prompt_numeric_token_count",
+          "prompt_symbolic_token_count",
+          "prompt_has_equation_marker",
+          "prompt_has_multiple_choice_marker",
+          "system_queue_depth",
+          "system_queue_depth_missing",
+          "system_pending_requests",
+          "system_pending_requests_missing",
+          "system_throughput_rps_recent",
+          "system_throughput_rps_recent_missing",
+          "system_active_workers",
+          "system_active_workers_missing",
+          "input_tokens",
+          "input_tokens_missing",
+          "request_hour_utc",
+          "request_weekday_utc",
+          "request_max_tokens",
+          "request_max_tokens_missing",
+          "request_temperature",
+          "request_temperature_missing",
+          "resource_gpu_utilization_pct",
+          "resource_gpu_utilization_pct_missing",
+          "telemetry_online_success_rate",
+          "telemetry_online_success_rate_missing",
+          "telemetry_online_effective_throughput_tps_peak",
+          "telemetry_online_effective_throughput_tps_peak_missing",
+          "telemetry_online_estimated_request_rps_peak",
+          "telemetry_online_estimated_request_rps_peak_missing",
+          "telemetry_throughput_request_rps",
+          "telemetry_throughput_request_rps_missing",
+          "telemetry_throughput_output_tps",
+          "telemetry_throughput_output_tps_missing",
+          "telemetry_engine_running_mean",
+          "telemetry_engine_running_mean_missing",
+          "telemetry_engine_waiting_mean",
+          "telemetry_engine_waiting_mean_missing",
+          "telemetry_engine_prompt_throughput_mean",
+          "telemetry_engine_prompt_throughput_mean_missing",
+          "telemetry_engine_generation_throughput_mean",
+          "telemetry_engine_kv_cache_usage_pct_mean",
+          "telemetry_engine_kv_cache_usage_pct_mean_missing"
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "base_output_root": "results/pred_reruns",
+    "datasets_dir_name": "datasets",
+    "models_dir_name": "models",
+    "reports_dir_name": "reports",
+    "manifest_dir_name": "manifest"
+  },
+  "validations": {
+    "fail_on_drop_features": true,
+    "fail_on_review_features": true,
+    "fail_on_missing_expected_features": true,
+    "fail_on_high_correlation_warnings": true
+  }
+}
