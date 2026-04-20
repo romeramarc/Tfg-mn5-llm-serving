@@ -24,7 +24,9 @@ import asyncio
 import glob
 import json
 import math
+import os
 import re
+import signal
 import statistics
 import time
 from pathlib import Path
@@ -51,6 +53,52 @@ from utils.reproducibility import (
 )
 
 logger = get_logger(__name__)
+
+
+def _maybe_stop_external_policy_server() -> None:
+    """Stop policy server if a parent launcher exposed its PID via env var.
+
+    This allows running sampling against vLLM and then freeing GPU memory
+    before merge+train in the same job.
+    """
+    raw_pid = os.environ.get("GRPO_POLICY_SERVER_PID", "").strip()
+    if not raw_pid:
+        return
+
+    try:
+        pid = int(raw_pid)
+    except ValueError:
+        logger.warning("Ignoring invalid GRPO_POLICY_SERVER_PID", extra={"value": raw_pid})
+        return
+
+    if pid <= 0:
+        return
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+        logger.info("Requested external policy server shutdown", extra={"pid": pid})
+    except ProcessLookupError:
+        logger.info("External policy server already stopped", extra={"pid": pid})
+        return
+    except PermissionError:
+        logger.warning("No permission to stop external policy server", extra={"pid": pid})
+        return
+
+    # Give the server a short grace period to release GPU allocations.
+    for _ in range(40):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.25)
+
+    try:
+        os.kill(pid, signal.SIGKILL)
+        logger.warning("Force-killed external policy server after timeout", extra={"pid": pid})
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        logger.warning("Could not force-kill external policy server", extra={"pid": pid})
 
 
 def _resolve_path_or_glob(path_or_pattern: str) -> str:
@@ -581,6 +629,10 @@ def run(
 
     write_jsonl(samples, run_dir / "grpo_samples_all.jsonl")
     write_jsonl(selected, run_dir / "grpo_samples_selected.jsonl")
+
+    # Sampling finished: optionally stop externally-managed policy vLLM to
+    # free GPU memory before adapter merge and weighted SFT.
+    _maybe_stop_external_policy_server()
 
     if max_train_samples is not None and max_train_samples > 0 and max_train_samples < len(selected):
         selected = selected[:max_train_samples]

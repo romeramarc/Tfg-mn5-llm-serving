@@ -154,6 +154,10 @@ _SERVER_PID=$!
 
 python -m serving.healthcheck --url "${POLICY_BASE_URL}" --retries 120 --interval 5
 
+# Let refinement process stop the policy server after sampling to avoid
+# GPU memory contention during adapter merge and weighted SFT training.
+export GRPO_POLICY_SERVER_PID="${_SERVER_PID}"
+
 GRPO_ARGS=(--config "${DISTILL_CONFIG}")
 if [[ -n "${GRPO_MAX_PROMPTS}" ]]; then
     GRPO_ARGS+=(--max-prompts "${GRPO_MAX_PROMPTS}")
