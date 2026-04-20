@@ -34,7 +34,7 @@ benchmarks:
     prompt_template: |
       Solve the following mathematics problem with concise step-by-step reasoning.
       The final non-empty line must be exactly: #### <final_answer_expression>
-      Do not use \boxed{} and do not write anything after the final line.
+      Do not use \boxed{{}} and do not write anything after the final line.
 
       Problem: {problem}
 
@@ -191,7 +191,7 @@ grpo_refinement:
       prompt_template: |
         Solve the following mathematics problem with concise step-by-step reasoning.
         The final non-empty line must be exactly: #### <final_answer_expression>
-        Do not use \boxed{} and do not write anything after that final line.
+        Do not use \boxed{{}} and do not write anything after that final line.
 
         Problem: {problem}
 
