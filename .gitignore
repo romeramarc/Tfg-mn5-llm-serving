@@ -31,3 +31,25 @@ results/distill/merged-qwen2.5-*/
 
 # Ignore large teacher outputs
 results/distill/teacher-gen-/teacher_outputs.jsonl
+
+# Python cache
+**/pycache/
+*.pyc
+# Cluster logs
+logs/.out
+logs/.err
+# Raw teacher dumps (too large for git)
+results/distill//teacher_outputs.jsonl
+results/distill//teacher_outputs_all.jsonl
+results/distill/teacher_outputs_1p5b_focus_residual.jsonl
+
+# Python cache
+**/pycache/
+*.pyc
+# Cluster logs
+logs/.out
+logs/.err
+# Raw teacher dumps (too large for git)
+results/distill//teacher_outputs.jsonl
+results/distill//teacher_outputs_all.jsonl
+results/distill/teacher_outputs_1p5b_focus_residual.jsonl

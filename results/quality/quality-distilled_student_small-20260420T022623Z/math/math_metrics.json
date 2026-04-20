@@ -1,0 +1,17 @@
+{
+  "total_examples": 500,
+  "scorable_examples": 475,
+  "unscorable_examples": 25,
+  "correct": 163,
+  "incorrect": 312,
+  "accuracy": 0.343158,
+  "accuracy_pct": 34.32,
+  "accuracy_scorable": 0.343158,
+  "accuracy_scorable_pct": 34.32,
+  "accuracy_total": 0.326,
+  "accuracy_total_pct": 32.6,
+  "unscorable_rate": 0.05,
+  "unscorable_rate_pct": 5.0,
+  "benchmark": "math",
+  "model": "results/distill/merged-qwen2.5-1.5b"
+}

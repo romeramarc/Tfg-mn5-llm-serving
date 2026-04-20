@@ -1,0 +1,2 @@
+total_examples,scorable_examples,unscorable_examples,correct,incorrect,accuracy,accuracy_pct,accuracy_scorable,accuracy_scorable_pct,accuracy_total,accuracy_total_pct,unscorable_rate,unscorable_rate_pct,benchmark,model
+1319,1272,47,788,484,0.619497,61.95,0.619497,61.95,0.597422,59.74,0.035633,3.56,gsm8k,results/distill/merged-qwen2.5-1.5b
