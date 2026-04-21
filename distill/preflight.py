@@ -57,8 +57,6 @@ def check_python_imports(include_grpo: bool = False) -> None:
             fail(f"{pkg} not importable: {e}")
 
     heavy = ["torch", "transformers", "peft"]
-    if include_grpo:
-        heavy.append("vllm")
 
     for pkg in heavy:
         try:
@@ -67,6 +65,15 @@ def check_python_imports(include_grpo: bool = False) -> None:
             ok(f"{pkg}=={ver}")
         except ImportError as e:
             fail(f"{pkg} not importable — run: pip install {pkg}  ({e})")
+
+    if include_grpo:
+        try:
+            mod = __import__("vllm")
+            ver = getattr(mod, "__version__", "?")
+            ok(f"vllm=={ver}")
+        except ImportError:
+            warn("vllm not importable on this node (expected on login nodes without GPU; "
+                 "will be available on compute nodes)")
 
 
 def check_datasets(config_path: str = "configs/distill.yaml") -> None:
