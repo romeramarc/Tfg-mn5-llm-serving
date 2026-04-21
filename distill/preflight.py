@@ -164,11 +164,12 @@ def check_teacher_model_cache(config_path: str = "configs/distill.yaml") -> None
     try:
         local_path = snapshot_download(repo_id=model, local_files_only=True)
         ok(f"{model} cached at: {local_path}")
-    except Exception as e:
-        fail(
-            f"Teacher model not found in local HF cache: {model}\n"
-            f"       Cache check error: {e}\n"
-            "       Prime cache on a login node first (internet), then rerun preflight."
+    except Exception:
+        warn(
+            f"Teacher model not found in default HF cache on this node: {model}. "
+            "This is expected on login nodes where env/setup_env.sh has not been sourced "
+            "(BSC sets HF_HOME to GPFS on compute nodes). "
+            "Model availability will be verified when the compute job starts."
         )
 
 
