@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 .Python
@@ -17,8 +18,10 @@ venv/
 # Accidental pip / shell junk
 =3.7
 
-# Logs ruidosos diarios (ajusta si quieres ignorar más)
-logs/202*.log
+# Cluster logs
+logs/*.log
+logs/*.out
+logs/*.err
 
 # Large model weights — not suitable for normal GitHub (use Git LFS or keep on BSC only)
 results/distill/merged-qwen2.5-*/
@@ -29,29 +32,10 @@ results/distill/merged-qwen2.5-*/
 # HuggingFace cache if ever under repo
 .cache/
 
-# Ignore large teacher outputs
-results/distill/teacher-gen-/teacher_outputs.jsonl
-
-# Python cache
-**/pycache/
-*.pyc
-# Cluster logs
-logs/.out
-logs/.err
 # Raw teacher dumps (too large for git)
-results/distill//teacher_outputs.jsonl
-results/distill//teacher_outputs_all.jsonl
-results/distill/teacher_outputs_1p5b_focus_residual.jsonl
-
-# Python cache
-**/pycache/
-*.pyc
-# Cluster logs
-logs/.out
-logs/.err
-# Raw teacher dumps (too large for git)
-results/distill//teacher_outputs.jsonl
-results/distill//teacher_outputs_all.jsonl
+results/distill/teacher_outputs*.jsonl
+results/distill/**/teacher_outputs.jsonl
+results/distill/**/teacher_outputs_all.jsonl
 results/distill/teacher_outputs_1p5b_focus_residual.jsonl
 
 # Predictor artifacts (generated)

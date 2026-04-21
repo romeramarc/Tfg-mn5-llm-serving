@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -37,6 +38,56 @@ from eval.scoring import (
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _extract_by_pattern(text: str, pattern: str) -> Optional[str]:
+    """Extract answer text using the last regex match and last non-empty group."""
+    if not text or not pattern:
+        return None
+    try:
+        matches = list(re.finditer(pattern, text, flags=re.MULTILINE))
+    except re.error:
+        return None
+    if not matches:
+        return None
+
+    match = matches[-1]
+    if match.lastindex:
+        for idx in range(match.lastindex, 0, -1):
+            grp = match.group(idx)
+            if grp is not None and str(grp).strip():
+                return str(grp).strip()
+
+    whole = match.group(0)
+    return str(whole).strip() if whole else None
+
+
+def _extract_predicted_math_answer(text: str, bench_cfg: Dict[str, Any]) -> Optional[str]:
+    """Extract predicted answer with robust fallbacks across common formats.
+
+    Priority: depth-aware \\boxed{} (handles nesting) > config regex > #### line.
+    The depth-aware extractor is checked first because a simple regex like
+    ``\\boxed{([^}]+)}`` silently truncates answers with nested braces
+    (e.g. ``\\frac{1}{2}``), producing wrong extractions.
+    """
+    # 1) Depth-aware boxed extraction (handles nested braces correctly).
+    boxed = extract_boxed_answer(text)
+    if boxed:
+        return boxed
+
+    # 2) Config-specific regex pattern (useful for non-boxed formats like ####).
+    configured_pattern = str(bench_cfg.get("answer_extraction_pattern", "")).strip()
+    if configured_pattern:
+        extracted = _extract_by_pattern(text, configured_pattern)
+        if extracted:
+            return extracted
+
+    # 3) Fallback: strict final hash line.
+    final_line = _extract_by_pattern(text, r"(?m)^####\s*(.+?)\s*$")
+    if final_line:
+        return final_line
+
+    return None
 
 
 # ── Dataset loading ─────────────────────────────────────────
@@ -148,7 +199,7 @@ async def _evaluate_batch(
                 client, url, model, prompt, max_tokens, temperature, timeout
             )
 
-        predicted_boxed = extract_boxed_answer(resp["text"])
+        predicted_answer = _extract_predicted_math_answer(resp["text"], bench_cfg)
         ref = ex["reference_answer"]
         correct = False
         scorable = True
@@ -157,15 +208,15 @@ async def _evaluate_batch(
         if resp["error"]:
             scorable = False
             ambiguity_reason = f"request_error: {resp['error']}"
-        elif predicted_boxed is None:
+        elif predicted_answer is None:
             scorable = False
-            ambiguity_reason = "no_boxed_answer_in_response"
+            ambiguity_reason = "no_extractable_answer_in_response"
         elif not ex.get("reference_is_boxed", True):
             # Reference itself was not boxed — scoring may be unreliable
             scorable = False
             ambiguity_reason = "reference_not_boxed"
         else:
-            correct = math_answer_match(predicted_boxed, ref)
+            correct = math_answer_match(predicted_answer, ref)
 
         results.append({
             "index": idx,
@@ -174,7 +225,7 @@ async def _evaluate_batch(
             "type": ex.get("type", ""),
             "reference_answer": ref,
             "model_response": resp["text"],
-            "predicted_answer": predicted_boxed,
+            "predicted_answer": predicted_answer,
             "correct": correct,
             "scorable": scorable,
             "ambiguity_reason": ambiguity_reason,
