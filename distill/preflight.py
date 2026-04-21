@@ -343,10 +343,11 @@ def _validate_model_reference(
         try:
             cache_path = snapshot_download(repo_id=value, local_files_only=True)
             ok(f"{label}: cached in local HF store ({cache_path})")
-        except Exception as e:
-            fail(
-                f"{label} not available in local HF cache while offline mode is active: {value}\n"
-                f"       Cache check error: {e}"
+        except Exception:
+            warn(
+                f"{label}: not found in default HF cache on this node ({value}). "
+                "This is expected on login nodes where env/setup_env.sh has not been sourced. "
+                "Model availability will be verified when the compute job starts."
             )
     else:
         ok(f"{label}: remote model reference ({value})")
