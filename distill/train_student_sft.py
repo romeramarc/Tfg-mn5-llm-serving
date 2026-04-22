@@ -235,7 +235,9 @@ def run(
 
     # Derive a short tag for directory naming
     model_short = student_model.split("/")[-1].lower().replace("-instruct", "")
-    tag = f"sft-{model_short}"
+    _tag_mode = str(tcfg.get("mode", "lora")).lower()
+    tag_prefix = "sft" if _tag_mode == "lora" else "sft-full"
+    tag = f"{tag_prefix}-{model_short}"
     if stage2_residual:
         tag = f"{tag}-residual-stage2"
 
@@ -266,8 +268,20 @@ def run(
     )
     from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 
+    # ── Training mode selection ─────────────────────────────
+    # "lora" (legacy default): wrap model with PEFT LoRA adapters.
+    # "full" (Exp. 6): full-parameter fine-tuning — no adapter, saves full model.
+    training_mode = str(tcfg.get("mode", "lora")).lower()
+    if training_mode not in {"lora", "full"}:
+        logger.warning(
+            "Unknown training.mode; falling back to 'lora'",
+            extra={"mode": training_mode},
+        )
+        training_mode = "lora"
+
     # ── Model + tokeniser ───────────────────────────────────
-    logger.info("Loading student model", extra={"model": student_model})
+    logger.info("Loading student model",
+                extra={"model": student_model, "training_mode": training_mode})
 
     tokeniser = AutoTokenizer.from_pretrained(student_model)
     if tokeniser.pad_token is None:
@@ -300,22 +314,36 @@ def run(
         model = model.merge_and_unload()
         logger.info("Merged stage initializer adapter into base model")
 
-    # ── LoRA ────────────────────────────────────────────────
+    # ── LoRA wrapping (skipped when mode=full) ──────────────
     lora_cfg = tcfg.get("lora", {})
-    peft_config = LoraConfig(
-        r=lora_cfg.get("r", 64),
-        lora_alpha=lora_cfg.get("lora_alpha", 16),
-        lora_dropout=lora_cfg.get("lora_dropout", 0.05),
-        target_modules=lora_cfg.get("target_modules",
-            ["q_proj", "k_proj", "v_proj", "o_proj",
-             "gate_proj", "up_proj", "down_proj"]),
-        bias=lora_cfg.get("bias", "none"),
-        task_type=TaskType.CAUSAL_LM,
-    )
-    # Required for gradient checkpointing to work with PEFT/LoRA
-    model.enable_input_require_grads()
-    model = get_peft_model(model, peft_config)
-    model.print_trainable_parameters()
+    if training_mode == "lora":
+        peft_config = LoraConfig(
+            r=lora_cfg.get("r", 64),
+            lora_alpha=lora_cfg.get("lora_alpha", 16),
+            lora_dropout=lora_cfg.get("lora_dropout", 0.05),
+            target_modules=lora_cfg.get("target_modules",
+                ["q_proj", "k_proj", "v_proj", "o_proj",
+                 "gate_proj", "up_proj", "down_proj"]),
+            bias=lora_cfg.get("bias", "none"),
+            task_type=TaskType.CAUSAL_LM,
+        )
+        # Required for gradient checkpointing to work with PEFT/LoRA
+        model.enable_input_require_grads()
+        model = get_peft_model(model, peft_config)
+        model.print_trainable_parameters()
+    else:
+        # Full-parameter fine-tuning: every param is trainable; gradient
+        # checkpointing works natively on the base model.
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in model.parameters())
+        logger.info(
+            "Full-parameter training (no LoRA)",
+            extra={
+                "trainable_params": trainable,
+                "total_params": total,
+                "trainable_pct": round(100.0 * trainable / max(total, 1), 4),
+            },
+        )
 
     # ── Dataset ─────────────────────────────────────────────
     dataset_path = dataset_override or tcfg.get(
@@ -424,18 +452,27 @@ def run(
         logger.info("Training log saved",
                      extra={"entries": len(trainer.state.log_history)})
 
-    # ── Save final adapter + tokeniser ──────────────────────
-    final_dir = run_dir / "final_adapter"
+    # ── Save final model/adapter + tokeniser ────────────────
+    # LoRA path  → saves PEFT adapter under final_adapter/
+    # Full FT    → saves the full HF model under final_model/
+    if training_mode == "lora":
+        final_dir = run_dir / "final_adapter"
+    else:
+        final_dir = run_dir / "final_model"
     trainer.save_model(str(final_dir))
     tokeniser.save_pretrained(str(final_dir))
     logger.info("Training complete",
-                extra={"adapter_dir": str(final_dir),
+                extra={"final_dir": str(final_dir),
+                       "training_mode": training_mode,
                        "student": student_model})
 
-    # Save a small manifest for downstream pipeline steps
+    # Save a small manifest for downstream pipeline steps.
     manifest = {
         "student_model": student_model,
-        "adapter_dir": str(final_dir),
+        "training_mode": training_mode,
+        "final_dir": str(final_dir),
+        # Back-compat: legacy key for LoRA consumers.
+        "adapter_dir": str(final_dir) if training_mode == "lora" else None,
         "dataset_path": dataset_path,
         "stage2_residual": stage2_residual,
         "init_adapter_path": init_adapter_path,
@@ -443,7 +480,7 @@ def run(
         "num_val_samples": len(val_ds) if val_ds else 0,
         "val_ratio": val_ratio,
         "epochs": tcfg.get("num_train_epochs", 3),
-        "lora_r": lora_cfg.get("r", 64),
+        "lora_r": lora_cfg.get("r", 64) if training_mode == "lora" else None,
     }
     with (run_dir / "training_manifest.json").open("w") as fh:
         json.dump(manifest, fh, indent=2)

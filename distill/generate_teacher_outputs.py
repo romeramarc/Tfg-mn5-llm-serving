@@ -494,6 +494,281 @@ async def _generate_gsm8k_consensus_record(
     return record
 
 
+# ── RFT (rejection-sampling FT) ─────────────────────────────
+
+def _verify_completion(
+    completion: str,
+    benchmark: str,
+    reference: Optional[str],
+    cfg: Dict[str, Any],
+) -> Tuple[bool, Optional[str]]:
+    """Check whether a teacher completion is correct for its benchmark.
+
+    Returns (is_correct, extracted_answer).
+    """
+    if not completion or reference is None:
+        return False, None
+    if benchmark == "gsm8k":
+        predicted = extract_numeric_answer(completion, _gsm8k_answer_pattern(cfg))
+        if predicted is None:
+            return False, None
+        return numeric_match(predicted, str(reference)), predicted
+    if benchmark == "math":
+        predicted = _extract_math_answer(completion, cfg)
+        if predicted is None:
+            return False, None
+        return math_answer_match(predicted, str(reference)), predicted
+    # Unsupported benchmark → cannot verify, reject by default under RFT.
+    return False, None
+
+
+def _rft_select_diverse(
+    correct_samples: List[Dict[str, Any]],
+    max_keep: int,
+    diversity: str,
+    length_buckets: int,
+) -> List[Dict[str, Any]]:
+    """Pick up to `max_keep` correct samples with diversity by length buckets."""
+    if not correct_samples or max_keep <= 0:
+        return []
+
+    # Deduplicate by normalised completion text.
+    seen: set[str] = set()
+    unique: List[Dict[str, Any]] = []
+    for s in correct_samples:
+        key = _clean_completion_for_length(str(s.get("completion") or ""))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(s)
+    if not unique:
+        return []
+
+    if diversity == "first":
+        return unique[:max_keep]
+    if diversity == "shortest":
+        unique.sort(key=lambda it: len(str(it.get("completion") or "")))
+        return unique[:max_keep]
+
+    # "length_buckets": sort by length, partition into `length_buckets` groups,
+    # then round-robin pick from each group until we hit max_keep.
+    unique.sort(key=lambda it: len(str(it.get("completion") or "")))
+    buckets: List[List[Dict[str, Any]]] = [[] for _ in range(max(1, length_buckets))]
+    for i, s in enumerate(unique):
+        buckets[i % len(buckets)].append(s)
+    picked: List[Dict[str, Any]] = []
+    idx = 0
+    while len(picked) < max_keep and any(buckets):
+        b = buckets[idx % len(buckets)]
+        if b:
+            picked.append(b.pop(0))
+        idx += 1
+        if idx > 10_000:  # safety guard
+            break
+    return picked
+
+
+def _resolve_rft_params(rft_cfg: Dict[str, Any], benchmark: str) -> Dict[str, Any]:
+    """Merge the RFT `default` block with the per-benchmark override."""
+    base = dict(rft_cfg.get("default", {}) or {})
+    per = dict((rft_cfg.get("per_benchmark", {}) or {}).get(benchmark, {}) or {})
+    base.update(per)
+    # Defaults if user omitted everything:
+    base.setdefault("num_samples", 8)
+    base.setdefault("sample_temperature", 0.7)
+    base.setdefault("sample_top_p", 0.95)
+    base.setdefault("sample_max_tokens", 1280)
+    base.setdefault("max_keep_per_problem", 4)
+    base.setdefault("require_correct", True)
+    base.setdefault("diversity", "length_buckets")
+    base.setdefault("length_buckets", 3)
+    return base
+
+
+async def _generate_rft_records(
+    client: httpx.AsyncClient,
+    item: Dict[str, Any],
+    cfg: Dict[str, Any],
+    url: str,
+    model: str,
+    timeout: float,
+    base_gen_params: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """RFT pass: N samples → verify → keep up to K correct (diverse).
+
+    Emits multiple records per problem (id = "<base_id>-s<k>"). Optionally
+    also keeps one greedy canonical sample (id = "<base_id>-g") when the
+    config sets ``rft.include_greedy_canonical: true``.
+    """
+    gen = cfg.get("generation", {})
+    rft_cfg = gen.get("rft", {}) or {}
+    benchmark = str(item.get("benchmark") or "")
+    params = _resolve_rft_params(rft_cfg, benchmark)
+
+    reference = item.get("reference_answer")
+    base_id = item.get("id") or ""
+    prompt = item.get("prompt") or ""
+    include_greedy = bool(rft_cfg.get("include_greedy_canonical", False))
+
+    collected_samples: List[Dict[str, Any]] = []
+
+    # Optional canonical greedy pass.
+    greedy_record: Optional[Dict[str, Any]] = None
+    if include_greedy:
+        greedy = await _query_teacher(
+            client,
+            url,
+            prompt,
+            model,
+            int(base_gen_params.get("max_tokens", 1024)),
+            0.0,
+            1.0,
+            timeout,
+        )
+        completion = str(greedy.get("teacher_completion") or "")
+        is_correct, predicted = _verify_completion(completion, benchmark, reference, cfg)
+        if completion and is_correct:
+            greedy_record = {
+                "id": f"{base_id}-g",
+                "benchmark": benchmark,
+                "prompt": prompt,
+                "teacher_completion": completion,
+                "teacher_model": model,
+                "generation_parameters": {
+                    **base_gen_params,
+                    "rft": {"kind": "greedy_canonical"},
+                },
+                "latency_ms": greedy.get("latency_ms"),
+                "finish_reason": greedy.get("finish_reason"),
+                "error": greedy.get("error"),
+                "teacher_accepted_for_kd": True,
+                "teacher_predicted_answer": predicted,
+                "teacher_scorable": True,
+                "teacher_correct": True,
+                "rft_sample_kind": "greedy",
+            }
+            for key, value in item.items():
+                if key not in {"id", "benchmark", "prompt"}:
+                    greedy_record[key] = value
+
+    # Sampling pass.
+    num_samples = max(1, int(params["num_samples"]))
+    sample_temp = float(params["sample_temperature"])
+    sample_top_p = float(params["sample_top_p"])
+    sample_max_tokens = int(params["sample_max_tokens"])
+    require_correct = bool(params["require_correct"])
+    max_keep = max(1, int(params["max_keep_per_problem"]))
+    diversity = str(params["diversity"])
+    length_buckets = max(1, int(params["length_buckets"]))
+
+    for k in range(num_samples):
+        res = await _query_teacher(
+            client,
+            url,
+            prompt,
+            model,
+            sample_max_tokens,
+            sample_temp,
+            sample_top_p,
+            timeout,
+        )
+        completion = str(res.get("teacher_completion") or "")
+        if res.get("error") is not None or not completion:
+            continue
+        is_correct, predicted = _verify_completion(completion, benchmark, reference, cfg)
+        if require_correct and not is_correct:
+            continue
+        collected_samples.append({
+            "sample_index": k,
+            "completion": completion,
+            "predicted": predicted,
+            "latency_ms": res.get("latency_ms"),
+            "finish_reason": res.get("finish_reason"),
+            "is_correct": is_correct,
+        })
+
+    selected = _rft_select_diverse(
+        collected_samples,
+        max_keep=max_keep,
+        diversity=diversity,
+        length_buckets=length_buckets,
+    )
+
+    records: List[Dict[str, Any]] = []
+    if greedy_record is not None:
+        records.append(greedy_record)
+
+    for k, s in enumerate(selected):
+        rec = {
+            "id": f"{base_id}-s{k}",
+            "benchmark": benchmark,
+            "prompt": prompt,
+            "teacher_completion": s["completion"],
+            "teacher_model": model,
+            "generation_parameters": {
+                **base_gen_params,
+                "rft": {
+                    "kind": "rejection_sampled",
+                    "num_samples": num_samples,
+                    "sample_temperature": sample_temp,
+                    "sample_top_p": sample_top_p,
+                    "sample_max_tokens": sample_max_tokens,
+                    "max_keep_per_problem": max_keep,
+                    "diversity": diversity,
+                    "length_buckets": length_buckets,
+                    "kept_of_correct": f"{len(selected)}/{len(collected_samples)}",
+                    "total_samples_drawn": num_samples,
+                },
+            },
+            "latency_ms": s.get("latency_ms"),
+            "finish_reason": s.get("finish_reason"),
+            "error": None,
+            "teacher_accepted_for_kd": True,
+            "teacher_predicted_answer": s.get("predicted"),
+            "teacher_scorable": True,
+            "teacher_correct": bool(s.get("is_correct")),
+            "rft_sample_kind": "sampled",
+            "rft_sample_index": s.get("sample_index"),
+        }
+        for key, value in item.items():
+            if key not in {"id", "benchmark", "prompt"}:
+                rec[key] = value
+        records.append(rec)
+
+    # If no correct sample survived AND no greedy canonical, emit ONE audit
+    # row per prompt so the generation summary can count failures without
+    # polluting the training set (teacher_accepted_for_kd=False → filtered).
+    if not records:
+        records.append({
+            "id": f"{base_id}-rft_fail",
+            "benchmark": benchmark,
+            "prompt": prompt,
+            "teacher_completion": None,
+            "teacher_model": model,
+            "generation_parameters": {
+                **base_gen_params,
+                "rft": {
+                    "kind": "no_correct_sample",
+                    "num_samples": num_samples,
+                    "sample_temperature": sample_temp,
+                },
+            },
+            "latency_ms": None,
+            "finish_reason": None,
+            "error": "no_correct_sample_under_rft",
+            "teacher_accepted_for_kd": False,
+            "teacher_predicted_answer": None,
+            "teacher_scorable": False,
+            "teacher_correct": False,
+            "rft_sample_kind": "none",
+        })
+        for key, value in item.items():
+            if key not in {"id", "benchmark", "prompt"}:
+                records[-1].setdefault(key, value)
+
+    return records
+
+
 async def _generate_all(
     prompts: List[Dict[str, Any]],
     cfg: Dict[str, Any],
@@ -512,6 +787,9 @@ async def _generate_all(
     gsm8k_consensus_cfg = gen.get("gsm8k_self_consistency", {}) or {}
     gsm8k_consensus_enabled = bool(gsm8k_consensus_cfg.get("enabled", False))
 
+    rft_cfg = gen.get("rft", {}) or {}
+    rft_enabled = bool(rft_cfg.get("enabled", False))
+
     gen_params = {
         "temperature": temperature,
         "top_p": top_p,
@@ -523,6 +801,18 @@ async def _generate_all(
 
     async def _bounded(item: Dict[str, Any]) -> None:
         async with sem:
+            if rft_enabled:
+                records = await _generate_rft_records(
+                    client,
+                    item,
+                    cfg,
+                    url,
+                    model,
+                    timeout,
+                    gen_params,
+                )
+                results.extend(records)
+                return
             if item.get("benchmark") == "gsm8k" and gsm8k_consensus_enabled:
                 record = await _generate_gsm8k_consensus_record(
                     client,

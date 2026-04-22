@@ -177,6 +177,10 @@ _SUMMARY_ROLE_MAP: Dict[str, Dict[str, Any]] = {
         "name": "1.5B post-KD", "short": "1.5B KD", "state": "post-KD",
         "params": 1.5, "version": "v2",
     },
+    "distilled_student_small_v6": {
+        "name": "1.5B post-KD (Exp. 6)", "short": "1.5B KD v6", "state": "post-KD",
+        "params": 1.5, "version": "v6",
+    },
 }
 
 

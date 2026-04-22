@@ -1,0 +1,166 @@
+# ─────────────────────────────────────────────────────────────
+# distill_v6.yaml — Experiment 6: "Pure-Distillation · Maximum Envelope"
+# ─────────────────────────────────────────────────────────────
+# Sprint 1 deliverable:
+#   - RFT (rejection-sampling FT): generate N samples per problem with the
+#     teacher, keep up to K correct ones per problem with diversity → many
+#     more unique correct traces than the current pipeline (1/problem).
+#   - Full-parameter fine-tuning of the 1.5B student (no LoRA) on the
+#     expanded dataset, with strict completion-only masking and early stop.
+#
+# Later sprints (same config, additive):
+#   - Sprint 2: persist teacher top-20 logprobs and train with CE + KL.
+#   - Sprint 3: GKD on-policy (student samples, teacher supervises).
+#   - Sprint 4: RFT iteration on the student's remaining errors + polish.
+#
+# Boundary respected (still pure distillation):
+#   - Teacher: Qwen2.5-14B-Instruct  (fixed)
+#   - Student: Qwen2.5-1.5B-Instruct (fixed base)
+#   - No external CoT datasets, no verifiers beyond the teacher + ground
+#     truth of GSM8K/MATH train splits, no tool use.
+# ─────────────────────────────────────────────────────────────
+
+benchmarks:
+  gsm8k:
+    enabled: true
+    dataset_name: "openai/gsm8k"
+    dataset_split: "train"               # 7 473 items
+    subset_size: null
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+    final_line_pattern: "(?m)^####\\s*([\\-\\d,\\.]+)\\s*$"
+    final_answer_parser: "numeric"
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+
+  math:
+    enabled: true                        # EleutherAI/hendrycks_math, 7 subjects, ~7 500 train
+    dataset_name: "EleutherAI/hendrycks_math"
+    dataset_split: "train"
+    subset_size: null
+    distill_answer_parser: "boxed"
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+
+# ── Step 1: Teacher output generation (RFT mode) ──────────────
+generation:
+  teacher_base_url: "http://localhost:8000"
+  teacher_model: "Qwen/Qwen2.5-14B-Instruct"
+  eval_config: "configs/eval.yaml"
+  extra_prompts_file: null
+  output_file: "results/distill/teacher_outputs_v6.jsonl"
+  experiment_tag: "v6"
+
+  # Base generation defaults (used for the greedy "canonical" pass and as
+  # fallbacks if an RFT sub-block omits a value).
+  max_tokens: 1280
+  temperature: 0.0
+  top_p: 1.0
+  batch_size: 48                         # concurrent requests to teacher
+  timeout_seconds: 240
+  seed: 42
+
+  # ── RFT: rejection-sampling fine-tuning ─────────────────────
+  # When enabled, for each prompt the teacher is queried N times with
+  # temperature>0; samples are verified against the ground-truth answer
+  # and up to max_keep_per_problem correct ones are retained, picked for
+  # diversity (length buckets). Each retained sample becomes its own
+  # JSONL row (id = "<benchmark>-<idx>-s<k>").
+  rft:
+    enabled: true
+    # Optional canonical greedy pass (temperature=0) stored alongside
+    # sampled traces — useful as a "format anchor" in polish phase.
+    include_greedy_canonical: true
+    # Defaults applied to all benchmarks with rft enabled; per-benchmark
+    # blocks below override.
+    default:
+      num_samples: 8
+      sample_temperature: 0.7
+      sample_top_p: 0.95
+      sample_max_tokens: 1280
+      max_keep_per_problem: 4
+      require_correct: true
+      diversity: "length_buckets"        # "length_buckets" | "first" | "shortest"
+      length_buckets: 3                  # split correct samples into 3 length buckets
+    per_benchmark:
+      gsm8k:
+        num_samples: 8
+        sample_temperature: 0.7
+        sample_max_tokens: 1024
+        max_keep_per_problem: 4
+      math:
+        num_samples: 10                  # harder → more samples
+        sample_temperature: 0.8
+        sample_max_tokens: 1536          # MATH solutions can be long
+        max_keep_per_problem: 4
+
+  # Quality filter: with RFT active, rows are already correct by
+  # construction, so we keep everything (no extra filtering). The
+  # existing filter pipeline stays as a safety net for format.
+  quality_filter:
+    enabled: true
+    respect_teacher_acceptance: true
+    require_final_line: false
+    require_final_line_last: false
+    require_parseable_final_answer: true  # hard requirement for training
+    default_policy: "all"
+    min_kept_per_benchmark: 100
+
+# ── Step 2: Student training (full-parameter FT) ──────────────
+training:
+  student_model: "Qwen/Qwen2.5-1.5B-Instruct"
+  dataset_path: "results/distill/teacher_outputs_v6.jsonl"
+  output_dir: "results/distill"
+  experiment_tag: "v6"
+
+  # NEW (Sprint 1): select training mode.
+  #   "lora": legacy LoRA path (train_student_sft.py default).
+  #   "full": full-parameter fine-tuning — no PEFT adapter, saves full model.
+  mode: "full"
+
+  num_train_epochs: 3
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16        # effective batch = 16
+  learning_rate: 1.0e-5                  # cosine decay
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_seq_length: 2048
+  fp16: false
+  bf16: true
+  gradient_checkpointing: true
+  seed: 42
+
+  val_ratio: 0.10
+  early_stopping_patience: 5
+  max_grad_norm: 1.0
+
+  # LoRA block kept for backwards compatibility — ignored when mode=full.
+  lora:
+    r: 128
+    lora_alpha: 256
+    lora_dropout: 0.05
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj",
+                     "gate_proj", "up_proj", "down_proj"]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+
+  logging:
+    logging_steps: 20
+    save_strategy: "steps"
+    save_steps: 400
+    eval_strategy: "steps"
+    eval_steps: 200
+    load_best_model_at_end: true
+    report_to: "none"
+
+model_overrides: {}
