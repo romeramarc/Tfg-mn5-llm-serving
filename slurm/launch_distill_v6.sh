@@ -77,8 +77,35 @@ python -m distill.preflight --step 1 --simulate-offline --config "${DISTILL_CONF
 export DISTILL_CONFIG
 
 if [[ ${WAIT_STAGE1} -eq 1 ]]; then
-    JOB_DG=$(sbatch --parsable --wait slurm/distill_generate_v6.sbatch)
-    echo "  [1/3] distill-gen-v6   : Job ${JOB_DG}  [20h]  (completed OK)"
+    # SAFE mode: submit gen first (so JOBID prints immediately), then poll until
+    # the job leaves the queue — same semantics as `sbatch --wait`, clearer UX.
+    echo ""
+    echo ">>> SAFE mode — esperando a que termine SOLO el job de generación antes de encolar train/posteval."
+    echo ">>> Puede tardar muchas horas; usa otra sesión SSH para:  squeue -u \$USER"
+    echo ""
+    JOB_DG=$(sbatch --parsable slurm/distill_generate_v6.sbatch)
+    echo "  [1/3] distill-gen-v6   : Job ${JOB_DG}  [20h]  (submitted, waiting …)"
+    echo "      log:  tail -f logs/distill-gen-v6-${JOB_DG}.out"
+    # Poll until job is no longer pending/running/configuring/completing
+    while squeue -h -j "${JOB_DG}" -t PD,R,CF,CG 2>/dev/null | grep -q .; do
+        sleep 60
+    done
+    # Accounting can lag a few seconds after the job leaves squeue
+    _EXIT=""
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 3
+        _EXIT=$(sacct -j "${JOB_DG}" -n -X --format=ExitCode -P 2>/dev/null | tail -1 | cut -d'|' -f1 | tr -d ' ' || true)
+        [[ -n "${_EXIT}" ]] && break
+    done
+    if [[ -z "${_EXIT}" ]]; then
+        echo "ERROR: sacct never returned ExitCode for ${JOB_DG}; check: sacct -j ${JOB_DG}"
+        exit 1
+    fi
+    if [[ "${_EXIT}" != "0:0" ]]; then
+        echo "ERROR: distill-gen-v6 job ${JOB_DG} did not exit cleanly (ExitCode=${_EXIT})"
+        exit 1
+    fi
+    echo "  [1/3] distill-gen-v6   : Job ${JOB_DG}  (completed OK, ExitCode=${_EXIT})"
 
     JOB_T1=$(sbatch --parsable slurm/distill_train_1.5b_v6.sbatch)
     echo "  [2/3] distill-1.5b-v6  : Job ${JOB_T1}  [16h]"
