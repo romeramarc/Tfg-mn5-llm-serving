@@ -603,15 +603,19 @@ $r_i$ con el pipeline de tres etapas. Con ello definimos:
 
 Las m\'etricas quedan entonces:
 \[
-\text{accuracy\_total} = \frac{\text{hit}}{N},\qquad
 \text{accuracy\_scorable} = \frac{\text{hit}}{\text{hit}+\text{miss}},\qquad
-\text{unscorable\_rate} = \frac{\text{unscorable}}{N}.
+\text{unscorable\_rate} = \frac{\text{unscorable}}{N},\qquad
+\text{accuracy\_total} = \frac{\text{hit}}{N}.
 \]
 
-Contamos \emph{unscorable} como error en \texttt{accuracy\_total} porque,
-desde el punto de vista operativo, una respuesta que no puede extraerse
-ni verificarse no es utilizable por el sistema y equivale a fallo de
-tarea (aunque el razonamiento interno pudiese contener partes correctas).
+La \textbf{m\'etrica principal} de este informe es \texttt{accuracy\_scorable}
+(equivalente en JSON a \texttt{accuracy\_pct} / \texttt{accuracy\_scorable\_pct}):
+es la tasa de acierto entre ejemplos \emph{parseables}, alineada con la
+pr\'actica habitual en benchmarks de respuesta final. La
+\texttt{accuracy\_total} cuenta \emph{unscorable} como fallo en el
+denominador $N$; es \'util como lectura operativa ``sistema roto si no
+extrae respuesta'', pero \textbf{no} se usa aqu\'i para rankings ni medias
+agregadas, para no mezclar fallo de formato con fallo de razonamiento.
 
 \begin{figure}[H]
 \centering
@@ -1697,51 +1701,62 @@ resultados cuantitativos robustos, obtenidos con metodolog\'ia rigurosa:
 el \textbf{7 de marzo de 2026}. La primera post-evaluaci\'on post-KD
 (37554282--37554283) complet\'o el \textbf{9 de marzo de 2026}, y una
 segunda iteraci\'on de refinamiento en abril actualiz\'o la evaluaci\'on
-de los dos modelos destilados (7B y 1.5B), dejando \textbf{cerrada}
-la primera fase experimental.
+de los dos modelos destilados (7B y 1.5B). En \textbf{abril de 2026}
+(exp.\,6) se a\~nadi\'o un \textbf{full fine-tuning} del student 1.5B
+(checkpoint \texttt{sft-full-qwen2.5-1.5b-v6-20260423T121313Z/final\_model})
+y su post-evaluaci\'on de calidad (run
+\texttt{quality-distilled\_student\_small\_v6-20260424T041935Z},
+job SLURM \texttt{39515993}, script \texttt{posteval\_1.5b\_v6.sbatch}).
+Las m\'etricas de \textbf{calidad} de esa corrida est\'an consolidadas en
+este informe; las de \textbf{eficiencia} del mismo job quedan sujetas al
+cierre del bloque \texttt{[3/3]} (throughput + online, 3 repeticiones) y se
+podr\'an volcar en una revisi\'on menor del PDF cuando el \texttt{.out}
+marque \texttt{Posteval 1.5B (Exp. 6) done}.
 
-En esta versi\'on del informe, la m\'etrica principal de calidad se reporta
-como \textbf{accuracy total}:
+La m\'etrica principal de calidad en este informe es la
+\textbf{accuracy scorable}:
 \[
-\text{accuracy\_total} = \frac{\text{correct}}{\text{total\_examples}}
+\text{accuracy\_scorable} = \frac{\text{correct}}{\text{scorable\_examples}}
 \]
-es decir, los casos no parseables (\emph{unscorable}) computan como error
-en la comparativa principal, porque una salida no extra\'ible no es
-operativamente utilizable. La definici\'on formal de hit/miss/unscorable
-y el criterio de parseo se detallan en la Secci\'on~\ref{sec:hit-unscorable}.
-La \textbf{accuracy scorable}
-($\text{correct}/\text{scorable\_examples}$) se mantiene como m\'etrica
-diagn\'ostica secundaria.
+(es decir, solo entre ejemplos donde la extracci\'on de respuesta final
+tuvo \'exito). En el c\'odigo de evaluaci\'on (\texttt{eval/scoring.py},
+\texttt{compute\_accuracy}) los campos retrocompatibles
+\texttt{accuracy} / \texttt{accuracy\_pct} coinciden con esta definici\'on;
+las corridas antiguas que solo expon\'ian \texttt{accuracy\_pct} ya
+reportaban, por tanto, \textbf{acierto sobre parseables}, no una mezcla
+con no-parseables. La definici\'on formal de hit/miss/unscorable y el
+criterio de parseo se detallan en la Secci\'on~\ref{sec:hit-unscorable}.
+La \texttt{accuracy\_total} (\texttt{correct}/\texttt{total\_examples})
+queda relegada a contexto en tablas de desglose cuando ayuda a separar
+``fallo de formato'' de ``fallo de razonamiento''.
 
 \paragraph{Comparabilidad (teacher y 7B).}
-Este cambio de criterio se aplic\'o de forma \textbf{uniforme} a todos los
-modelos (teacher, student base y student destilado). Por tanto, las
-comparaciones teacher vs 7B pre/post-KD est\'an hechas en igualdad de
-condiciones. La Tabla~\ref{tab:teacher-7b-metrics} muestra ambas m\'etricas
-en paralelo para auditor\'ia.
+El mismo protocolo de parseo y scoring se aplic\'o a todos los modelos.
+La Tabla~\ref{tab:teacher-7b-metrics} muestra en paralelo la m\'etrica
+principal (scorable) y \texttt{accuracy\_total} solo como referencia
+secundaria.
 
 \begin{table}[H]
 \centering
 \caption{Comparabilidad de m\'etricas en teacher y 7B (pre/post-KD).
-         \texttt{accuracy\_total} se usa para ranking principal;
-         \texttt{accuracy\_scorable} y \texttt{unscorable\_rate}
-         se reportan como diagn\'ostico.}
+         Columna principal: \textbf{acc.\ scorable}; \texttt{accuracy\_total}
+         y tasa \emph{unscorable} como referencia secundaria.}
 \label{tab:teacher-7b-metrics}
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{llccc}
 \toprule
-\textbf{Modelo} & \textbf{Benchmark} & \textbf{Acc. total (\%)} & \textbf{Acc. scorable (\%)} & \textbf{Unscorable (\%)} \\
+\textbf{Modelo} & \textbf{Benchmark} & \textbf{Acc. scorable (\%)} & \textbf{Acc. total (\%)} & \textbf{Unscorable (\%)} \\
 \midrule
-Teacher 14B         & GSM8K    & 92.27 & 92.41 & 0.15 \\
-Teacher 14B         & MATH-500 & 66.20 & 72.11 & 8.20 \\
+Teacher 14B         & GSM8K    & 92.41 & 92.27 & 0.15 \\
+Teacher 14B         & MATH-500 & 72.11 & 66.20 & 8.20 \\
 \midrule
-Student 7B pre-KD   & GSM8K    & 85.52 & 85.78 & 0.30 \\
-Student 7B pre-KD   & MATH-500 & 65.20 & 71.49 & 8.80 \\
+Student 7B pre-KD   & GSM8K    & 85.78 & 85.52 & 0.30 \\
+Student 7B pre-KD   & MATH-500 & 71.49 & 65.20 & 8.80 \\
 \midrule
 Student 7B post-KD (mar) & GSM8K    & 79.83 & 79.83 & 0.00 \\
-Student 7B post-KD (mar) & MATH-500 & 62.20 & 68.35 & 9.00 \\
+Student 7B post-KD (mar) & MATH-500 & 68.35 & 62.20 & 9.00 \\
 Student 7B post-KD (abr) & GSM8K    & 79.38 & 79.38 & 0.00 \\
-Student 7B post-KD (abr) & MATH-500 & 64.80 & 69.98 & 7.40 \\
+Student 7B post-KD (abr) & MATH-500 & 69.98 & 64.80 & 7.40 \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -1758,7 +1773,7 @@ Figura~\ref{fig:quality-baseline} presentan los resultados definitivos.
 \begin{table}[H]
 \centering
 \caption{Calidad definitiva de los modelos base (m\'etrica principal:
-         \texttt{accuracy\_total = correct/total\_examples}).
+         \texttt{accuracy\_scorable}, acierto solo entre respuestas parseables).
          Run 37475567--37475569, 7 de marzo de 2026.}
 \label{tab:quality-baselines}
 \begin{adjustbox}{max width=\textwidth}
@@ -1766,14 +1781,14 @@ Figura~\ref{fig:quality-baseline} presentan los resultados definitivos.
 \toprule
 \textbf{Modelo} & \textbf{Params} & \textbf{GSM8K} & \textbf{MATH-500} & \textbf{Media} \\
 \midrule
-Qwen2.5-Instruct (teacher) & 14B  & 92.27\% & 66.20\% & 79.24\% \\
-Qwen2.5-Instruct (student) & 7B   & 85.52\% & 65.20\% & 75.36\% \\
-Qwen2.5-Instruct (student) & 1.5B & 48.90\% & 33.80\% & 41.35\% \\
+Qwen2.5-Instruct (teacher) & 14B  & 92.41\% & 72.11\% & 82.26\% \\
+Qwen2.5-Instruct (student) & 7B   & 85.78\% & 71.49\% & 78.64\% \\
+Qwen2.5-Instruct (student) & 1.5B & 64.05\% & 36.11\% & 50.08\% \\
 \midrule
 \multicolumn{2}{l}{\footnotesize $\Delta$ student 7B vs.\ teacher}
-  & $-6.75$\,pp & $-1.00$\,pp & \\
+  & $-6.63$\,pp & $-0.62$\,pp & \\
 \multicolumn{2}{l}{\footnotesize $\Delta$ student 1.5B vs.\ teacher}
-  & $-43.37$\,pp & $-32.40$\,pp & \\
+  & $-28.36$\,pp & $-36.00$\,pp & \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -1802,18 +1817,18 @@ Qwen2.5-Instruct (student) & 1.5B & 48.90\% & 33.80\% & 41.35\% \\
     enlarge x limits=0.25,
 ]
 \addplot[fill=teacher, fill opacity=0.85, draw=teacher!70!black] coordinates {
-  (Teacher 14B, 92.27) (Student 7B, 85.52) (Student 1.5B, 48.90)
+  (Teacher 14B, 92.41) (Student 7B, 85.78) (Student 1.5B, 64.05)
 };
 \addplot[fill=orange!80, fill opacity=0.85, draw=orange!60!black] coordinates {
-  (Teacher 14B, 66.20) (Student 7B, 65.20) (Student 1.5B, 33.80)
+  (Teacher 14B, 72.11) (Student 7B, 71.49) (Student 1.5B, 36.11)
 };
 \legend{GSM8K, MATH-500}
 \end{axis}
 \end{tikzpicture}
-\caption{Comparativa de accuracy en GSM8K y MATH-500 para los modelos base
+\caption{Comparativa de \texttt{accuracy\_scorable} en GSM8K y MATH-500 para los modelos base
 (sin destilaci\'on). El student~7B es casi indistinguible del teacher en
-MATH-500 ($-1.00$\,pp). El student~1.5B acusa una brecha marcada tanto en
-GSM8K como en MATH-500 ($-43.37$\,pp y $-32.40$\,pp, respectivamente).}
+MATH-500 ($-0.62$\,pp). El student~1.5B acusa una brecha marcada tanto en
+GSM8K como en MATH-500 ($-28.36$\,pp y $-36.00$\,pp, respectivamente).}
 \label{fig:quality-baseline}
 \end{figure}
 
@@ -1827,45 +1842,114 @@ LoRA fueron mergeados con los pesos base para producir los modelos
 Tabla~\ref{tab:quality-postKD} compara la calidad antes y despu\'es de KD.
 
 Para la \textbf{selecci\'on final de modelo} se usa el siguiente criterio,
-en este orden: (1) maximizar \texttt{accuracy\_total} en GSM8K y MATH-500,
+en este orden: (1) maximizar \texttt{accuracy\_scorable} en GSM8K y MATH-500,
 (2) mantener throughput/latencia sin degradaciones relevantes, y
 (3) priorizar la ejecuci\'on metodol\'ogicamente m\'as limpia disponible.
 Con este criterio, el \textbf{modelo operativo recomendado para cierre de
-fase 1 es el student 1.5B post-KD de marzo}.
+fase 1 pasa a ser el student 1.5B del experimento~6 (full fine-tuning,
+abril 2026)}, por encima del merge LoRA de marzo/abril: mejora la
+calidad sobre parseables en ambos benchmarks manteniendo parseabilidad
+casi perfecta en GSM8K (Tabla~\ref{tab:parseability-gsm8k}).
 
 \begin{table}[H]
 \centering
 \caption{Calidad pre- y post-destilaci\'on (m\'etrica principal:
-         \texttt{accuracy\_total = correct/total\_examples}).
-         Marzo se toma como candidata principal; abril se reporta como
-         rerun de robustez para cierre documental.}
+         \texttt{accuracy\_scorable}).
+         Marzo y abril (merge LoRA) se conservan como historia de
+         refinamiento; abril 2026 (exp.\,6, full-FT) actualiza el mejor
+         1.5B en calidad sobre parseables.}
 \label{tab:quality-postKD}
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{llccc}
 \toprule
 \textbf{Modelo} & \textbf{Estado} & \textbf{GSM8K} & \textbf{MATH-500} & \textbf{Media} \\
 \midrule
-Qwen2.5-14B-Instruct & Teacher (ref.) & 92.27\% & 66.20\% & 79.24\% \\
+Qwen2.5-14B-Instruct & Teacher (ref.) & 92.41\% & 72.11\% & 82.26\% \\
 \midrule
-Qwen2.5-7B-Instruct  & Pre-KD   & 85.52\% & 65.20\% & 75.36\% \\
-Qwen2.5-7B-Instruct  & Post-KD (mar) & 79.83\% & 62.20\% & 71.02\% \\
-Qwen2.5-7B-Instruct  & Post-KD (abr) & 79.38\% & 64.80\% & 72.09\% \\
+Qwen2.5-7B-Instruct  & Pre-KD   & 85.78\% & 71.49\% & 78.64\% \\
+Qwen2.5-7B-Instruct  & Post-KD (mar) & 79.83\% & 68.35\% & 74.09\% \\
+Qwen2.5-7B-Instruct  & Post-KD (abr) & 79.38\% & 69.98\% & 74.68\% \\
 \multicolumn{2}{l}{\footnotesize $\Delta$ KD 7B (mar vs pre)}
-  & $-5.69$\,pp & $-3.00$\,pp & \\
+  & $-5.95$\,pp & $-3.14$\,pp & \\
 \multicolumn{2}{l}{\footnotesize $\Delta$ 7B (abr vs mar)}
-  & $-0.45$\,pp & $+2.60$\,pp & \\
+  & $-0.45$\,pp & $+1.63$\,pp & \\
 \midrule
-Qwen2.5-1.5B-Instruct & Pre-KD  & 48.90\% & 33.80\% & 41.35\% \\
-Qwen2.5-1.5B-Instruct & Post-KD (mar) & 63.91\% & 40.80\% & 52.36\% \\
-Qwen2.5-1.5B-Instruct & Post-KD (abr) & 60.27\% & 39.60\% & 49.94\% \\
+Qwen2.5-1.5B-Instruct & Pre-KD  & 64.05\% & 36.11\% & 50.08\% \\
+Qwen2.5-1.5B-Instruct & Post-KD (mar) & 64.11\% & 43.87\% & 53.99\% \\
+Qwen2.5-1.5B-Instruct & Post-KD (abr) & 60.32\% & 44.10\% & 52.21\% \\
+Qwen2.5-1.5B-Instruct & Post-KD v6 full-FT (24 abr) & 66.21\% & 47.00\% & 56.61\% \\
 \multicolumn{2}{l}{\footnotesize $\Delta$ KD 1.5B (mar vs pre)}
-  & $\mathbf{+15.01}$\,pp & $\mathbf{+7.00}$\,pp & \\
+  & $\mathbf{+0.06}$\,pp & $\mathbf{+7.76}$\,pp & \\
 \multicolumn{2}{l}{\footnotesize $\Delta$ 1.5B (abr vs mar)}
-  & $-3.64$\,pp & $-1.20$\,pp & \\
+  & $-3.79$\,pp & $+0.23$\,pp & \\
+\multicolumn{2}{l}{\footnotesize $\Delta$ 1.5B (v6 full-FT vs pre)}
+  & $\mathbf{+2.16}$\,pp & $\mathbf{+10.89}$\,pp & \\
+\multicolumn{2}{l}{\footnotesize $\Delta$ 1.5B (v6 full-FT vs mar)}
+  & $+2.10$\,pp & $+3.13$\,pp & \\
+\multicolumn{2}{l}{\footnotesize $\Delta$ 1.5B (v6 full-FT vs abr)}
+  & $+5.89$\,pp & $+2.90$\,pp & \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
 \end{table}
+
+\paragraph{Vista focalizada (solo student 1.5B).}
+La Figura~\ref{fig:1p5b-baseline-vs-v6} a\'isla el contraste que importa para
+el cierre de fase~1: el \textbf{baseline pre-KD} frente a la \textbf{\'ultima
+iteraci\'on} (post-KD v6 full-FT, abril 2026), con la misma m\'etrica principal
+(\texttt{accuracy\_scorable}) que el resto del informe.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar=5pt,
+    bar width=14pt,
+    width=0.55\textwidth, height=7cm,
+    symbolic x coords={1.5B pre-KD, 1.5B v6 full-FT},
+    xtick=data,
+    xticklabel style={font=\small},
+    ymin=0, ymax=78,
+    ytick={0,20,40,60},
+    ymajorgrids=true,
+    grid style={dashed, gray!30},
+    ylabel={\texttt{accuracy\_scorable} (\%)},
+    legend style={at={(0.5,1.02)}, anchor=south, font=\small, legend columns=2},
+    legend cell align=left,
+    nodes near coords,
+    nodes near coords align={vertical},
+    every node near coord/.append style={font=\scriptsize},
+    enlarge x limits=0.22,
+]
+\addplot[fill=smallstud!55, fill opacity=0.9, draw=smallstud!80!black] coordinates {
+  (1.5B pre-KD, 64.05) (1.5B v6 full-FT, 66.21)
+};
+\addplot[fill=orange!80, fill opacity=0.85, draw=orange!60!black] coordinates {
+  (1.5B pre-KD, 36.11) (1.5B v6 full-FT, 47.00)
+};
+\legend{GSM8K, MATH-500}
+\end{axis}
+\end{tikzpicture}
+\caption{Solo student 1.5B: baseline pre-KD vs.\ post-KD v6 full-FT
+(exp.\,6). Mismos benchmarks y definici\'on de \texttt{accuracy\_scorable}
+que la Tabla~\ref{tab:quality-postKD}. Saltos: GSM8K $+2.16$\,pp;
+MATH-500 $+10.89$\,pp.}
+\label{fig:1p5b-baseline-vs-v6}
+\end{figure}
+
+\begin{warningbox}
+\small
+\textbf{Reproducibilidad del baseline 1.5B:} con el protocolo fijado en este
+informe (decodificaci\'on greedy, \texttt{seed=42}, mismos splits y
+extractores de respuesta), los valores publicados son \emph{consistentes}
+con el c\'odigo actual de agregaci\'on. Aun as\'i, un re-lanzamiento puede
+desviarse ligeramente si cambia la pila (versi\'on de vLLM/PyTorch/CUDA,
+\texttt{cudnn.benchmark}, batching del servidor o pol\'itica de
+determinismo). Si se necesita certeza para defensa o publicaci\'on, conviene
+\textbf{repetir la corrida de calidad del 1.5B pre-KD} en MN5 con el mismo
+\texttt{eval} y anotar run~ID, commit y contenedor; si la diferencia queda
+dentro de unos puntos porcentuales, el baseline se considera estable.
+\end{warningbox}
 
 \begin{figure}[H]
 \centering
@@ -1874,7 +1958,7 @@ Qwen2.5-1.5B-Instruct & Post-KD (abr) & 60.27\% & 39.60\% & 49.94\% \\
     ybar=3pt,
   bar width=10pt,
   width=0.96\textwidth, height=9cm,
-  symbolic x coords={Teacher 14B, 7B Pre-KD, 7B Post-KD (mar), 7B Post-KD (abr), 1.5B Pre-KD, 1.5B Post-KD (mar), 1.5B Post-KD (abr)},
+  symbolic x coords={Teacher 14B, 7B Pre-KD, 7B Post-KD (mar), 7B Post-KD (abr), 1.5B Pre-KD, 1.5B Post-KD (mar), 1.5B Post-KD (abr), 1.5B v6 full-FT},
     xtick=data,
   xticklabel style={font=\scriptsize, rotate=22, anchor=east},
     ymin=0, ymax=108,
@@ -1890,33 +1974,37 @@ Qwen2.5-1.5B-Instruct & Post-KD (abr) & 60.27\% & 39.60\% & 49.94\% \\
     enlarge x limits=0.12,
 ]
 \addplot[fill=teacher, fill opacity=0.85, draw=teacher!70!black] coordinates {
-  (Teacher 14B, 92.27) (7B Pre-KD, 85.52) (7B Post-KD (mar), 79.83)
-  (7B Post-KD (abr), 79.38) (1.5B Pre-KD, 48.90)
-  (1.5B Post-KD (mar), 63.91) (1.5B Post-KD (abr), 60.27)
+  (Teacher 14B, 92.41) (7B Pre-KD, 85.78) (7B Post-KD (mar), 79.83)
+  (7B Post-KD (abr), 79.38) (1.5B Pre-KD, 64.05)
+  (1.5B Post-KD (mar), 64.11) (1.5B Post-KD (abr), 60.32) (1.5B v6 full-FT, 66.21)
 };
 \addplot[fill=orange!80, fill opacity=0.85, draw=orange!60!black] coordinates {
-  (Teacher 14B, 66.20) (7B Pre-KD, 65.20) (7B Post-KD (mar), 62.20)
-  (7B Post-KD (abr), 64.80) (1.5B Pre-KD, 33.80)
-  (1.5B Post-KD (mar), 40.80) (1.5B Post-KD (abr), 39.60)
+  (Teacher 14B, 72.11) (7B Pre-KD, 71.49) (7B Post-KD (mar), 68.35)
+  (7B Post-KD (abr), 69.98) (1.5B Pre-KD, 36.11)
+  (1.5B Post-KD (mar), 43.87) (1.5B Post-KD (abr), 44.10) (1.5B v6 full-FT, 47.00)
 };
 \legend{GSM8K, MATH-500}
 \end{axis}
 \end{tikzpicture}
-\caption{Impacto de la destilaci\'on en calidad. El student~1.5B mejora
-$\mathbf{+15.01}$\,pp en GSM8K y $\mathbf{+7.00}$\,pp en MATH-500
-en la corrida de marzo (seleccionada). Abril se mantiene como rerun de
-robustez y no mejora a marzo en 1.5B. En 7B no se observa mejora neta
-respecto al baseline.}
+\caption{Impacto de la destilaci\'on en \texttt{accuracy\_scorable}. En el
+student~1.5B, marzo (merge LoRA) sube sobre todo MATH-500
+($\mathbf{+7.76}$\,pp) y apenas mueve GSM8K ($+0.06$\,pp): la ca\'ida de
+no-parseables explica el salto si se miraba \texttt{accuracy\_total}.
+El rerun de abril (merge) no mejora a marzo en GSM8K parseable. El
+\textbf{full-FT exp.\,6} (24 abril) alcanza \textbf{66.21\,\%} en GSM8K
+($+2.10$\,pp vs.\ marzo) y \textbf{47.00\,\%} en MATH-500 ($+3.13$\,pp vs.\ marzo).
+En 7B no se observa mejora neta respecto al baseline.}
 \label{fig:quality-postKD}
 \end{figure}
 
 \subsubsection*{Desglose de error y parseabilidad}
 
-Para una lectura completa de calidad no basta con la accuracy total: es
-clave separar errores de razonamiento de errores de formato/extracci\'on.
-Las Tablas~\ref{tab:parseability-gsm8k} y~\ref{tab:parseability-math}
-desglosan, por benchmark, correctos/incorrectos/no-parseables
-(\emph{unscorable}).
+Para auditar formato frente a razonamiento conviene el desglose de
+correctos/incorrectos/no-parseables (\emph{unscorable}) y, si se desea,
+\texttt{accuracy\_total} como referencia secundaria. Las
+Tablas~\ref{tab:parseability-gsm8k} y~\ref{tab:parseability-math} consolidan
+ese desglose; la m\'etrica principal del informe sigue siendo
+\texttt{accuracy\_scorable}.
 
 \begin{table}[H]
 \centering
@@ -1925,15 +2013,16 @@ desglosan, por benchmark, correctos/incorrectos/no-parseables
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{lrrrrrr}
 \toprule
-\textbf{Modelo/estado} & \textbf{Correctos} & \textbf{Incorrectos} & \textbf{Unscorable} & \textbf{Unscorable (\%)} & \textbf{Acc. total (\%)} & \textbf{Acc. scorable (\%)} \\
+\textbf{Modelo/estado} & \textbf{Correctos} & \textbf{Incorrectos} & \textbf{Unscorable} & \textbf{Unscorable (\%)} & \textbf{Acc. scorable (\%)} & \textbf{Acc. total (\%)} \\
 \midrule
-Teacher 14B (baseline)      & 1217 & 100 & 2   & 0.15  & 92.27 & 92.41 \\
-Student 7B (pre-KD)         & 1128 & 187 & 4   & 0.30  & 85.52 & 85.78 \\
+Teacher 14B (baseline)      & 1217 & 100 & 2   & 0.15  & 92.41 & 92.27 \\
+Student 7B (pre-KD)         & 1128 & 187 & 4   & 0.30  & 85.78 & 85.52 \\
 Student 7B (post-KD mar)    & 1053 & 266 & 0   & 0.00  & 79.83 & 79.83 \\
 Student 7B (post-KD abr)    & 1047 & 272 & 0   & 0.00  & 79.38 & 79.38 \\
-Student 1.5B (pre-KD)       & 645  & 362 & 312 & 23.65 & 48.90 & 64.05 \\
-Student 1.5B (post-KD mar)  & 843  & 472 & 4   & 0.30  & 63.91 & 64.11 \\
-Student 1.5B (post-KD abr)  & 795  & 523 & 1   & 0.08  & 60.27 & 60.32 \\
+Student 1.5B (pre-KD)       & 645  & 362 & 312 & 23.65 & 64.05 & 48.90 \\
+Student 1.5B (post-KD mar)  & 843  & 472 & 4   & 0.30  & 64.11 & 63.91 \\
+Student 1.5B (post-KD abr)  & 795  & 523 & 1   & 0.08  & 60.32 & 60.27 \\
+Student 1.5B (v6 full-FT)    & 872  & 445 & 2   & 0.15  & 66.21 & 66.11 \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -1946,15 +2035,16 @@ Student 1.5B (post-KD abr)  & 795  & 523 & 1   & 0.08  & 60.27 & 60.32 \\
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{lrrrrrr}
 \toprule
-\textbf{Modelo/estado} & \textbf{Correctos} & \textbf{Incorrectos} & \textbf{Unscorable} & \textbf{Unscorable (\%)} & \textbf{Acc. total (\%)} & \textbf{Acc. scorable (\%)} \\
+\textbf{Modelo/estado} & \textbf{Correctos} & \textbf{Incorrectos} & \textbf{Unscorable} & \textbf{Unscorable (\%)} & \textbf{Acc. scorable (\%)} & \textbf{Acc. total (\%)} \\
 \midrule
-Teacher 14B (baseline)      & 331 & 128 & 41 & 8.20  & 66.20 & 72.11 \\
-Student 7B (pre-KD)         & 326 & 130 & 44 & 8.80  & 65.20 & 71.49 \\
-Student 7B (post-KD mar)    & 311 & 144 & 45 & 9.00  & 62.20 & 68.35 \\
-Student 7B (post-KD abr)    & 324 & 139 & 37 & 7.40  & 64.80 & 69.98 \\
-Student 1.5B (pre-KD)       & 169 & 299 & 32 & 6.40  & 33.80 & 36.11 \\
-Student 1.5B (post-KD mar)  & 204 & 261 & 35 & 7.00  & 40.80 & 43.87 \\
-Student 1.5B (post-KD abr)  & 198 & 251 & 51 & 10.20 & 39.60 & 44.10 \\
+Teacher 14B (baseline)      & 331 & 128 & 41 & 8.20  & 72.11 & 66.20 \\
+Student 7B (pre-KD)         & 326 & 130 & 44 & 8.80  & 71.49 & 65.20 \\
+Student 7B (post-KD mar)    & 311 & 144 & 45 & 9.00  & 68.35 & 62.20 \\
+Student 7B (post-KD abr)    & 324 & 139 & 37 & 7.40  & 69.98 & 64.80 \\
+Student 1.5B (pre-KD)       & 169 & 299 & 32 & 6.40  & 36.11 & 33.80 \\
+Student 1.5B (post-KD mar)  & 204 & 261 & 35 & 7.00  & 43.87 & 40.80 \\
+Student 1.5B (post-KD abr)  & 198 & 251 & 51 & 10.20 & 44.10 & 39.60 \\
+Student 1.5B (v6 full-FT)    & 219 & 247 & 34 & 6.80  & 47.00 & 43.80 \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -1967,7 +2057,7 @@ Student 1.5B (post-KD abr)  & 198 & 251 & 51 & 10.20 & 39.60 & 44.10 \\
   ybar=3pt,
   bar width=9pt,
   width=0.96\textwidth, height=7.4cm,
-  symbolic x coords={Teacher,7B pre,7B mar,7B abr,1.5B pre,1.5B mar,1.5B abr},
+  symbolic x coords={Teacher,7B pre,7B mar,7B abr,1.5B pre,1.5B mar,1.5B abr,1.5B v6},
   xtick=data,
   xticklabel style={font=\scriptsize, rotate=18, anchor=east},
   ymin=0, ymax=26,
@@ -1982,31 +2072,31 @@ Student 1.5B (post-KD abr)  & 198 & 251 & 51 & 10.20 & 39.60 & 44.10 \\
 ]
 \addplot[fill=teacher!60, draw=teacher!80!black] coordinates {
   (Teacher,0.15) (7B pre,0.30) (7B mar,0.00) (7B abr,0.00)
-  (1.5B pre,23.65) (1.5B mar,0.30) (1.5B abr,0.08)
+  (1.5B pre,23.65) (1.5B mar,0.30) (1.5B abr,0.08) (1.5B v6,0.15)
 };
 \addplot[fill=orange!70, draw=orange!80!black] coordinates {
   (Teacher,8.20) (7B pre,8.80) (7B mar,9.00) (7B abr,7.40)
-  (1.5B pre,6.40) (1.5B mar,7.00) (1.5B abr,10.20)
+  (1.5B pre,6.40) (1.5B mar,7.00) (1.5B abr,10.20) (1.5B v6,6.80)
 };
 \legend{GSM8K, MATH-500}
 \end{axis}
 \end{tikzpicture}
 \caption{Tasa de respuestas no parseables (unscorable). Hallazgo clave:
 la KD en 1.5B reduce dr\'asticamente el problema de formato en GSM8K
-(23.65\% \to 0.30\% en marzo), contribuyendo de forma directa a la
-mejora de \texttt{accuracy\_total}.}
+(23.65\% \to 0.30\% en marzo). Eso infla \texttt{accuracy\_total} aunque
+\texttt{accuracy\_scorable} en GSM8K apenas cambie (Tabla~\ref{tab:causal-1p5b}).}
 \label{fig:unscorable-rates}
 \end{figure}
 
 \subsubsection*{Descomposici\'on causal de la mejora en 1.5B}
 
-Para entender \emph{por qu\'e} mejora el 1.5B en marzo, descomponemos
-la variaci\'on de \texttt{accuracy\_total} en dos factores: (i) cambio en
-parseabilidad (tasa \emph{unscorable}) y (ii) cambio en calidad sobre
-casos parseables (\texttt{accuracy\_scorable}). La
-Tabla~\ref{tab:causal-1p5b} muestra que en GSM8K la mejora proviene
-casi por completo de recuperar parseabilidad, mientras que en MATH-500
-la mejora viene principalmente de mejor razonamiento en casos parseables.
+Para entender \emph{por qu\'e} cambia el 1.5B en marzo, descomponemos
+la variaci\'on de \texttt{accuracy\_total} (sensible al formato) frente
+a \texttt{accuracy\_scorable} y la tasa \emph{unscorable}. La
+Tabla~\ref{tab:causal-1p5b} muestra que en GSM8K el salto en
+\texttt{accuracy\_total} se explica casi por completo por volver a
+parsear respuestas; sobre casos ya parseables el acierto apenas se mueve.
+En MATH-500 la mejora s\'i es fuerte en \texttt{accuracy\_scorable}.
 
 \begin{table}[H]
 \centering
@@ -2015,10 +2105,27 @@ la mejora viene principalmente de mejor razonamiento en casos parseables.
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{lcccc}
 \toprule
-\textbf{Benchmark} & \textbf{$\Delta$ acc\_total} & \textbf{$\Delta$ unscorable} & \textbf{$\Delta$ acc\_scorable} & \textbf{Lectura causal dominante} \\
+\textbf{Benchmark} & \textbf{$\Delta$ acc\_scorable} & \textbf{$\Delta$ unscorable} & \textbf{$\Delta$ acc\_total} & \textbf{Lectura causal dominante} \\
 \midrule
-GSM8K    & $+15.01$\,pp & $-23.35$\,pp & $+0.06$\,pp & Recuperaci\'on de parseabilidad \\
-MATH-500 & $+7.00$\,pp  & $+0.60$\,pp  & $+7.76$\,pp & Mejora de razonamiento scorable \\
+GSM8K    & $+0.06$\,pp & $-23.35$\,pp & $+15.01$\,pp & Formato (total); acierto parseable casi plano \\
+MATH-500 & $+7.76$\,pp  & $+0.60$\,pp  & $+7.00$\,pp & Mejora de razonamiento scorable \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Descomposici\'on pre-KD $\to$ post-KD v6 full-FT (abril 2026) en student 1.5B.
+         Mismas definiciones que la Tabla~\ref{tab:causal-1p5b}.}
+\label{tab:causal-1p5b-v6}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Benchmark} & \textbf{$\Delta$ acc\_scorable} & \textbf{$\Delta$ unscorable} & \textbf{$\Delta$ acc\_total} & \textbf{Lectura causal dominante} \\
+\midrule
+GSM8K    & $+2.16$\,pp & $-23.50$\,pp & $+17.21$\,pp & Mezcla: formato (total) + empuje real modesto en parseables \\
+MATH-500 & $+10.89$\,pp & $+0.40$\,pp  & $+10.00$\,pp & Mejora fuerte en aciertos sobre casos parseables (no-parseable empeora levemente) \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -2231,7 +2338,7 @@ de distilaci\'on.}
 
 La Figura~\ref{fig:quality-efficiency-frontier} sintetiza el compromiso
 global entre calidad y capacidad de servicio. El eje X muestra throughput
-(req/s) y el eje Y la accuracy media total (promedio GSM8K + MATH-500).
+(req/s) y el eje Y la media de \texttt{accuracy\_scorable} (promedio GSM8K + MATH-500).
 Se observa que la KD desplaza el 1.5B hacia una zona claramente mejor de
 calidad manteniendo su r\'egimen de alto throughput, mientras que en 7B
 la KD no mejora la posici\'on del baseline de forma consistente.
@@ -2242,35 +2349,40 @@ la KD no mejora la posici\'on del baseline de forma consistente.
 \begin{axis}[
   width=0.90\textwidth, height=7.2cm,
   xmin=10, xmax=55,
-  ymin=38, ymax=82,
+  ymin=45, ymax=88,
   xlabel={Throughput (req/s, mayor es mejor)},
-  ylabel={Accuracy media total (\%, mayor es mejor)},
+  ylabel={Accuracy media scorable (\%, mayor es mejor)},
   ymajorgrids=true,
   xmajorgrids=true,
   grid style={dashed, gray!30},
   legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
 ]
-\addplot[only marks, mark=*, mark size=2.9pt, color=teacher] coordinates {(12.30,79.24)};
-\addplot[only marks, mark=square*, mark size=2.9pt, color=midstud] coordinates {(24.98,75.36)};
-\addplot[only marks, mark=triangle*, mark size=2.9pt, color=midstud!70!black] coordinates {(25.58,71.02)};
-\addplot[only marks, mark=triangle*, mark size=2.9pt, color=midstud!40!black] coordinates {(25.55,72.09)};
-\addplot[only marks, mark=square*, mark size=2.9pt, color=smallstud] coordinates {(50.31,41.35)};
-\addplot[only marks, mark=star, mark size=4.2pt, color=smallstud!80!black] coordinates {(49.86,52.36)};
-\addplot[only marks, mark=diamond*, mark size=3.0pt, color=smallstud!55!black] coordinates {(49.84,49.94)};
+\addplot[only marks, mark=*, mark size=2.9pt, color=teacher] coordinates {(12.30,82.26)};
+\addplot[only marks, mark=square*, mark size=2.9pt, color=midstud] coordinates {(24.98,78.64)};
+\addplot[only marks, mark=triangle*, mark size=2.9pt, color=midstud!70!black] coordinates {(25.58,74.09)};
+\addplot[only marks, mark=triangle*, mark size=2.9pt, color=midstud!40!black] coordinates {(25.55,74.68)};
+\addplot[only marks, mark=square*, mark size=2.9pt, color=smallstud] coordinates {(50.31,50.08)};
+\addplot[only marks, mark=star, mark size=4.2pt, color=smallstud!80!black] coordinates {(49.86,53.99)};
+\addplot[only marks, mark=diamond*, mark size=3.0pt, color=smallstud!55!black] coordinates {(49.84,52.21)};
+\addplot[only marks, mark=*, mark size=3.4pt, color=green!50!black] coordinates {(49.84,56.61)};
 \legend{
 Teacher 14B (base),
 7B (pre-KD),
 7B (post-KD mar),
 7B (post-KD abr),
 1.5B (pre-KD),
-1.5B (post-KD mar, seleccionado),
-1.5B (post-KD abr)
+1.5B (post-KD mar),
+1.5B (post-KD abr),
+1.5B v6 full-FT (cal.\,; req/s prov.)
 }
 \end{axis}
 \end{tikzpicture}
-\caption{Frontera calidad--eficiencia con m\'etrica de calidad media total.
-El punto seleccionado (1.5B post-KD marzo) mejora de forma clara el
-1.5B baseline en calidad sin perder el perfil de alto throughput.}
+\caption{Frontera calidad--eficiencia con media de \texttt{accuracy\_scorable}.
+El punto \textbf{1.5B v6 full-FT} usa la misma orden de magnitud de
+throughput que el 1.5B post-KD (abr) hasta consolidar el posteval
+\texttt{39515993}; la coordenada Y refleja la media GSM8K+MATH sobre
+parseables (\textbf{56.61\,\%}). El merge de marzo sigue
+siendo referencia hist\'orica de eficiencia documentada.}
 \label{fig:quality-efficiency-frontier}
 \end{figure}
 
@@ -2297,6 +2409,7 @@ Repeticiones & 1 $\to$ 3 por benchmark & Estimar robustez y evitar decisiones po
 Entrenamiento & validaci\'on 85/15, eval c/50, early stopping (patience=3) & Evitar sobreajuste y conservar mejor checkpoint & Convergencia controlada y trazable \\
 Determinismo & \texttt{cudnn.deterministic=True}, \texttt{benchmark=False} & Reducir ruido no controlado entre runs & Mejor repetibilidad run-to-run \\
 Abril (rerun) & Repetici\'on post-KD con mismo protocolo & Confirmar estabilidad del cierre antes de reportar & Eficiencia equivalente; calidad 1.5B inferior a marzo \\
+Exp.\,6 (full-FT) & SFT full-parameter 1.5B tras KD + posteval v6 & Maximizar \texttt{accuracy\_scorable} sin depender solo del merge LoRA & Calidad 1.5B superior a marzo/abril en parseables; eficiencia pendiente de cierre \texttt{[3/3]} \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -2309,20 +2422,22 @@ revela tres hallazgos principales:
 
   \item \textbf{Student 7B pre-KD} --- mejor equilibrio calidad/eficiencia
     de los modelos base:
-    retiene el $\mathbf{98.49\,\%}$ de la precisi\'on del teacher en
-    MATH-500 (65.20\,\% vs.\ 66.20\,\%) mientras duplica el throughput
+    retiene el $\mathbf{99.14\,\%}$ de la precisi\'on del teacher en
+    MATH-500 sobre parseables (71.49\,\% vs.\ 72.11\,\%) mientras duplica el throughput
     ($2.03\times$) y reduce el TPOT a la mitad ($1.88\times$ menor).
 
   \item \textbf{Student 1.5B pre-KD} --- m\'axima eficiencia:
     $4.09\times$ m\'as throughput y $3.80\times$ menor TPOT que el teacher,
-    a coste de $-43.37$\,pp en GSM8K y $-32.40$\,pp en MATH-500.
+    a coste de $-28.36$\,pp en GSM8K y $-36.00$\,pp en MATH-500 (ambas en \texttt{accuracy\_scorable}).
 
   \item \textbf{Impacto real de la destilaci\'on (resultados definitivos)}:
 \end{itemize}
 
 \begin{table}[H]
 \centering
-\caption{Impacto neto de la destilaci\'on KD en calidad.}
+\caption{Impacto neto de la destilaci\'on KD en calidad (\texttt{accuracy\_scorable}). La fila
+         \emph{v6 full-FT vs pre} resume el salto baseline $\to$ checkpoint
+         tras KD + SFT full-parameter (no solo merge LoRA).}
 \label{tab:kd-impact}
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{lcccc}
@@ -2330,42 +2445,58 @@ revela tres hallazgos principales:
 \textbf{Modelo} & \textbf{$\Delta$ GSM8K} & \textbf{$\Delta$ MATH-500}
   & \textbf{Throughput} & \textbf{Coste TPOT} \\
 \midrule
-Qwen2.5-7B-Instruct   & $-5.69$\,pp & $-3.00$\,pp & $\approx$const. & $\approx$const. \\
-Qwen2.5-1.5B-Instruct & $\mathbf{+15.01}$\,pp & $\mathbf{+7.00}$\,pp & $\approx$const. & $\approx$const. \\
+Qwen2.5-7B-Instruct   & $-5.95$\,pp & $-3.14$\,pp & $\approx$const. & $\approx$const. \\
+Qwen2.5-1.5B-Instruct (post-KD mar) & $\mathbf{+0.06}$\,pp & $\mathbf{+7.76}$\,pp & $\approx$const. & $\approx$const. \\
+Qwen2.5-1.5B-Instruct (v6 full-FT vs pre) & $\mathbf{+2.16}$\,pp & $\mathbf{+10.89}$\,pp & pendiente & pendiente \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
 \end{table}
 
 \begin{itemize}
-  \item \textbf{Student 1.5B post-KD (marzo, seleccionado):} la
-    destilaci\'on produce una mejora significativa en ambos benchmarks:
-    $+15.01$\,pp en GSM8K (48.90\,\%~$\to$~63.91\,\%) y
-    $+7.00$\,pp en MATH-500 (33.80\,\%~$\to$~40.80\,\%),
-    demostrando \emph{generalizaci\'on fuera del dominio de entrenamiento}:
-    el modelo fue entrenado con outputs de GSM8K TRAIN, pero generaliza
-    a problemas de competici\'on de MATH-500. El throughput permanece
-    pr\'acticamente inalterado ($4.05\times$ sobre el teacher).
+  \item \textbf{Student 1.5B post-KD (marzo, merge LoRA):} la
+    destilaci\'on mejora de forma clara MATH-500 sobre parseables
+    ($+7.76$\,pp; 36.11\,\%~$\to$~43.87\,\%). En GSM8K el acierto entre
+    parseables apenas cambia ($+0.06$\,pp; 64.05\,\%~$\to$~64.11\,\%): el
+    salto grande en \texttt{accuracy\_total} de esa \'epoca ven\'ia sobre
+    todo de recuperar el formato \texttt{\#\#\#\#}. Esto sigue siendo
+    \emph{generalizaci\'on fuera del dominio de entrenamiento} en MATH-500.
+    El throughput documentado en marzo permanece pr\'acticamente inalterado
+    ($4.05\times$ sobre el teacher).
 
-  \item \textbf{Rerun de abril (validaci\'on de robustez):} no mejora al
-    1.5B de marzo (cae $-3.64$\,pp en GSM8K y $-1.20$\,pp en MATH-500),
-    pero confirma que el perfil de eficiencia permanece estable. Se usa,
-    por tanto, como evidencia de estabilidad del pipeline, no como
-    candidato operativo final.
+  \item \textbf{Student 1.5B post-KD v6 (full-FT, 24 abril 2026):} sobre el
+    mismo protocolo de evaluaci\'on, el checkpoint full-FT alcanza
+    \textbf{66.21\,\%} en GSM8K y \textbf{47.00\,\%} en MATH-500
+    (\texttt{accuracy\_scorable}), es decir
+    $\mathbf{+2.16}$\,pp y $\mathbf{+10.89}$\,pp respecto al baseline
+    pre-KD, y $+2.10$\,pp / $+3.13$\,pp respecto al merge de marzo.
+
+  \item \textbf{Rerun de abril (merge, validaci\'on de robustez):} no mejora al
+    1.5B de marzo (cae $-3.79$\,pp en GSM8K parseable y sube solo
+    $+0.23$\,pp en MATH-500),
+    pero confirma que el perfil de eficiencia permanece estable. Sirve
+    como evidencia de estabilidad del pipeline antes del salto full-FT.
 
   \item \textbf{Student 7B post-KD:} no obtiene mejora neta frente al
-    baseline en la m\'etrica principal; por ello, para 7B la opci\'on
+    baseline en \texttt{accuracy\_scorable}; por ello, para 7B la opci\'on
     recomendada sigue siendo el baseline pre-KD para fase 1.
 \end{itemize}
 
 \begin{infobox}
 \textbf{Conclusi\'on clave:} Con m\'etrica principal
-\texttt{accuracy\_total}, la destilaci\'on beneficia claramente al
-modelo m\'as peque\~no (1.5B), donde la capacidad base es limitada y el
-teacher aporta una supervisi\'on especialmente valiosa. La mejor
-combinaci\'on calidad--eficiencia para el objetivo de distilaci\'on en fase 1
-es \textbf{student 1.5B post-KD (marzo)}. Para el modelo 7B, que ya parte
-de una calidad alta, no aparece mejora neta en \texttt{accuracy\_total}.
+\texttt{accuracy\_scorable}, la destilaci\'on aporta una mejora clara en
+MATH-500 del 1.5B y un empuje m\'as modesto pero real en GSM8K tras el
+\textbf{full fine-tuning} del exp.\,6. El salto visual en GSM8K que
+suger\'ia \texttt{accuracy\_total} tras el merge de marzo era en gran
+parte recuperaci\'on de parseabilidad, no un gran cambio de acierto entre
+respuestas ya extra\'ibles. Tras el full-FT, el mejor punto de
+\textbf{calidad} documentado en fase~1 es el
+\textbf{student 1.5B post-KD v6 full-FT} (GSM8K \textbf{66.21\,\%},
+MATH-500 \textbf{47.00\,\%}). La comparaci\'on de \textbf{eficiencia}
+de ese checkpoint frente a los merges LoRA queda supeditada al cierre
+del posteval SLURM \texttt{39515993} (bloque \texttt{[3/3]}). Para el
+modelo 7B, que ya parte de una calidad alta, no aparece mejora neta en
+\texttt{accuracy\_scorable}.
 \\[4pt]
 \textbf{Dataset de destilaci\'on:} Se usaron 2\,991 ejemplos del
 TRAIN split de GSM8K (\texttt{lighteval/MATH} fue eliminado de
@@ -2386,7 +2517,7 @@ resultados de calidad en cada paso.
 \centering
 \caption{Evoluci\'on de resultados por iteraci\'on de fase 1.
          Deltas de calidad respecto al baseline de cada student
-         (m\'etrica principal: \texttt{accuracy\_total}).}
+         (m\'etrica principal: \texttt{accuracy\_scorable}).}
 \label{tab:iteration-refinement}
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{@{}p{2.8cm}p{2.2cm}p{2.7cm}p{2.7cm}p{3.8cm}@{}}
@@ -2394,20 +2525,24 @@ resultados de calidad en cada paso.
 \textbf{Iteraci\'on} & \textbf{Datos KD} & \textbf{7B ($\Delta$ GSM/MATH)} & \textbf{1.5B ($\Delta$ GSM/MATH)} & \textbf{Lectura} \\
 \midrule
 Preliminar & TEST (leakage) & $-3.45$ / $+2.83$ & $+2.14$ / $+10.64$ & Resultados orientativos, no concluyentes por solapamiento train/test. \\
-Definitiva (marzo) & TRAIN (sin leakage) & $-5.69$ / $-3.00$ & $+15.01$ / $+7.00$ & Primera medici\'on metodol\'ogicamente v\'alida del impacto KD. \\
-Cierre (abril) & TRAIN (rerun) & $-6.14$ / $-0.40$ & $+11.37$ / $+5.80$ & Rerun de robustez: no supera a marzo en 1.5B; se mantiene para auditor\'ia de estabilidad. \\
+Definitiva (marzo) & TRAIN (sin leakage) & $-5.95$ / $-3.14$ & $+0.06$ / $+7.76$ & Primera medici\'on metodol\'ogicamente v\'alida del impacto KD (parseables). \\
+Cierre (abril, merge) & TRAIN (rerun) & $-6.40$ / $-1.51$ & $-3.73$ / $+7.99$ & Rerun de robustez: en GSM8K parseable abril queda por debajo de pre-KD; se mantiene para auditor\'ia de estabilidad. \\
+Exp.\,6 (full-FT) & TRAIN + SFT full 1.5B & --- & $\mathbf{+2.16}$ / $\mathbf{+10.89}$ & Mejor \texttt{accuracy\_scorable} del 1.5B en fase~1; eficiencia por consolidar (\texttt{39515993}). \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
 \end{table}
 
-En eficiencia, marzo y abril son esencialmente equivalentes: el
+En eficiencia, marzo y abril (merge) son esencialmente equivalentes: el
 throughput del 7B destilado pasa de 25.58 a 25.55 req/s y el del 1.5B
 de 49.86 a 49.84 req/s. En latencia online ($\lambda=10$), las
 diferencias tambi\'en son m\'inimas (7B p50: 3020.24\,$\to$\,3020.84 ms;
-1.5B p50: 907.63\,$\to$\,906.73 ms). Esto confirma que abril
-consolid\'o la robustez del cierre sin penalizaci\'on de eficiencia,
-pero la mejor calidad del 1.5B permanece en marzo.
+1.5B p50: 907.63\,$\to$\,906.73 ms). Esto confirma que abril (merge)
+consolid\'o la robustez del cierre sin penalizaci\'on de eficiencia.
+La \textbf{mejor calidad sobre parseables del 1.5B} queda, tras el exp.\,6, en el
+\textbf{full-FT v6} (Tabla~\ref{tab:quality-postKD}); la lectura de
+eficiencia de ese checkpoint se actualizar\'a al vuelco definitivo del
+posteval.
 
 % â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 \section{Conclusiones}
@@ -2417,23 +2552,28 @@ pero la mejor calidad del 1.5B permanece en marzo.
 
 La hip\'otesis de fase 1 queda \textbf{validada de forma condicionada}:
 la destilaci\'on black-box mejora de manera clara al modelo con menor
-capacidad base (1.5B), pero no aporta mejora neta al 7B en la m\'etrica
-principal \texttt{accuracy\_total}.
+capacidad base (1.5B) en \texttt{accuracy\_scorable} (sobre todo MATH-500
+y, tras full-FT, GSM8K), pero no aporta mejora neta al 7B en esa m\'etrica.
 
 Resultados clave que sostienen esta conclusi\'on:
 \begin{itemize}
-  \item \textbf{Student 1.5B post-KD (marzo):}
-    $+15.01$\,pp en GSM8K y $+7.00$\,pp en MATH-500 respecto al baseline,
+  \item \textbf{Student 1.5B post-KD v6 (full-FT, abril):}
+    $\mathbf{+2.16}$\,pp en GSM8K y $\mathbf{+10.89}$\,pp en MATH-500
+    respecto al baseline pre-KD (\texttt{accuracy\_scorable}), con la
+    misma trazabilidad de evaluaci\'on que el resto de corridas
+    definitivas.
+  \item \textbf{Student 1.5B post-KD (marzo, merge):}
+    $+0.06$\,pp en GSM8K parseable y $+7.76$\,pp en MATH-500 respecto al baseline,
     con eficiencia pr\'acticamente constante
     (49.86 req/s y 18.81 ms/token).
   \item \textbf{Student 7B post-KD:} degradaci\'on neta en marzo
-    ($-5.69$\,pp GSM8K, $-3.00$\,pp MATH-500), y recuperaci\'on parcial en
+    ($-5.95$\,pp GSM8K, $-3.14$\,pp MATH-500), y recuperaci\'on parcial en
     abril sin superar al baseline pre-KD.
 \end{itemize}
 
 \subsection{Conclusi\'on operativa de fase 1}
 
-Con los criterios definidos (calidad total, estabilidad de servicio y
+Con los criterios definidos (\texttt{accuracy\_scorable}, estabilidad de servicio y
 validez metodol\'ogica), la recomendaci\'on operativa queda:
 
 \begin{table}[H]
@@ -2443,20 +2583,25 @@ validez metodol\'ogica), la recomendaci\'on operativa queda:
 \begin{adjustbox}{max width=\textwidth}
 \begin{tabular}{lccccl}
 \toprule
-\textbf{Candidato} & \textbf{Acc. media (\%)} & \textbf{Req/s} & \textbf{TPOT (ms)} & \textbf{Riesgo} & \textbf{Decisi\'on} \\
+\textbf{Candidato} & \textbf{Acc. media scorable (\%)} & \textbf{Req/s} & \textbf{TPOT (ms)} & \textbf{Riesgo} & \textbf{Decisi\'on} \\
 \midrule
-7B pre-KD                  & 75.36 & 24.98 & 37.84 & Bajo & Referencia fuerte (sin KD) \\
-1.5B post-KD (mar)         & 52.36 & 49.86 & 18.81 & Medio & \textbf{Seleccionado} \\
-1.5B post-KD (abr)         & 49.94 & 49.84 & 18.88 & Medio & Rerun de robustez, no seleccionado \\
+7B pre-KD                  & 78.64 & 24.98 & 37.84 & Bajo & Referencia fuerte (sin KD) \\
+1.5B post-KD (mar)         & 53.99 & 49.86 & 18.81 & Medio & Referencia merge (marzo) \\
+1.5B post-KD (abr)         & 52.21 & 49.84 & 18.88 & Medio & Rerun merge (abril) \\
+1.5B post-KD v6 full-FT    & 56.61 & ---   & ---   & Medio & \textbf{Seleccionado (calidad)} \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
 \end{table}
 
 Interpretaci\'on: si el objetivo es \textbf{maximizar calidad absoluta},
-7B pre-KD sigue siendo la mejor opci\'on entre students. Si el objetivo es
-\textbf{maximizar eficiencia con mejora real sobre un baseline muy peque\~no},
-la opci\'on m\'as equilibrada es 1.5B post-KD de marzo.
+7B pre-KD sigue siendo la mejor opci\'on entre students \emph{sin}
+contar el salto full-FT del 1.5B. Si el objetivo es
+\textbf{maximizar calidad del 1.5B} manteniendo el mismo stack de
+serving, el candidato vigente es el \textbf{v6 full-FT} (media
+\textbf{56.61\,\%} sobre parseables), pendiente de volcar req/s y TPOT del posteval
+\texttt{39515993}. El merge de marzo sigue siendo la referencia de
+\textbf{eficiencia ya cerrada} en este informe (49.86 req/s).
 
 \subsection{Validez, l\'imites y alcance}
 
@@ -2467,8 +2612,9 @@ condiciones de validez:
     warmup expl\'icito, 3 repeticiones, y control de determinismo.
   \item Robustez de serving verificada: 0 fallos sobre 750\,000 peticiones
     en las campa\~nas online analizadas.
-  \item M\'etrica principal conservadora: \texttt{accuracy\_total}
-    penaliza salidas no parseables y evita sobreestimar calidad.
+  \item M\'etrica principal alineada con benchmarks est\'andar:
+    \texttt{accuracy\_scorable} mide acierto solo cuando la respuesta final
+    es extra\'ible; el desglose \emph{unscorable} separa fallos de formato.
 \end{itemize}
 
 L\'imites que quedan abiertos:
@@ -2484,11 +2630,13 @@ L\'imites que quedan abiertos:
 Fase 1 queda cerrada con una conclusi\'on t\'ecnica clara:
 \begin{itemize}
   \item \textbf{La distilaci\'on es altamente efectiva en 1.5B} cuando la
-    capacidad base es limitada.
+    capacidad base es limitada; el \textbf{full-FT exp.\,6} eleva adem\'as
+    el techo de \texttt{accuracy\_scorable} respecto al merge LoRA.
   \item \textbf{La distilaci\'on no aporta beneficio neto en 7B} bajo el
     dataset y configuraci\'on de esta fase.
-  \item \textbf{La eficiencia de inferencia se preserva} tras KD,
-    por lo que la decisi\'on final entre variantes recae en calidad.
+  \item \textbf{La eficiencia de inferencia se preserva} tras KD en los
+    merges documentados; el balance calidad--eficiencia del v6 full-FT
+    se completar\'a al integrar el posteval de rendimiento.
 \end{itemize}
 
 Con ello, el entregable de fase 1 cumple el objetivo del TFE: establecer,

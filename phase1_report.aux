@@ -39,3 +39,52 @@
 \@writefile{lol}{\contentsline {lstlisting}{\numberline {2}{\ignorespaces Extracto de serving.yaml}}{6}{lstlisting.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.3}\texttt  {configs/benchmark.yaml} --- Configuraci\'on de benchmarks}{6}{subsubsection.1.6.3}\protected@file@percent }
 \@writefile{lol}{\contentsline {lstlisting}{\numberline {3}{\ignorespaces Extracto de benchmark.yaml}}{6}{lstlisting.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.4}\texttt  {configs/eval.yaml} --- Configuraci\'on de evaluaci\'on}{7}{subsubsection.1.6.4}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4}{\ignorespaces Extracto de eval.yaml}}{7}{lstlisting.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.5}\texttt  {configs/distill.yaml} --- Configuraci\'on de destilaci\'on}{7}{subsubsection.1.6.5}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {5}{\ignorespaces Extracto de distill.yaml}}{7}{lstlisting.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.6}\texttt  {configs/routing.yaml} --- Configuraci\'on de routing}{8}{subsubsection.1.6.6}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {6}{\ignorespaces Extracto de routing.yaml}}{8}{lstlisting.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Sistema de evaluaci\'on}{8}{section.2}\protected@file@percent }
+\newlabel{sec:eval-system}{{2}{8}{Sistema de evaluaci\'on}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Evaluaci\'on de calidad}{8}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Motor de scoring.}{8}{section*.11}\protected@file@percent }
+\newlabel{sec:hit-unscorable}{{2.1}{9}{Definiciones operativas (hit, miss, unscorable)}{section*.12}{}}
+\@writefile{toc}{\contentsline {paragraph}{Definiciones operativas (hit, miss, unscorable).}{9}{section*.12}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Pipeline de scoring en tres etapas. Cada predicci\'on pasa por las tres comparaciones; basta con que una declare coincidencia para contar como correcta.}}{9}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:scoring}{{1}{9}{Pipeline de scoring en tres etapas. Cada predicci\'on pasa por las tres comparaciones; basta con que una declare coincidencia para contar como correcta}{figure.caption.13}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Evaluaci\'on de eficiencia}{10}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Experimentos preliminares}{10}{section.3}\protected@file@percent }
+\newlabel{sec:preliminary}{{3}{10}{Experimentos preliminares}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Visi\'on general del pipeline preliminar}{10}{subsection.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Pipeline de los experimentos preliminares. Las notas en rojo se\~nalan las limitaciones metodol\'ogicas que se identificaron posteriormente.}}{10}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:prelim-pipeline}{{2}{10}{Pipeline de los experimentos preliminares. Las notas en rojo se\~nalan las limitaciones metodol\'ogicas que se identificaron posteriormente}{figure.caption.14}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Par\'ametros utilizados}{10}{subsection.3.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Par\'ametros de los experimentos preliminares y razonamiento.}}{11}{table.caption.15}\protected@file@percent }
+\newlabel{tab:prelim-params}{{4}{11}{Par\'ametros de los experimentos preliminares y razonamiento}{table.caption.15}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Resultados de eficiencia}{11}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Throughput offline}{11}{subsubsection.3.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Throughput (1\,000 peticiones, sin warmup, 1 repetici\'on).}}{11}{table.caption.16}\protected@file@percent }
+\newlabel{tab:prelim-throughput}{{5}{11}{Throughput (1\,000 peticiones, sin warmup, 1 repetici\'on)}{table.caption.16}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Latencia online}{11}{subsubsection.3.3.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Latencia online ($\lambda =10$ req/s, 1\,000 peticiones, 1 rep).}}{11}{table.caption.17}\protected@file@percent }
+\newlabel{tab:prelim-latency}{{6}{11}{Latencia online ($\lambda =10$ req/s, 1\,000 peticiones, 1 rep)}{table.caption.17}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Resultados preliminares de eficiencia. Izquierda: throughput (mayor es mejor). Derecha: latencia (menor es mejor).}}{12}{figure.caption.18}\protected@file@percent }
+\newlabel{fig:prelim-efficiency}{{3}{12}{Resultados preliminares de eficiencia. Izquierda: throughput (mayor es mejor). Derecha: latencia (menor es mejor)}{figure.caption.18}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Resultados de calidad (l\'ineas base)}{12}{subsection.3.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Precisi\'on base en los benchmarks de calidad.}}{12}{table.caption.19}\protected@file@percent }
+\newlabel{tab:prelim-quality}{{7}{12}{Precisi\'on base en los benchmarks de calidad}{table.caption.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Destilaci\'on preliminar}{12}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.1}Paso 1: Generaci\'on de outputs del teacher}{12}{subsubsection.3.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.2}Paso 2: Entrenamiento SFT con LoRA}{13}{subsubsection.3.5.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Hiperpar\'ametros de entrenamiento SFT + LoRA.}}{13}{table.caption.20}\protected@file@percent }
+\newlabel{tab:hparams}{{8}{13}{Hiperpar\'ametros de entrenamiento SFT + LoRA}{table.caption.20}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.3}Bugs encontrados durante el desarrollo}{13}{subsubsection.3.5.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Bugs encontrados y corregidos en el training.}}{13}{table.caption.21}\protected@file@percent }
+\newlabel{tab:bugs}{{9}{13}{Bugs encontrados y corregidos en el training}{table.caption.21}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.4}Resultados de entrenamiento}{14}{subsubsection.3.5.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Resultados del entrenamiento SFT preliminar.}}{14}{table.caption.22}\protected@file@percent }
+\newlabel{tab:prelim-train}{{10}{14}{Resultados del entrenamiento SFT preliminar}{table.caption.22}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.5}Resultados post-destilaci\'on}{14}{subsubsection.3.5.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Resultados post-destilaci\'on preliminares.}}{14}{table.caption.23}\protected@file@percent }
+\newlabel{tab:prelim-postdistill}{{11}{14}{Resultados post-destilaci\'on preliminares}{table.caption.23}{}}

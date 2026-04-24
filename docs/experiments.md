@@ -247,3 +247,21 @@ results/
             ├── routerbench_metrics.json
             └── routerbench_metrics.csv
 ```
+
+---
+
+## Baseline 1.5B re-evaluation (same protocol as Exp. 6 posteval)
+
+To **re-run only evaluation** for the **pre-KD** student (`Qwen/Qwen2.5-1.5B-Instruct`, role `student_small`) using the **same stack as** `slurm/posteval_1.5b_v6.sbatch` (direct `vllm.entrypoints.openai.api_server`, `--max-model-len 4096`, `--gpu-memory-utilization 0.90`, `--dtype auto`, `--seed 42`, then `eval.run_quality` + throughput/online with `NUM_REPS=3`):
+
+```bash
+sbatch slurm/posteval_1.5b_baseline_match_v6.sbatch
+```
+
+Quality-only (skip throughput and online):
+
+```bash
+sbatch --export=ALL,SKIP_PERF_BENCH=1 slurm/posteval_1.5b_baseline_match_v6.sbatch
+```
+
+Outputs appear under `results/quality/quality-student_small-<timestamp>/` (and under `results/throughput/` / `results/online/` if perf is not skipped). Override `WORKDIR` if the clone path on MN5 differs from the default inside the sbatch file.

@@ -41,3 +41,6 @@ results/distill/teacher_outputs_1p5b_focus_residual.jsonl
 # Predictor artifacts (generated)
 results/predictors/
 results/pred_reruns/
+
+# Memoria del TFG (borrador local, PDFs de referencia)
+memoria/
