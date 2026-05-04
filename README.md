@@ -395,6 +395,20 @@ python -m routing.cascade_quality \
 
 This produces benchmark-level outputs under `results/quality/quality-cascade_phase2-<timestamp>/` using the same extraction and scoring logic as `eval/run_quality.py`, plus per-attempt routing traces for each evaluated example.
 
+## 11.0 Phase 2 — Phase A: service traces and cost predictor
+
+Phase A captures Poisson-arrival load against the same vLLM serving stack and
+trains an offline service-cost predictor (latency / GPU-seconds / energy
+proxy as a function of the request and the system state `z`).
+
+```bash
+python scripts/preflight_phase_a.py        # local sanity checks
+bash slurm/launch_phase_a.sh               # BSC: servers + captures + train
+```
+
+The full runbook (config keys, output layout, single-role variants, what `z`
+captures) lives in `docs/phase_a_runbook.md`.
+
 ### 11.1 BSC Launch Workflow (Recommended)
 
 For MareNostrum 5, use dedicated server jobs per role and a separate evaluator job:

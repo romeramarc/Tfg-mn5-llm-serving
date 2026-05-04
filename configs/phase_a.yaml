@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────
+# phase_a.yaml — Phase A configuration
+# ─────────────────────────────────────────────────────────────
+# Phase A — Service-state traces (z) and service-cost predictor.
+#
+# Pipeline (follows the email plan with Pol):
+#   1) bench.run_load_capture  → emits trace.jsonl + sidecar samples
+#   2) predictors.builders.build_cost_dataset  → builds feature/target table
+#   3) predictors.training.train_cost           → trains the service predictor
+#
+# All paths are relative to the repository root.
+# ─────────────────────────────────────────────────────────────
+
+common:
+  base_url: "http://localhost:8000"     # overridden per-role at launch time
+  seed: 42
+  results_base_dir: "results/phase_a"
+
+# ── 1) Load capture (open-loop Poisson workload) ─────────────
+capture:
+  # Prompt source: any JSONL with "prompt" or "question" key. Sampled
+  # with replacement, deterministic per seed.
+  prompts_file: "configs/prompts.jsonl"
+
+  # Per-role roster. Each entry creates one capture sub-run that targets
+  # a single vLLM endpoint. Endpoint URLs are resolved at launch time
+  # from results/routing/endpoints/<role>.url (BSC) or fall back to
+  # `common.base_url` (local single-server runs).
+  roles:
+    - name: "teacher"
+    - name: "student_mid"
+    - name: "student_small"
+
+  # Arrival law: requests are issued with exponential inter-arrivals
+  # at the configured rate λ (req/s). Run one session per λ to span
+  # low-load through queue-saturation regimes.
+  arrival_rates_rps: [1, 2, 5, 10, 20, 40]
+
+  # Workload size per λ.
+  num_requests_per_rate: 600          # main measurement window
+  num_warmup_requests: 60             # discarded from the trace
+  max_inflight: 256                   # async semaphore (open-loop ceiling)
+
+  # Generation parameters (kept identical across roles for comparability).
+  max_tokens: 256
+  temperature: 0.0
+  request_timeout_s: 120.0
+
+  # Streaming: set true to capture true TTFT from SSE; false uses TTFB.
+  stream: true
+  include_usage: true                 # adds usage block in final SSE event
+
+  # Sidecar samplers (background tasks during the session).
+  samplers:
+    server_metrics:
+      enabled: true                   # vLLM /metrics scrape (Prometheus)
+      interval_s: 0.25                # 4 Hz
+    gpu_smi:
+      enabled: true                   # nvidia-smi --query-gpu loop
+      interval_s: 0.2                 # 5 Hz
+
+# ── 2) Dataset build (feeds the predictors/ pipeline) ────────
+dataset:
+  # Glob patterns for trace files emitted by capture runs.
+  # Default expands to every Phase A capture under results/phase_a/captures/.
+  trace_glob_patterns:
+    - "results/phase_a/captures/**/trace.jsonl"
+
+  output_dir: "results/phase_a/datasets"
+  dataset_name: "service_cost_phase_a"
+
+  # Cost target. "latency_ms" matches the email's primary claim
+  # (latencia marginal). "composite" combines latency + gpu_seconds
+  # + energy with explicit weights.
+  cost_mode: "latency_ms"             # latency_ms | composite
+  latency_weight: 1.0
+  gpu_seconds_weight: 0.0
+  energy_weight: 0.0
+
+  # Feature policy: "extended_operational" is the right choice for a
+  # service predictor — it includes telemetry/system features that
+  # are observable at decision time inside the serving stack.
+  feature_policy: "extended_operational"   # strict_ex_ante | extended_operational
+
+# ── 3) Predictor training ────────────────────────────────────
+predictor:
+  output_root: "results/phase_a/predictors"
+  family: "gradient_boosting"         # linear | random_forest | gradient_boosting
+  seed: 42
+  train_ratio: 0.70
+  val_ratio: 0.15                     # test gets 0.15 (1 - train - val)
