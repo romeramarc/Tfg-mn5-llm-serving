@@ -42,5 +42,18 @@ results/distill/teacher_outputs_1p5b_focus_residual.jsonl
 results/predictors/
 results/pred_reruns/
 
-# Memoria del TFG (borrador local, PDFs de referencia)
-memoria/
+# Memoria LaTeX (artefactos de compilación; el fuente .tex sí se versiona)
+memoria/*.aux
+memoria/*.bbl
+memoria/*.blg
+memoria/*.fdb_latexmk
+memoria/*.fls
+memoria/*.lof
+memoria/*.log
+memoria/*.lot
+memoria/*.out
+memoria/*.synctex.gz
+memoria/*.toc
+memoria/*.xdv
+memoria/memoria-tfg.pdf
+memoria/Memoria-yasser*.pdf

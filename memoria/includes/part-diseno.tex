@@ -1,0 +1,293 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\part{Diseño del sistema}
+\label{part:diseno-sistema}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Diseño del sistema experimental}
+\label{sec:diseno-sistema-exp}
+
+\subsection{Visión global del pipeline}
+
+El sistema se organiza en cuatro pipelines concatenados: \textit{destilación}, \textit{serving}, \textit{evaluación} y \textit{routing}. Los dos primeros producen activos (un student destilado y un par de servidores de inferencia); el tercero somete esos activos a un protocolo de medida uniforme; el cuarto combina los servidores bajo una política concreta (A, B o C) y se vuelve a medir con el mismo protocolo del tercero. La Figura~\ref{fig:pipeline-global} muestra la vista integrada.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+>=Latex,
+node distance=6mm and 10mm,
+stage/.style={draw, rounded corners=3pt, align=center, minimum width=38mm, minimum height=12mm, font=\footnotesize, thick},
+asset/.style={draw, rounded corners=2pt, align=center, minimum width=26mm, minimum height=8mm, font=\scriptsize, fill=gray!12}
+]
+% Pipeline destilación
+\node[stage, fill=bcdata!25] (p1) {\textbf{1. Destilación}\\teacher $\to$ student};
+\node[asset, below=4mm of p1] (a1) {checkpoint student};
+
+% Pipeline serving
+\node[stage, right=14mm of p1, fill=bcstudent!25] (p2) {\textbf{2. Serving}\\vLLM (teacher + student)};
+\node[asset, below=4mm of p2] (a2) {dos endpoints HTTP};
+
+% Pipeline evaluación
+\node[stage, right=14mm of p2, fill=bcmeasure!25] (p3) {\textbf{3. Evaluación}\\calidad + servicio};
+\node[asset, below=4mm of p3] (a3) {métricas baseline};
+
+% Pipeline routing
+\node[stage, right=14mm of p3, fill=bcrouter!35] (p4) {\textbf{4. Routing}\\políticas A / B / C};
+\node[asset, below=4mm of p4] (a4) {comparativa calidad-coste};
+
+% flechas
+\draw[->] (p1) -- (p2);
+\draw[->] (p2) -- (p3);
+\draw[->] (p3) -- (p4);
+\draw[->, dashed] (a1) -- (p2);
+\draw[->, dashed] (a2) -- (p3);
+\draw[->, dashed] (a3) -- (p4);
+\end{tikzpicture}%
+}
+\caption{Vista global del pipeline: cuatro bloques encadenados que producen activos reutilizables y métricas comparables entre sí bajo un único protocolo de medida. Fuente: elaboración propia.}
+\label{fig:pipeline-global}
+\end{figure}
+
+Lo importante de esta vista es que \textbf{todas las mediciones comparten el mismo protocolo}, ya descrito en la Parte~\ref{part:gestion-tesis} (Sección~\ref{sec:metodologia-trabajo}, con warmup, ventana, repeticiones y control de variables). Eso permite comparar el teacher con el student, y cualquier política de cascada con la baseline, sin introducir sesgos por cambios de configuración. Cada uno de los cuatro pipelines se describe con detalle en las secciones siguientes.
+
+\subsection{Pipeline de destilación}
+
+Este pipeline produce el \textit{student} que usarán las Políticas B y C. Se diseña como la variante más sencilla posible compatible con el presupuesto del TFG, asumiendo explícitamente que no se trata de investigar KD sino de obtener un modelo suficientemente bueno para alimentar la cascada.
+
+\subsubsection{Selección de teacher y student}
+
+La elección de modelos viene condicionada por tres restricciones. Han de ser abiertos y permitir \textit{distillation}, vLLM debe servirlos sin modificaciones, y las combinaciones entre \textit{teacher} y \textit{student} deben tener sentido (misma familia, tokenizer idéntico y órdenes de magnitud de diferencia en parámetros). El candidato principal del proyecto es la familia Qwen2.5~\cite{qwen2}, con un teacher de entre 7B y 14B y un student más pequeño (1,5B o similar) dentro de la misma familia. Este emparejamiento garantiza tokenizer común, lo que simplifica la destilación por respuesta, y deja un diferencial de coste interesante entre los dos modelos.
+
+En caso de que el plan de contingencia R2 se active (destilación inviable con la cuota disponible), se usa directamente un modelo preentrenado pequeño de la misma familia. No se considera una derrota del TFG sino una decisión documentada: la cascada y las políticas se pueden evaluar igual, aceptando un techo de calidad algo más bajo para el student.
+
+\subsubsection{Datos para destilar}
+
+Un punto clave del pipeline es \textbf{de qué datos sale el corpus de destilación}. En una destilación off-policy clásica, se toma un conjunto de prompts, se le pasan al teacher, y el student aprende a imitar las respuestas (o, mejor, las distribuciones) del teacher. Para este TFG el corpus tiene que cumplir dos condiciones.
+\begin{enumerate}[nosep,leftmargin=*]
+\item Ser representativo del \textit{tipo de peticiones} sobre el que se va a evaluar luego. Como la evaluación final se hace sobre razonamiento matemático, conviene que el corpus de destilación tenga también un peso importante de problemas de ese estilo, aunque no sean exactamente los mismos que aparecen en el benchmark.
+\item No coincidir con los conjuntos de \textit{test} de los benchmarks que se usan en la evaluación. Cualquier contaminación invalida la comparación posterior: un student entrenado directamente con los test sets daría una falsa apariencia de calidad.
+\end{enumerate}
+En la práctica se usa una combinación de splits de entrenamiento públicos y datos sintéticos generados con el teacher sobre prompts semilla, con un filtrado básico de calidad (descartar respuestas vacías, respuestas con código incorrecto, respuestas muy cortas).
+
+\subsubsection{Función de pérdida y criterios de diseño}
+
+La pérdida es la destilación por respuesta descrita en la Sección~\ref{sec:knowledge-distillation}, y se escribe
+\[
+\mathcal{L}(x, y) = \alpha \, \mathrm{CE}\!\big(y,\, p^s(x;1)\big) + (1-\alpha)\, T^2 \, \mathrm{KL}\!\big(p^t(x;T)\,\|\,p^s(x;T)\big),
+\]
+con $T$ y $\alpha$ como hiperparámetros. Los valores exactos se eligen en los primeros experimentos del pipeline; la elección no es tanto un ``tuning'' exhaustivo como una decisión de diseño justificada, porque el presupuesto de GPU del TFG no da para hacer búsqueda masiva. Como punto de partida razonable se usan valores estándar de la literatura ($T\in[2, 4]$, $\alpha\in[0{,}1, 0{,}3]$) y se valida que la pérdida baja de forma estable.
+
+\textbf{Criterio de parada.} El entrenamiento se detiene cuando la pérdida en validación deja de mejorar durante un número fijo de pasos, con un tope absoluto de pasos para acotar el uso de GPU. No se persigue \textit{squeezear} el último 1\,\% de accuracy del student: basta con que la destilación haya convergido a un comportamiento razonablemente parecido al teacher.
+
+\textbf{Criterio de aceptación.} Para que el student destilado entre al pipeline de routing, tiene que cumplir (a) no colapsar ni generar outputs degenerados en una muestra de 100 prompts de prueba; (b) mantener accuracy por encima de un umbral mínimo absoluto (que se fija como una fracción de la accuracy del teacher) en el benchmark de calibración; (c) responder a la misma API que el teacher, para que la cascada se pueda montar sin lógica específica por modelo.
+
+\subsubsection{Ramas experimentales de destilación}
+
+Durante el proyecto se contemplan tres ramas en el pipeline de destilación, de menor a mayor ambición. No se ejecutan todas obligatoriamente: la decisión de explorar las siguientes depende del éxito y del presupuesto residual.
+
+\begin{table}[H]
+\centering
+\caption{Ramas de destilación contempladas en el TFG, ordenadas por ambición creciente. Fuente: elaboración propia.}
+\label{tab:ramas-kd}
+\footnotesize
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{3.2cm}}
+\toprule
+\textbf{Rama} & \textbf{Descripción} & \textbf{Decisión} \\
+\midrule
+K1. Off-policy básica & Corpus precomputado con el teacher; pérdida KD clásica con hard + soft labels. & \textbf{Elegida como base.} \\
+\addlinespace
+K2. Off-policy con énfasis en fallos del student & Se inyectan al corpus los ejemplos donde el student inicial falla, para reforzar esas zonas. & Solo si K1 deja un gap grande en un subconjunto identificable. \\
+\addlinespace
+K3. On-policy (GKD) & El student genera, el teacher puntúa, pérdida en secuencias del propio student~\cite{agarwal2024gkd}. & Descartada por presupuesto de GPU dentro del TFG. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+La decisión de descartar la rama K3 para el TFG no quiere decir que sea peor; quiere decir que no es viable dentro del presupuesto actual. Se deja mencionada y referenciada para el capítulo de trabajo futuro.
+
+\subsection{Pipeline de serving}
+
+El pipeline de serving es el encargado de convertir dos checkpoints (teacher y student) en dos servicios de inferencia estables, accesibles por una API HTTP uniforme, que el resto de pipelines pueden usar como caja negra.
+
+\subsubsection{Arquitectura de despliegue}
+
+Cada modelo se sirve con una instancia independiente de vLLM, ejecutada como un job SLURM en una GPU H100 dedicada. Las dos instancias pueden vivir en el mismo nodo (si hay varias GPUs disponibles) o en nodos distintos. Ambas exponen una API compatible con el formato OpenAI (\texttt{/v1/completions} y \texttt{/v1/chat/completions}), de modo que el cliente de evaluación y el router las tratan como endpoints equivalentes salvo por el nombre del modelo.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+>=Latex,
+node distance=6mm and 10mm,
+nodo/.style={draw, dashed, rounded corners=4pt, inner sep=6pt},
+srv/.style={draw, rounded corners=2pt, align=center, minimum width=34mm, minimum height=11mm, font=\footnotesize, thick},
+cli/.style={draw, rounded corners=2pt, align=center, minimum width=30mm, minimum height=9mm, font=\footnotesize, fill=yellow!22}
+]
+\node[cli] (cli) at (0,0) {Cliente de evaluación};
+
+\node[srv, fill=bcteacher!30] (tea) at (7,1) {vLLM teacher\\(H100, API :8000)};
+\node[srv, fill=bcstudent!30] (stu) at (7,-1) {vLLM student\\(H100, API :8001)};
+
+\draw[->] (cli.east) -- (tea.west);
+\draw[->] (cli.east) -- (stu.west);
+
+\node[nodo, fit=(tea)(stu), label={[font=\scriptsize]below:Nodo GPU MareNostrum~5}] {};
+\end{tikzpicture}
+\caption{Arquitectura de despliegue: dos servidores vLLM independientes exponen APIs compatibles OpenAI y son atacados por el mismo cliente. Las métricas se toman con el cliente y el servidor corriendo en el mismo nodo para eliminar latencia de red externa. Fuente: elaboración propia.}
+\label{fig:arq-serving}
+\end{figure}
+
+\subsubsection{Configuración del servidor}
+
+La configuración de vLLM se fija una sola vez y se comparte entre teacher y student salvo por el modelo cargado. Esto es crucial para la comparabilidad, pues cualquier diferencia de parámetros de serving entre modelos contamina las métricas. Los parámetros principales incluyen los siguientes.
+\begin{itemize}[nosep,leftmargin=*]
+\item \texttt{dtype} = \texttt{bfloat16} (o FP16), uniforme entre ambos modelos.
+\item \texttt{max\_model\_len} acotado a un valor razonable para GSM8K y MATH (suficiente para prompt+CoT+respuesta).
+\item \texttt{gpu\_memory\_utilization} $\sim 0{,}9$ para dejar margen al sistema.
+\item \texttt{swap\_space} = 0 (no se permite swap a CPU; un swap altera las métricas).
+\item Parámetros de decoding fijos: \texttt{temperature}=0, \texttt{top\_p}=1, \texttt{max\_tokens} uniformes por benchmark.
+\end{itemize}
+
+La elección de \texttt{temperature}=0 es deliberada. No interesa estudiar sampling estocástico en este TFG, porque añade varianza entre ejecuciones que haría la comparativa mucho más difícil de interpretar. Para discutir la cascada basta con una política determinista.
+
+\subsubsection{Instrumentación}
+
+Cada servidor emite logs estructurados por petición que incluyen, entre otros campos, el timestamp de entrada, el del primer token, el del último token, el número de tokens de prompt y de generación, el modelo usado y un identificador de petición. El cliente, a su vez, marca sus propios timestamps y asocia cada petición a un experimento. A partir de estos dos logs se reconstruyen las métricas de servicio (TTFT, latencia p50/p95, throughput) sin necesidad de instrumentación adicional.
+
+La memoria GPU se monitoriza con \texttt{nvidia-smi} en modo \texttt{dmon} durante la ventana del experimento, con un sampling de un segundo. Se registra el máximo de VRAM ocupada, que es el indicador útil. Si el máximo supera un umbral, el experimento no es seguro (riesgo de OOM en la siguiente ejecución) y se re-dimensiona.
+
+\subsection{Pipeline de evaluación}
+
+El pipeline de evaluación es el que aplica el protocolo de medida a un endpoint dado (teacher, student o una política de cascada) y devuelve un conjunto cerrado de métricas. Es la pieza que garantiza que todo se mide con la misma regla.
+
+\subsubsection{Esquema del cliente}
+
+El cliente de evaluación es un script Python que encadena tres pasos.
+
+\begin{enumerate}[nosep,leftmargin=*]
+\item \textbf{Carga del benchmark.} Lee el dataset (GSM8K, MATH) y aplica la plantilla de prompt fijada. La plantilla es la misma para todos los modelos; puede incluir \textit{few-shot examples} comunes.
+\item \textbf{Generación.} Envía las peticiones al endpoint, con una política de concurrencia configurable. Para métricas de calidad la concurrencia se puede poner a 1 (no altera el resultado); para métricas de throughput se suelen hacer barridos con distintos niveles de concurrencia.
+\item \textbf{Evaluación.} Extrae la respuesta final con un parser común (``el número después de \texttt{\#\#\#\#}'' en GSM8K, expresión en una caja \texttt{\textbackslash boxed\{\}} en MATH) y la compara con la verdad vía \textit{exact match}.
+\end{enumerate}
+
+El resultado por experimento es un fichero JSON con una entrada por petición (prompt, respuesta, métrica de calidad, tiempos) y un fichero CSV con el resumen agregado (accuracy, p50/p95 de TTFT y latencia, throughput medio, memoria GPU máxima).
+
+\subsubsection{Benchmarks y su papel}
+
+\textbf{GSM8K}~\cite{cobbe2021gsm8k} es un conjunto de unos 1\,300 problemas de aritmética escolar con razonamiento en varios pasos, pensado para evaluar capacidad matemática básica. La métrica es exact match sobre el número final. Es el benchmark de cabecera porque es estable, bien establecido y refleja una tarea donde el student tiene una probabilidad razonable de resolver una parte, pero falla en la cola más difícil.
+
+\textbf{MATH}~\cite{hendrycks2021math} es más duro: problemas de olimpiada clasificados por dificultad (niveles 1--5). Muchos student pequeños fallan la mayoría de los niveles 4--5, lo que lo convierte en una piedra de toque útil para la cascada. Si el router tiene alguna capacidad, debería detectar que los niveles 4--5 merecen el teacher mucho más que los 1--2.
+
+El TFG deja explícita la posibilidad de que MATH o GSM8K se sustituyan, combinen o complementen durante la ejecución del proyecto (por ejemplo, usar solo un subconjunto de MATH si el coste de evaluar el conjunto completo es prohibitivo). Cualquier decisión de este tipo queda documentada como parte de las ramas experimentales (Subsección~\ref{subsec:ramas-experimentales}).
+
+\subsubsection{Métricas reportadas}
+
+Por cada experimento se reportan las magnitudes de la Tabla~\ref{tab:metricas-reportadas}.
+
+\begin{table}[H]
+\centering
+\caption{Métricas reportadas por el pipeline de evaluación para cada experimento. Fuente: elaboración propia.}
+\label{tab:metricas-reportadas}
+\footnotesize
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{3.2cm}}
+\toprule
+\textbf{Métrica} & \textbf{Definición} & \textbf{Unidad} \\
+\midrule
+Accuracy / EM & Fracción de peticiones con respuesta correcta según el parser. & \% \\
+TTFT p50 / p95 & Percentiles 50 y 95 del tiempo hasta el primer token. & ms \\
+Latencia p50 / p95 & Percentiles 50 y 95 del tiempo total de servicio. & ms \\
+Throughput medio & Tokens generados por segundo agregados del sistema. & tok/s \\
+VRAM pico & Máximo de VRAM ocupada en la ventana de medida. & GB \\
+\% escaladas al teacher & En políticas B y C: fracción de peticiones que terminan usando el teacher. & \% \\
+Energía consumida & Registrada vía \texttt{sacct ConsumedEnergy} a nivel de job SLURM. & Wh \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Con estas métricas, cada política (A, B o C) queda caracterizada por un punto en un espacio multidimensional calidad--coste--latencia. La discusión final de resultados consiste en comparar esos puntos y razonar bajo qué restricciones operativas una política domina a las otras.
+
+\subsection{Pipeline de routing}
+
+El pipeline de routing materializa la lógica de las Políticas B y C y las somete al mismo protocolo de medida que el teacher y el student aislados.
+
+\subsubsection{Política A (baseline)}
+
+No hay pipeline específico; se reutiliza el pipeline de evaluación atacando únicamente al endpoint del teacher. Sirve como referencia contra la que se miden B y C.
+
+\subsubsection{Política B (cascada forzada)}
+
+La Política B se implementa como un pequeño módulo cliente que, para cada petición, ejecuta la secuencia siguiente.
+\begin{enumerate}[nosep,leftmargin=*]
+\item Envía la petición al student y espera su respuesta.
+\item Aplica una función \textit{quality gate} $g(\cdot)$ sobre la respuesta del student.
+\item Si $g$ acepta, devuelve la respuesta del student.
+\item Si $g$ rechaza, envía la misma petición al teacher y devuelve su respuesta.
+\end{enumerate}
+
+La clave del diseño es qué función se usa como \textit{quality gate}. Hay un abanico de opciones con distinto coste y distinto grado de información.
+\begin{itemize}[nosep,leftmargin=*]
+\item \textbf{Parser estructural.} Rechazar si la respuesta no tiene el formato esperado (por ejemplo, si no contiene un \texttt{\#\#\#\#} seguido de número en GSM8K, o una caja \texttt{\textbackslash boxed} en MATH). Es gratis pero solo detecta errores de formato, no de contenido.
+\item \textbf{Señales de confianza del student.} Usar log-probabilidades del último token, entropía media de la distribución, margen top-1 vs top-2. Más informativo, sigue siendo barato.
+\item \textbf{Segunda muestra de verificación.} Pedir al student que se \textit{autoverifique}, o comparar dos generaciones con temperatura baja y rechazar si difieren. Más caro.
+\item \textbf{LLM juez externo.} Preguntar a un tercer modelo (o al propio teacher con un prompt ligero) si la respuesta parece correcta. Caro pero preciso.
+\end{itemize}
+
+El TFG adopta la combinación ``parser estructural + señales de confianza'' porque es la más defendible como \textit{cascada forzada} en el sentido estricto. El \textit{quality gate} es barato, no requiere ejecutar el teacher ni entrenar modelos adicionales. Las alternativas más caras se dejan como extensiones para trabajo futuro.
+
+\subsubsection{Política C (cascada por confianza)}
+
+La Política C introduce un \textbf{predictor} que decide \textit{a priori} si una petición se envía al student o directamente al teacher. El objetivo es evitar el coste extra de las peticiones que, en la Política B, acaban escalando tras ejecutarse en el student.
+
+\textbf{Features del predictor.} Se consideran tres grupos.
+\begin{enumerate}[nosep,leftmargin=*]
+\item \textit{Del prompt:} longitud en tokens, presencia de símbolos matemáticos, ratio de palabras por línea, densidad de números, idioma detectado, nivel de dificultad si es un benchmark que lo anota.
+\item \textit{Del student (con pasada corta):} log-prob del primer token generado, entropía media de los primeros $k$ tokens, perplejidad del prompt. Esto implica pagar una pequeña parte del student; no es gratis pero es barato.
+\item \textit{Mixtas.} Combinaciones de las anteriores con un clasificador (regresión logística o gradient boosting).
+\end{enumerate}
+
+\textbf{Etiquetas de entrenamiento.} Para cada prompt del conjunto de entrenamiento del predictor se ejecutan \textit{offline} el student y el teacher, y se etiqueta como ``fácil'' si el student acierta (y por tanto se puede servir con el pequeño) y como ``difícil'' si no. Sobre este dataset se entrena el clasificador.
+
+\textbf{Umbral de decisión.} El predictor devuelve una probabilidad de ``fácil''; el umbral que decide si se usa student o teacher se calibra sobre un conjunto de validación para balancear ahorro y calidad. Se reporta la curva completa (ROC-like) en los resultados, no un único punto.
+
+\textbf{Latencia del router.} El router corre en CPU con features baratas o con una pasada corta del student, pero aun así añade una latencia no nula al pipeline. El objetivo del TFG es caracterizarla explícitamente, porque forma parte del coste de la Política C.
+
+\subsubsection{Criterio de comparación entre políticas}
+
+Para decidir si una política es mejor que otra no basta con mirar un número. Las tres conviven en un espacio multiobjetivo con al menos tres ejes: accuracy, fracción de peticiones al teacher (proxy de coste) y latencia p95. Una política domina a otra si es mejor o igual en los tres ejes y mejor en al menos uno. Lo más probable es que no haya dominación estricta: la Política C será mejor en coste y latencia a costa de un pequeño margen de accuracy, y la Política B un caso intermedio.
+
+La discusión de resultados se organiza en torno a esa frontera de Pareto calidad--coste y no en torno a un ``ganador''. En el capítulo de resultados se reportarán las tres políticas lado a lado con el mismo conjunto de métricas, y se razonará en qué escenario operativo cada una es preferible.
+
+\subsection{Ramas experimentales y decisiones de diseño}
+\label{subsec:ramas-experimentales}
+
+Un TFG experimental no se reduce a la rama que funciona. Mucha información útil está en las ramas que se probaron, se descartaron o se aparcaron, y en los motivos de cada decisión. Esta sección recoge de forma estructurada esas decisiones y actúa como registro permanente; se irá ampliando a medida que el trabajo avance, pero su esqueleto ya es conocido.
+
+\begin{table}[H]
+\centering
+\caption{Ramas experimentales y decisiones de diseño del TFG. Elaboración propia.}
+\label{tab:ramas}
+\footnotesize
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{3cm}}
+\toprule
+\textbf{Decisión} & \textbf{Alternativas y justificación} & \textbf{Estado} \\
+\midrule
+Familia de modelos & Qwen2.5 (misma familia teacher/student, tokenizer común); alternativas: Llama3, Mistral. Qwen2.5 elegida por madurez del ecosistema y cobertura de tamaños. & \textbf{Fijada.} \\
+\addlinespace
+Motor de serving & vLLM vs TGI vs llama.cpp. Elegido vLLM por PagedAttention, madurez, uso estándar en BSC y API compatible OpenAI. & \textbf{Fijada.} \\
+\addlinespace
+Tipo de KD & Off-policy response-based (K1) vs on-policy GKD (K3) vs feature-based. Elegida K1 por coste y simplicidad; K3 descartada por GPU. & \textbf{Fijada.} \\
+\addlinespace
+Benchmark principal & GSM8K + MATH vs HumanEval + HELM vs mezcla. Elegidos GSM8K+MATH por cobertura de razonamiento y estabilidad. & \textbf{Fijada, sujeta a revisión.} \\
+\addlinespace
+Quality gate Política~B & Parser + señales de confianza vs verificador externo vs self-consistency. Elegida la primera por coste. & \textbf{Fijada.} \\
+\addlinespace
+Predictor Política~C & Features mixtas con clasificador ligero vs LLM juez vs heurística manual. Elegido clasificador ligero por interpretabilidad y coste. & \textbf{Fijada, tuning pendiente.} \\
+\addlinespace
+Temperatura de decoding & 0 vs sampling con $T>0$. Fijada a 0 para eliminar varianza y simplificar comparación. & \textbf{Fijada.} \\
+\addlinespace
+Concurrencia de evaluación & 1 para calidad, sweep para throughput. Evita que el mismo experimento mezcle dos regímenes. & \textbf{Fijada.} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Cada una de estas decisiones podría cambiar a lo largo del proyecto; cuando cambie, se actualizará esta tabla y se documentará el motivo en \texttt{CHANGELOG.md}. El objetivo es que la memoria, en su versión final, cuente no solo qué se hizo sino también qué se probó, qué se descartó y por qué.
+

@@ -1,0 +1,107 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PORTADA
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{titlepage}
+\centering
+
+\IfFileExists{figures/upc.png}{%
+  \includegraphics[width=1\textwidth]{figures/upc.png}%
+}{%
+  \IfFileExists{upc.png}{%
+    \includegraphics[width=1\textwidth]{upc.png}%
+  }{%
+    \fbox{\begin{minipage}[c][2.2cm]{\textwidth}\centering\vfill
+    \textbf{Logo UPC}\\[0.3em]
+    \small Coloca \texttt{upc.png} en \texttt{memoria/figures/} (recomendado) o en \texttt{memoria/}.
+    \vfill\end{minipage}}%
+  }%
+}\\[1cm]
+
+{\Large \textbf{Trabajo de Fin de Grado}}\\[0.5cm]
+{\large Grado en Ingeniería Informática}\\[0.3cm]
+{\large Especialidad: Computación}\\[1cm]
+
+{\LARGE \textbf{Knowledge Distillation y despliegue eficiente de modelos de lenguaje en entornos de supercomputación}}\\[3cm]
+
+\begin{center}
+\begin{tabular}{r l}
+\textbf{Autor:} & Marc Romera Peral \\[0.3cm]
+\textbf{Dirección:} & Josep Lluís Berral García \\
+                    & Pol Garcia Recasens \\[0.3cm]
+\textbf{Departamento:} & Arquitectura de Computadores \\[0.3cm]
+\textbf{Universidad:} & Universitat Politècnica de Catalunya \\[0.3cm]
+\textbf{Centro:} & Facultat d'Informàtica de Barcelona \\[0.3cm]
+\textbf{Curso:} & 2025--2026 \\
+\end{tabular}
+\end{center}
+\end{titlepage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ABSTRACTS (es / ca / en)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\section*{Resumen}
+\addcontentsline{toc}{section}{Resumen}
+
+Los modelos de lenguaje de gran tamaño (Large Language Models, LLMs) han alcanzado en los últimos años un nivel de calidad que los hace útiles en muchísimas tareas, pero su despliegue en producción sigue siendo caro. El coste dominante no es entrenarlos, sino servirlos, pues cada token generado requiere una ejecución completa del modelo y los modelos más potentes no caben ni siquiera en una única GPU de gama alta sin técnicas de gestión de memoria sofisticadas.
+
+Este Trabajo de Fin de Grado estudia cómo reducir el coste computacional de la inferencia de LLMs sin degradar significativamente la calidad de sus respuestas. La hipótesis de partida es sencilla. No todas las peticiones necesitan el modelo más grande; muchas pueden resolverse con un modelo más pequeño y más barato, y conviene reservar al modelo grande solo para las peticiones que realmente lo justifican.
+
+A partir de esa idea se diseña un sistema de cascada entre \textit{teacher} y \textit{student}, construido con modelos obtenidos mediante destilación del conocimiento (knowledge distillation), que compara experimentalmente tres políticas de servicio (baseline con el modelo grande o \textit{teacher}, cascada forzada que intenta primero con el modelo pequeño o \textit{student} y escala si no cumple un criterio mínimo, y cascada por confianza con un predictor que decide a priori qué modelo atiende cada petición). El sistema se despliega sobre el supercomputador MareNostrum~5 del Barcelona Supercomputing Center utilizando vLLM como motor de serving, y se mide tanto en métricas de calidad (accuracy en benchmarks estándar) como en métricas de servicio (TTFT, latencia p95, throughput y memoria GPU).
+
+El objetivo último es caracterizar de forma reproducible el compromiso entre calidad y eficiencia de las tres políticas, y discutir bajo qué condiciones la cascada es preferible al uso directo del teacher.
+
+\textbf{Palabras clave.} Modelos de lenguaje, destilación del conocimiento, inferencia eficiente, cascada de modelos, supercomputación, vLLM, MareNostrum~5.
+
+\newpage
+\section*{Resum}
+\addcontentsline{toc}{section}{Resum}
+
+Els models de llenguatge de gran mida (Large Language Models, LLMs) han assolit en els darrers anys un nivell de qualitat que els fa útils en moltíssimes tasques, però desplegar-los en producció continua sent car. El cost dominant no és entrenar-los, sinó servir-los, ja que cada token generat requereix una execució completa del model, i els models més potents no caben ni tan sols en una GPU d'alta gamma sense tècniques de gestió de memòria sofisticades.
+
+Aquest Treball de Fi de Grau estudia com reduir el cost computacional de la inferència de LLMs sense degradar significativament la qualitat de les seves respostes. La hipòtesi de partida és senzilla. No totes les peticions necessiten el model més gran; moltes es poden resoldre amb un model més petit i barat, i convé reservar el gran només per a les peticions que realment ho justifiquen.
+
+A partir d'aquesta idea es dissenya un sistema de cascada entre \textit{teacher} i \textit{student}, construït amb models obtinguts mitjançant destil·lació del coneixement (knowledge distillation), que compara experimentalment tres polítiques de servei (baseline amb el model gran o \textit{teacher}, cascada forçada que prova primer amb el model petit o \textit{student} i escala si no compleix un criteri mínim, i cascada per confiança amb un predictor que decideix a priori quin model atén cada petició). El sistema es desplega sobre el supercomputador MareNostrum~5 del Barcelona Supercomputing Center utilitzant vLLM com a motor de serving, i es mesura tant en mètriques de qualitat (accuracy en benchmarks estàndard) com en mètriques de servei (TTFT, latència p95, throughput i memòria GPU).
+
+L'objectiu final és caracteritzar de manera reproduïble el compromís entre qualitat i eficiència de les tres polítiques, i discutir en quines condicions la cascada és preferible a l'ús directe del teacher.
+
+\textbf{Paraules clau.} Models de llenguatge, destil·lació del coneixement, inferència eficient, cascada de models, supercomputació, vLLM, MareNostrum~5.
+
+\newpage
+\section*{Abstract}
+\addcontentsline{toc}{section}{Abstract}
+
+In recent years Large Language Models (LLMs) have reached a quality level that makes them useful in a wide range of tasks, but deploying them in production is still expensive. The dominant cost is not training, but serving, because every generated token requires a full forward pass of the model, and the most capable models do not fit on a single high-end GPU without sophisticated memory management techniques.
+
+This Bachelor's Thesis studies how to reduce the computational cost of LLM inference without significantly degrading the quality of its answers. The starting hypothesis is simple. Not every request needs the largest model; many of them can be handled by a smaller and cheaper model, and the large one should be reserved only for requests that actually require it.
+
+Building on this idea, we design a cascade between \textit{teacher} and \textit{student}, composed of models obtained through knowledge distillation, and we experimentally compare three serving policies (baseline with the large model or \textit{teacher}, forced cascade that tries first with the small model or \textit{student} and escalates if the answer does not meet a minimum quality criterion, and confidence-based cascade with a predictor to decide a priori which model should handle each request). The system is deployed on MareNostrum~5 at the Barcelona Supercomputing Center using vLLM as the serving engine, and is measured both in quality metrics (accuracy on standard benchmarks) and in serving metrics (TTFT, p95 latency, throughput and GPU memory).
+
+The ultimate goal is to characterise, in a reproducible way, the quality--efficiency trade-off of the three policies, and to discuss under which conditions the cascade is preferable to using the teacher directly.
+
+\textbf{Keywords.} Large language models, knowledge distillation, efficient inference, model cascade, supercomputing, vLLM, MareNostrum~5.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% AGRADECIMIENTOS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\section*{Agradecimientos}
+\addcontentsline{toc}{section}{Agradecimientos}
+
+A mis directores, Josep Lluís Berral y Pol Garcia, por hacer posible este proyecto, por su guía técnica y por el tiempo dedicado a las sesiones de seguimiento. Al Barcelona Supercomputing Center y, en particular, al grupo Data Centric Computing, por facilitar el acceso a MareNostrum~5 y el entorno experimental necesario para llevar a cabo los experimentos.
+
+A la Facultat d'Informàtica de Barcelona y a los profesores con los que he coincidido durante el Grado, cuya formación ha hecho posible afrontar este trabajo. Y, finalmente, a mi familia y amigos por el apoyo durante todo el proceso.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ÍNDICES
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\tableofcontents
+\newpage
+\listoftables
+\newpage
+\listoffigures
+\newpage
+
+\small
+
