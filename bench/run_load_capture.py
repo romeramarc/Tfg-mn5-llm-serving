@@ -879,7 +879,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Phase A — Poisson load capture")
     parser.add_argument("--config", default="configs/phase_a.yaml")
     parser.add_argument("--role", required=True,
-                        help="Role key in configs/models.yaml (teacher | student_mid | student_small)")
+                        help="Role key in configs/models.yaml (teacher | student_mid | student_q3b | student_small | student_tiny)")
     parser.add_argument("--base-url", default=None,
                         help="Override base URL (else read from results/routing/endpoints/<role>.url)")
     parser.add_argument("--model", default=None,

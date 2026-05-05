@@ -61,12 +61,31 @@ results/phase_a/
 
 ## 3. Local checks (run before pushing to BSC)
 
+On **your laptop / WSL**, `env/setup_env.sh` is not the MareNostrum Lmod stack:
+it skips `module load` and activates, in order, `VENV_PATH` if set, else
+`<repo>/.venv`, else `~/.venvs/tfg`. Create a repo venv once:
+
+```bash
+cd /path/to/repo
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install numpy httpx scikit-learn joblib pyyaml python-json-logger
+# optional full stack (heavy): pip install -r requirements.txt
+```
+
+Then either `source env/setup_env.sh` or stay inside `.venv` and run:
+
 ```bash
 python scripts/preflight_phase_a.py
 ```
 
 This validates configs, imports, prompt count and SLURM templates. It does
 **not** require a GPU.
+
+If you sourced `setup_env.sh` on WSL **before** creating `.venv`, you will see
+`module: command not found` (harmless) and then the script tells you how to
+create `.venv`.
 
 ## 4. BSC execution
 

@@ -32,14 +32,14 @@ set -euo pipefail
 
 ROLE="${ROLE:-}"
 if [[ -z "${ROLE}" ]]; then
-  echo "ERROR: ROLE is required (teacher|student_mid|student_small)."
+  echo "ERROR: ROLE is required (teacher|student_mid|student_q3b|student_small|student_tiny)."
   echo "Submit example:"
   echo "  sbatch --nodelist=\$SERVER_NODE --export=ALL,ROLE=teacher,PROJECT_DIR=\$PWD slurm/phase_a_capture.sbatch"
   exit 1
 fi
 
 case "${ROLE}" in
-  teacher|student_mid|student_small) ;;
+  teacher|student_mid|student_q3b|student_small|student_tiny) ;;
   *)
     echo "ERROR: invalid ROLE='${ROLE}'."
     exit 1

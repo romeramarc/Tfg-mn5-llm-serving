@@ -1,17 +1,32 @@
 # ─────────────────────────────────────────────────────────────
-# models.yaml — Model registry
+# models.yaml — Model registry (5-model routing roster)
 # ─────────────────────────────────────────────────────────────
-# All model identifiers used across serving, distillation,
-# and routing modules are declared here.  No other file may
-# hard-code model names or paths.
+# Five-rung Qwen 2.5 ladder used by Phase A capture + Phase D routing.
+# One of the rungs is OUR distilled student (full fine-tuning, exp.6).
+#
+# Roles (smallest → largest):
+#   student_tiny    : Qwen2.5-0.5B-Instruct  (base)
+#   student_small   : 1.5B distilled (full fine-tuning, exp.6)  ← our model
+#   student_q3b     : Qwen2.5-3B-Instruct    (base)
+#   student_mid     : Qwen2.5-7B-Instruct    (base)
+#   teacher         : Qwen2.5-14B-Instruct   (base)
+#
+# Notes
+# -----
+# * `student_small.name` is a path on the BSC project filesystem produced by
+#   slurm/distill_train_1.5b_v6.sbatch. If you train a newer full-FT 1.5B,
+#   either point this entry to the new directory or symlink the old path
+#   in-place (sft-full-qwen2.5-1.5b-v6-<TIMESTAMP>/final_model).
+# * Path is relative to the repository root; vLLM resolves it from the cwd
+#   that the SLURM scripts cd into (PROJECT_DIR).
 # ─────────────────────────────────────────────────────────────
 
 teacher:
   name: "Qwen/Qwen2.5-14B-Instruct"
   revision: "main"
-  dtype: "auto"                 # auto | float16 | bfloat16
+  dtype: "auto"
   trust_remote_code: false
-  tensor_parallel_size: 1      # 14B fits in a single H100-80G
+  tensor_parallel_size: 1
 
 student_mid:
   name: "Qwen/Qwen2.5-7B-Instruct"
@@ -20,10 +35,27 @@ student_mid:
   trust_remote_code: false
   tensor_parallel_size: 1
 
-student_small:
-  name: "Qwen/Qwen2.5-1.5B-Instruct"
+student_q3b:
+  name: "Qwen/Qwen2.5-3B-Instruct"
   revision: "main"
   dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+# Our distilled student (full fine-tuning, exp.6).
+# If a newer full-FT run produces a different timestamped folder, update
+# the path below — the format is sft-full-qwen2.5-1.5b-v6-<TS>/final_model.
+student_small:
+  name: "results/distill/sft-full-qwen2.5-1.5b-v6-20260423T121313Z/final_model"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+student_tiny:
+  name: "Qwen/Qwen2.5-0.5B-Instruct"
+  revision: "main"
+  dtype: "float16"
   trust_remote_code: false
   tensor_parallel_size: 1
 

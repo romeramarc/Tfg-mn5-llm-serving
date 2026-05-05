@@ -26,10 +26,15 @@ capture:
   # a single vLLM endpoint. Endpoint URLs are resolved at launch time
   # from results/routing/endpoints/<role>.url (BSC) or fall back to
   # `common.base_url` (local single-server runs).
+  #
+  # Five-rung roster (matches configs/models.yaml). `student_small` is
+  # OUR distilled 1.5B (full fine-tuning, exp.6).
   roles:
     - name: "teacher"
     - name: "student_mid"
+    - name: "student_q3b"
     - name: "student_small"
+    - name: "student_tiny"
 
   # Arrival law: requests are issued with exponential inter-arrivals
   # at the configured rate λ (req/s). Run one session per λ to span
