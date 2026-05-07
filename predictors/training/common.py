@@ -17,6 +17,7 @@ from sklearn.ensemble import (
 )
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.inspection import permutation_importance
 
 from distill.dataset_utils import read_jsonl
 from predictors.dataset_common import META_COLUMNS
@@ -97,7 +98,21 @@ def run_training(
     model_dir = make_model_dir(output_root=output_root, predictor_id=predictor_id, model_family=model_family)
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    feature_importance_rows = extract_feature_importance(estimator, vectorizer)
+    # Feature importance:
+    # - Tree models like RandomForest expose `feature_importances_`.
+    # - Linear models expose `coef_`.
+    # - HistGradientBoosting* exposes neither, so we fall back to permutation importance on the
+    #   validation split to keep a stable, model-agnostic importance report.
+    X_val_raw = to_feature_matrix(val_rows, feature_columns, feature_types)
+    X_val_enc = vectorizer.transform(X_val_raw)
+    y_val = np.asarray([float(row[target_column]) for row in val_rows], dtype=float)
+    feature_importance_rows = extract_feature_importance(
+        estimator,
+        vectorizer,
+        X_ref=X_val_enc,
+        y_ref=y_val if task == "regression" else y_val.astype(int),
+        seed=seed,
+    )
 
     metrics_payload = {
         "predictor_id": predictor_id,
@@ -375,7 +390,14 @@ def build_estimator(*, task: str, family: str, seed: int) -> Any:
     raise ValueError(f"Unsupported estimator family '{family}' for task '{task}'")
 
 
-def extract_feature_importance(estimator: Any, vectorizer: DictVectorizer) -> List[Dict[str, float]]:
+def extract_feature_importance(
+    estimator: Any,
+    vectorizer: DictVectorizer,
+    *,
+    X_ref: Optional[np.ndarray] = None,
+    y_ref: Optional[np.ndarray] = None,
+    seed: int = 42,
+) -> List[Dict[str, float]]:
     names = vectorizer_feature_names(vectorizer)
     values: Optional[np.ndarray] = None
 
@@ -387,6 +409,23 @@ def extract_feature_importance(estimator: Any, vectorizer: DictVectorizer) -> Li
             values = np.abs(coef)
         else:
             values = np.mean(np.abs(coef), axis=0)
+
+    if values is None:
+        # Model-agnostic fallback (e.g., HistGradientBoosting*).
+        # Use permutation importance if reference data is available.
+        if X_ref is not None and y_ref is not None and len(names) > 0:
+            try:
+                result = permutation_importance(
+                    estimator,
+                    X_ref,
+                    y_ref,
+                    n_repeats=10,
+                    random_state=seed,
+                    n_jobs=-1,
+                )
+                values = np.asarray(result.importances_mean, dtype=float)
+            except Exception:
+                return []
 
     if values is None or len(values) != len(names):
         return []

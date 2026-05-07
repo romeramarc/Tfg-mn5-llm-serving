@@ -42,7 +42,7 @@ PROJECT_DIR="${PROJECT_DIR:-/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving}"
 cd "${PROJECT_DIR}"
 source env/setup_env.sh
 
-mkdir -p logs results/routing/endpoints
+mkdir -p logs results/routing/endpoints results/phase_a/gpu_samples_by_role
 
 # Pick a free port inside a role-specific range so jobs can safely share nodes.
 case "${ROLE}" in
@@ -134,6 +134,35 @@ cfg.setdefault("server", {})["port"] = int("${SERVER_PORT}")
 save_yaml(cfg, "${RUNTIME_SERVING_CFG}")
 print(f"Runtime serving config written to: ${RUNTIME_SERVING_CFG}")
 EOF
+
+# ── GPU sampler sidecar (runs ON THE SERVER NODE, sees the right GPU) ──
+# Captures will read from this path instead of running their own sampler,
+# so GPU telemetry is always for the GPU that is actually serving the model.
+GPU_SAMPLES_DIR="results/phase_a/gpu_samples_by_role"
+GPU_SAMPLES_PATH="${GPU_SAMPLES_DIR}/${ROLE}-${SLURM_JOB_ID}.jsonl"
+GPU_SAMPLES_PUBLISH="results/routing/endpoints/${ROLE}.gpu"
+
+# Publish gpu samples path BEFORE starting vLLM so captures can pick it up.
+TMP_GPU_PUBLISH="${GPU_SAMPLES_PUBLISH}.tmp.${SLURM_JOB_ID}"
+printf '%s\n' "${PROJECT_DIR}/${GPU_SAMPLES_PATH}" > "${TMP_GPU_PUBLISH}"
+mv "${TMP_GPU_PUBLISH}" "${GPU_SAMPLES_PUBLISH}"
+
+# Start the sampler in background, kill on exit.
+python -m bench.gpu_sampler --output "${GPU_SAMPLES_PATH}" --interval 0.2 \
+  > "logs/gpu-sampler-${ROLE}-${SLURM_JOB_ID}.out" \
+  2> "logs/gpu-sampler-${ROLE}-${SLURM_JOB_ID}.err" &
+GPU_SAMPLER_PID=$!
+echo "GPU sampler started: pid=${GPU_SAMPLER_PID}, output=${GPU_SAMPLES_PATH}"
+
+cleanup() {
+  if [[ -n "${GPU_SAMPLER_PID:-}" ]] && kill -0 "${GPU_SAMPLER_PID}" 2>/dev/null; then
+    kill -TERM "${GPU_SAMPLER_PID}" || true
+    sleep 1
+    kill -KILL "${GPU_SAMPLER_PID}" 2>/dev/null || true
+  fi
+  rm -f "${GPU_SAMPLES_PUBLISH}" "${ENDPOINT_FILE}"
+}
+trap cleanup EXIT
 
 echo "Launching role server process..."
 python -m serving.start_server \

@@ -8,11 +8,15 @@
 #   2. Submits a vLLM server job per role declared in
 #      configs/phase_a.yaml → capture.roles using
 #      slurm/server_role_phase2.sbatch.
-#   3. Submits one capture client per role with
-#      slurm/phase_a_capture.sbatch (waits for the server endpoint).
-#   4. Submits the predictor training job (phase_a_train.sbatch)
-#      with --dependency=afterok on every capture job, so it runs
-#      automatically once captures have finished.
+#   3. WAITS until each server allocation is RUNNING and extracts the
+#      compute node it landed on.
+#   4. Submits one capture client per role with
+#      slurm/phase_a_capture.sbatch and **--nodelist=<server_node>** so
+#      the capture is GUARANTEED to be co-located with its server. This
+#      is required for nvidia-smi / GPU sampling to see the right GPU.
+#   5. Submits the predictor training job (phase_a_train.sbatch) with
+#      --dependency=afterok on every capture, so it auto-runs once
+#      captures have finished successfully.
 #
 # Usage
 # -----
@@ -23,6 +27,7 @@
 #   PHASE_A_CONFIG     path to YAML (default: configs/phase_a.yaml)
 #   ROLES              space-separated role list (default: read from YAML)
 #   BENCHMARK_LABEL    label written into the trace (default: phase_a_workload)
+#   SERVER_WAIT_S      max seconds to wait for each server to RUN (default: 1800)
 #
 # After captures complete, the launcher prints the scancel command for
 # the long-running server jobs.
@@ -35,6 +40,7 @@ PROJECT_DIR="$(pwd -P)"
 
 PHASE_A_CONFIG="${PHASE_A_CONFIG:-configs/phase_a.yaml}"
 BENCHMARK_LABEL="${BENCHMARK_LABEL:-phase_a_workload}"
+SERVER_WAIT_S="${SERVER_WAIT_S:-1800}"
 
 if [[ ! -f "${PHASE_A_CONFIG}" ]]; then
   echo "ERROR: ${PHASE_A_CONFIG} not found."
@@ -66,6 +72,7 @@ echo "Project dir:       ${PROJECT_DIR}"
 echo "Config:            ${PHASE_A_CONFIG}"
 echo "Roles:             ${ROLES}"
 echo "Benchmark label:   ${BENCHMARK_LABEL}"
+echo "Server wait (s):   ${SERVER_WAIT_S}"
 echo "=========================================="
 
 # ── 1) Clean stale endpoint files ─────────────────────────
@@ -75,39 +82,96 @@ done
 
 # ── 2) Submit one server per role ─────────────────────────
 declare -A SERVER_JOB
+declare -A SERVER_NODE
 SERVER_JOBS_LIST=()
 for role in ${ROLES}; do
   jid=$(sbatch --parsable --export="ALL,PROJECT_DIR=${PROJECT_DIR},ROLE=${role}" \
               slurm/server_role_phase2.sbatch)
   SERVER_JOB[${role}]="${jid}"
   SERVER_JOBS_LIST+=("${jid}")
-  echo "server ${role}: ${jid}"
+  echo "server ${role}: ${jid} (queued)"
 done
 
-# ── 3) Submit one capture per role, co-located on its server node ──
-# We start the capture job with --dependency=after:<server_jobid> so
-# the scheduler only places it once the server allocation is RUNNING.
+# ── 3) Wait for each server to be RUNNING and extract its node ──
+# Capture MUST be on the same node as the server, otherwise nvidia-smi
+# samples the wrong GPU and we get useless telemetry.
+wait_for_running() {
+  local jid="$1"
+  local timeout="$2"
+  local elapsed=0
+  while (( elapsed < timeout )); do
+    local state node
+    state=$(scontrol show job "${jid}" -o 2>/dev/null | grep -oP 'JobState=\K\S+' || echo "")
+    case "${state}" in
+      RUNNING)
+        node=$(scontrol show job "${jid}" -o | grep -oP 'NodeList=\K\S+' || echo "")
+        if [[ -n "${node}" && "${node}" != "(null)" ]]; then
+          echo "${node}"
+          return 0
+        fi
+        ;;
+      FAILED|CANCELLED*|TIMEOUT|NODE_FAIL|BOOT_FAIL|OUT_OF_MEMORY)
+        echo "ERROR: server job ${jid} ended in state '${state}' before allocation." >&2
+        return 1
+        ;;
+    esac
+    sleep 10
+    (( elapsed += 10 ))
+  done
+  echo "ERROR: server job ${jid} did not reach RUNNING within ${timeout}s." >&2
+  return 1
+}
+
+echo ""
+echo "Waiting for servers to start (max ${SERVER_WAIT_S}s each)..."
+for role in ${ROLES}; do
+  jid="${SERVER_JOB[${role}]}"
+  if ! node=$(wait_for_running "${jid}" "${SERVER_WAIT_S}"); then
+    echo "FATAL: cancelling all submitted servers because ${role} (${jid}) did not start." >&2
+    scancel "${SERVER_JOBS_LIST[@]}" || true
+    exit 1
+  fi
+  SERVER_NODE[${role}]="${node}"
+  echo "  ${role}: server ${jid} RUNNING on ${node}"
+done
+
+# ── 4) Submit one capture per role, optionally co-located on the server ──
+# GPU telemetry now comes from the server-side gpu_sampler (started by
+# server_role_phase2.sbatch), so co-location is no longer strictly required
+# for correctness — only for low-latency networking. Enable with
+# COLOC_CAPTURE=1 (default off, because some BSC partitions don't allow
+# sharing a node between two jobs of the same user).
 declare -a CAPTURE_JOBS_LIST
 for role in ${ROLES}; do
   srv_jid="${SERVER_JOB[${role}]}"
-  cap_jid=$(sbatch --parsable \
-                   --dependency=after:${srv_jid} \
-                   --export="ALL,PROJECT_DIR=${PROJECT_DIR},ROLE=${role},PHASE_A_CONFIG=${PHASE_A_CONFIG},BENCHMARK_LABEL=${BENCHMARK_LABEL}" \
-                   slurm/phase_a_capture.sbatch)
+  srv_node="${SERVER_NODE[${role}]}"
+  if [[ "${COLOC_CAPTURE:-0}" == "1" ]]; then
+    cap_jid=$(sbatch --parsable \
+                     --dependency=after:${srv_jid} \
+                     --nodelist="${srv_node}" \
+                     --export="ALL,PROJECT_DIR=${PROJECT_DIR},ROLE=${role},PHASE_A_CONFIG=${PHASE_A_CONFIG},BENCHMARK_LABEL=${BENCHMARK_LABEL}" \
+                     slurm/phase_a_capture.sbatch)
+    echo "capture ${role}: ${cap_jid} on ${srv_node} (co-located, depends on server ${srv_jid})"
+  else
+    cap_jid=$(sbatch --parsable \
+                     --dependency=after:${srv_jid} \
+                     --export="ALL,PROJECT_DIR=${PROJECT_DIR},ROLE=${role},PHASE_A_CONFIG=${PHASE_A_CONFIG},BENCHMARK_LABEL=${BENCHMARK_LABEL}" \
+                     slurm/phase_a_capture.sbatch)
+    echo "capture ${role}: ${cap_jid} (depends on server ${srv_jid}; GPU samples from ${srv_node})"
+  fi
   CAPTURE_JOBS_LIST+=("${cap_jid}")
-  echo "capture ${role}: ${cap_jid} (depends on server ${srv_jid})"
 done
 
 CAPTURE_JOBS_DEP=$(IFS=:; echo "${CAPTURE_JOBS_LIST[*]}")
 
-# ── 4) Train predictor after every capture has finished OK ─
+# ── 5) Train predictor after every capture has finished OK ─
 JOB_TRAIN=$(sbatch --parsable \
                    --dependency=afterok:${CAPTURE_JOBS_DEP} \
                    --export="ALL,PROJECT_DIR=${PROJECT_DIR},PHASE_A_CONFIG=${PHASE_A_CONFIG}" \
                    slurm/phase_a_train.sbatch)
 echo "train predictor: ${JOB_TRAIN} (afterok of captures)"
 
-# ── 5) Auto-cleanup of long-running servers when captures end ─
+# ── 6) Auto-cleanup of long-running servers when captures end ─
 SERVER_JOBS_SCANCEL_ARGS="${SERVER_JOBS_LIST[*]}"
 JOB_CLEANUP=$(sbatch --parsable \
                      --dependency=afterany:${CAPTURE_JOBS_DEP} \
@@ -121,7 +185,7 @@ echo "auto-cleanup:     ${JOB_CLEANUP} (scancels servers when captures end)"
 echo ""
 echo "Submitted jobs:"
 for role in ${ROLES}; do
-  echo "  server  ${role}:        ${SERVER_JOB[${role}]}"
+  echo "  server  ${role}:        ${SERVER_JOB[${role}]} (node=${SERVER_NODE[${role}]})"
 done
 for jid in "${CAPTURE_JOBS_LIST[@]}"; do
   echo "  capture:                 ${jid}"

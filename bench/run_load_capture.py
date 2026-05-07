@@ -73,6 +73,14 @@ def _now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def _hostname() -> str:
+    try:
+        import socket
+        return socket.gethostname()
+    except Exception:
+        return ""
+
+
 def _approx_word_count(text: str) -> int:
     return sum(1 for _ in re.finditer(r"\S+", text or ""))
 
@@ -86,6 +94,15 @@ def _read_endpoint_file(role: str, base_dir: str = "results/routing/endpoints") 
     return text or None
 
 
+def _read_gpu_path_file(role: str, base_dir: str = "results/routing/endpoints") -> Optional[Path]:
+    """Return the GPU samples path published by the server (or None)."""
+    p = Path(base_dir) / f"{role}.gpu"
+    if not p.exists():
+        return None
+    text = p.read_text(encoding="utf-8").strip()
+    return Path(text) if text else None
+
+
 # ── Server-metrics scraper ──────────────────────────────────
 
 class _MetricsScraper:
@@ -97,10 +114,33 @@ class _MetricsScraper:
     by the existing predictor pipeline without translation.
     """
 
-    _RUNNING_RE = re.compile(r"^vllm:num_requests_running\b.*?\s+(?P<v>[0-9.eE+-]+)")
-    _WAITING_RE = re.compile(r"^vllm:num_requests_waiting\b.*?\s+(?P<v>[0-9.eE+-]+)")
-    _GEN_TPS_RE = re.compile(r"^vllm:avg_generation_throughput_toks_per_s\b.*?\s+(?P<v>[0-9.eE+-]+)")
-    _KV_RE = re.compile(r"^vllm:gpu_cache_usage_perc\b.*?\s+(?P<v>[0-9.eE+-]+)")
+    # vLLM metric names have changed across releases (':' vs '_' namespaces, and some suffixes).
+    # We therefore match a small set of known variants.
+    _RUNNING_PATTERNS = [
+        re.compile(r"^(?:vllm:|vllm_)?num_requests_running\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+        re.compile(r"^vllm_num_requests_running\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+    ]
+    _WAITING_PATTERNS = [
+        re.compile(r"^(?:vllm:|vllm_)?num_requests_waiting\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+        re.compile(r"^vllm_num_requests_waiting\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+    ]
+    _GEN_TPS_PATTERNS = [
+        re.compile(r"^(?:vllm:|vllm_)?avg_generation_throughput.*?\s+(?P<v>[0-9.eE+-]+)"),
+        re.compile(r"^(?:vllm:|vllm_)?generation_throughput.*?\s+(?P<v>[0-9.eE+-]+)"),
+    ]
+    _KV_PATTERNS = [
+        re.compile(r"^(?:vllm:|vllm_)?gpu_cache_usage_perc\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+        re.compile(r"^(?:vllm:|vllm_)?kv_cache_usage_perc\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+        re.compile(r"^(?:vllm:|vllm_)?gpu_kv_cache_usage_perc\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+    ]
+    # Counters (used to compute generation throughput when the gauge is
+    # not exposed in newer vLLM versions).
+    _GEN_TOK_TOTAL_PATTERNS = [
+        re.compile(r"^(?:vllm:|vllm_)?generation_tokens_total\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+    ]
+    _PROMPT_TOK_TOTAL_PATTERNS = [
+        re.compile(r"^(?:vllm:|vllm_)?prompt_tokens_total\b.*?\s+(?P<v>[0-9.eE+-]+)"),
+    ]
 
     def __init__(self, base_url: str, interval_s: float, output: Optional[Path]) -> None:
         self._url = f"{base_url.rstrip('/')}/metrics"
@@ -112,9 +152,15 @@ class _MetricsScraper:
             "running": None,
             "waiting": None,
             "gen_tps": None,
+            "prompt_tps": None,
             "kv_usage_pct": None,
             "ts_monotonic": None,
         }
+        self._prev_gen_total: Optional[float] = None
+        self._prev_prompt_total: Optional[float] = None
+        self._prev_ts: Optional[float] = None
+        self._diag_path: Optional[Path] = None
+        self._diag_written: bool = False
         self._available: Optional[bool] = None
 
     @property
@@ -124,6 +170,9 @@ class _MetricsScraper:
     @property
     def available(self) -> bool:
         return bool(self._available)
+
+    def set_diagnostics_path(self, path: Path) -> None:
+        self._diag_path = Path(path)
 
     def start(self) -> None:
         if self._task is None:
@@ -164,16 +213,68 @@ class _MetricsScraper:
         self._available = True
 
         body = resp.text
-        running = self._extract(self._RUNNING_RE, body)
-        waiting = self._extract(self._WAITING_RE, body)
-        gen_tps = self._extract(self._GEN_TPS_RE, body)
-        kv = self._extract(self._KV_RE, body)
+        running = self._extract_any(self._RUNNING_PATTERNS, body)
+        waiting = self._extract_any(self._WAITING_PATTERNS, body)
+        gen_tps_gauge = self._extract_any(self._GEN_TPS_PATTERNS, body)
+        kv = self._extract_any(self._KV_PATTERNS, body)
+        gen_tot = self._extract_any(self._GEN_TOK_TOTAL_PATTERNS, body)
+        prompt_tot = self._extract_any(self._PROMPT_TOK_TOTAL_PATTERNS, body)
         ts_mono = time.monotonic()
+
+        gen_tps = gen_tps_gauge
+        prompt_tps: Optional[float] = None
+        if (
+            self._prev_ts is not None
+            and gen_tot is not None
+            and self._prev_gen_total is not None
+        ):
+            dt = max(ts_mono - self._prev_ts, 1e-9)
+            d_gen = max(gen_tot - self._prev_gen_total, 0.0)
+            if gen_tps_gauge is None:
+                gen_tps = d_gen / dt
+            if prompt_tot is not None and self._prev_prompt_total is not None:
+                d_pr = max(prompt_tot - self._prev_prompt_total, 0.0)
+                prompt_tps = d_pr / dt
+
+        if gen_tot is not None:
+            self._prev_gen_total = gen_tot
+        if prompt_tot is not None:
+            self._prev_prompt_total = prompt_tot
+        self._prev_ts = ts_mono
+
+        if (not self._diag_written) and self._diag_path is not None:
+            try:
+                self._diag_path.parent.mkdir(parents=True, exist_ok=True)
+                first_lines = [
+                    ln for ln in body.splitlines() if ln and not ln.startswith("#")
+                ][:200]
+                with self._diag_path.open("w", encoding="utf-8") as dh:
+                    json.dump(
+                        {
+                            "url": self._url,
+                            "matched": {
+                                "running": running,
+                                "waiting": waiting,
+                                "gen_tps_gauge": gen_tps_gauge,
+                                "gen_tokens_total": gen_tot,
+                                "prompt_tokens_total": prompt_tot,
+                                "kv_usage_pct": kv,
+                            },
+                            "first_metric_lines": first_lines,
+                        },
+                        dh,
+                        indent=2,
+                        default=str,
+                    )
+                self._diag_written = True
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("metrics diagnostics write failed", extra={"error": str(exc)})
 
         self._last = {
             "running": running,
             "waiting": waiting,
             "gen_tps": gen_tps,
+            "prompt_tps": prompt_tps,
             "kv_usage_pct": kv,
             "ts_monotonic": ts_mono,
         }
@@ -183,14 +284,19 @@ class _MetricsScraper:
             "running": running,
             "waiting": waiting,
             "gen_tps": gen_tps,
+            "prompt_tps": prompt_tps,
             "kv_usage_pct": kv,
+            "gen_tokens_total": gen_tot,
+            "prompt_tokens_total": prompt_tot,
         }
 
     @staticmethod
-    def _extract(pattern: re.Pattern[str], body: str) -> Optional[float]:
+    def _extract_any(patterns: List[re.Pattern[str]], body: str) -> Optional[float]:
         for line in body.splitlines():
-            m = pattern.match(line)
-            if m is not None:
+            for pattern in patterns:
+                m = pattern.match(line)
+                if m is None:
+                    continue
                 try:
                     return float(m.group("v"))
                 except ValueError:
@@ -423,6 +529,7 @@ async def _run_session(
                 "z_metrics_running": metrics_at_send.get("running"),
                 "z_metrics_waiting": metrics_at_send.get("waiting"),
                 "z_metrics_gen_tps": metrics_at_send.get("gen_tps"),
+                "z_metrics_prompt_tps": metrics_at_send.get("prompt_tps"),
                 "z_metrics_kv_usage_pct": metrics_at_send.get("kv_usage_pct"),
             })
 
@@ -532,17 +639,32 @@ def _attach_gpu_samples(
         return 0, None
 
     # Pre-compute per-sample mean util across GPUs (single-GPU is the common
-    # serving setup but we keep the average general).
+    # serving setup but we keep the average general). If a sample contains no
+    # GPU rows (e.g. nvidia-smi unavailable), mark it as unusable so we don't
+    # silently turn missing telemetry into zeros.
     times = np.asarray([float(s["ts_monotonic"]) for s in samples], dtype=float)
-    util = np.asarray(
-        [
-            float(np.mean([
-                (g.get("utilization_gpu_pct") or 0.0) for g in s.get("gpus") or []
-            ])) if s.get("gpus") else 0.0
-            for s in samples
-        ],
-        dtype=float,
-    )
+    util_list: List[Optional[float]] = []
+    for s in samples:
+        gpus = s.get("gpus") or []
+        if not gpus:
+            util_list.append(None)
+            continue
+        vals = [(g.get("utilization_gpu_pct")) for g in gpus]
+        vals = [float(v) for v in vals if isinstance(v, (int, float))]
+        util_list.append(float(np.mean(vals)) if vals else None)
+
+    usable_mask = np.asarray([u is not None for u in util_list], dtype=bool)
+    if not usable_mask.any():
+        return 0, {
+            "samples_loaded": len(samples),
+            "rows_annotated": 0,
+            "mean_util_pct": None,
+            "max_util_pct": None,
+            "note": "No usable GPU samples (gpus empty or missing utilization).",
+        }
+
+    times_usable = times[usable_mask]
+    util_usable = np.asarray([u for u in util_list if u is not None], dtype=float)
 
     n_attached = 0
     for row in rows:
@@ -553,13 +675,13 @@ def _attach_gpu_samples(
         t_end = t_send + float(latency_ms) / 1000.0
 
         # Closest-window mean — vectorised mask
-        mask = (times >= t_send) & (times <= t_end)
+        mask = (times_usable >= t_send) & (times_usable <= t_end)
         if not mask.any():
             # Fall back to nearest sample
-            idx = int(np.argmin(np.abs(times - t_send)))
-            row["gpu_utilization_pct_mean"] = float(util[idx])
+            idx = int(np.argmin(np.abs(times_usable - t_send)))
+            row["gpu_utilization_pct_mean"] = float(util_usable[idx])
         else:
-            row["gpu_utilization_pct_mean"] = float(util[mask].mean())
+            row["gpu_utilization_pct_mean"] = float(util_usable[mask].mean())
 
         gpu_seconds_proxy = (row["gpu_utilization_pct_mean"] / 100.0) * (float(latency_ms) / 1000.0)
         row["gpu_seconds_proxy"] = gpu_seconds_proxy
@@ -568,8 +690,8 @@ def _attach_gpu_samples(
     summary = {
         "samples_loaded": len(samples),
         "rows_annotated": n_attached,
-        "mean_util_pct": float(util.mean()) if util.size else None,
-        "max_util_pct": float(util.max()) if util.size else None,
+        "mean_util_pct": float(util_usable.mean()) if util_usable.size else None,
+        "max_util_pct": float(util_usable.max()) if util_usable.size else None,
     }
     return n_attached, summary
 
@@ -591,9 +713,10 @@ def _emit_trace_jsonl(
     for r in rows:
         running = _none_to_float(r.get("z_metrics_running"))
         waiting = _none_to_float(r.get("z_metrics_waiting"))
-        active_workers: Optional[float] = None
-        if running is not None and waiting is not None:
-            active_workers = running
+        # `active_workers` should reflect the number of requests currently
+        # running on the engine; if running was scraped successfully we use
+        # it regardless of whether waiting was also captured.
+        active_workers: Optional[float] = running
 
         record = {
             "query_id": f"phase_a:{benchmark_label}:{role}:{int(r['req_idx'])}",
@@ -615,6 +738,8 @@ def _emit_trace_jsonl(
             "system_state": {
                 "queue_depth": _none_to_float(r.get("z_metrics_waiting")),
                 "pending_requests": _none_to_float(r.get("z_inflight_at_send")),
+                # NOTE: vLLM exposes generation throughput in tokens/s; we keep the field name for schema
+                # compatibility but interpret it as "recent throughput proxy" (not strict req/s).
                 "throughput_rps_recent": _none_to_float(r.get("z_metrics_gen_tps")),
                 "active_workers": active_workers,
             },
@@ -640,6 +765,7 @@ def _emit_trace_jsonl(
                         "waiting_mean": _none_to_float(r.get("z_metrics_waiting")),
                         "kv_cache_usage_pct_mean": _none_to_float(r.get("z_metrics_kv_usage_pct")),
                         "generation_throughput_mean": _none_to_float(r.get("z_metrics_gen_tps")),
+                        "prompt_throughput_mean": _none_to_float(r.get("z_metrics_prompt_tps")),
                     },
                 },
                 "z_inflight_at_send": _none_to_float(r.get("z_inflight_at_send")),
@@ -751,11 +877,51 @@ def run(
             interval_s=float(samp_cfg["server_metrics"].get("interval_s", 0.25)),
             output=run_dir / "server_metrics.jsonl",
         )
-    if (samp_cfg.get("gpu_smi") or {}).get("enabled", True):
+        metrics_sidecar.set_diagnostics_path(run_dir / "server_metrics_diag.json")
+    # If the server has published a shared GPU samples path, prefer that —
+    # it is taken on the GPU node where the model actually runs, so it is
+    # always correct, even if the capture is allocated to a different node.
+    server_gpu_path = _read_gpu_path_file(role)
+    use_external_gpu = server_gpu_path is not None
+    if use_external_gpu:
+        logger.info(
+            "Using server-side GPU samples (no local sidecar)",
+            extra={"server_gpu_path": str(server_gpu_path)},
+        )
+
+    if (samp_cfg.get("gpu_smi") or {}).get("enabled", True) and not use_external_gpu:
         gpu_sidecar = _GpuSidecar(
             output=run_dir / "gpu_samples.jsonl",
             interval_s=float(samp_cfg["gpu_smi"].get("interval_s", 0.2)),
         )
+        # Probe nvidia-smi up-front so we fail-loud if the capture node has no
+        # visible GPU (capture must be co-located with the server node).
+        probe_path = run_dir / "gpu_probe.json"
+        try:
+            probe_out = subprocess.run(
+                ["nvidia-smi", "--query-gpu=index,name,utilization.gpu",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5.0, check=False,
+            )
+            probe_payload = {
+                "returncode": probe_out.returncode,
+                "stdout": probe_out.stdout.strip(),
+                "stderr": probe_out.stderr.strip(),
+                "hostname": _hostname(),
+            }
+            probe_path.write_text(json.dumps(probe_payload, indent=2), encoding="utf-8")
+            if probe_out.returncode != 0 or not probe_out.stdout.strip():
+                logger.warning(
+                    "GPU probe FAILED — capture node appears to have no visible GPU; "
+                    "GPU utilization features will be missing.",
+                    extra=probe_payload,
+                )
+        except Exception as exc:
+            probe_path.write_text(
+                json.dumps({"error": str(exc), "hostname": _hostname()}, indent=2),
+                encoding="utf-8",
+            )
+            logger.warning("GPU probe error", extra={"error": str(exc)})
 
     rng = np.random.default_rng(seed)
 
@@ -809,13 +975,32 @@ def run(
     summaries, all_rows = asyncio.run(_run_all())
 
     # ── Attach GPU utilisation post-hoc ─────────────────────
+    # Priority:
+    #   1. Server-side path (if published by server_role_phase2.sbatch).
+    #   2. Local sidecar output (legacy fallback).
     gpu_summary: Optional[Dict[str, Any]] = None
-    if gpu_sidecar is not None:
+    gpu_jsonl_to_use: Optional[Path] = None
+    if use_external_gpu and server_gpu_path is not None and server_gpu_path.exists():
+        gpu_jsonl_to_use = server_gpu_path
+        # Copy a snapshot into run_dir so the trace is self-contained.
+        try:
+            (run_dir / "gpu_samples.jsonl").write_text(
+                server_gpu_path.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("Failed to snapshot server GPU samples", extra={"error": str(exc)})
+    elif gpu_sidecar is not None:
+        gpu_jsonl_to_use = run_dir / "gpu_samples.jsonl"
+
+    if gpu_jsonl_to_use is not None:
         n_attached, gpu_summary = _attach_gpu_samples(
             rows=all_rows,
-            gpu_jsonl=run_dir / "gpu_samples.jsonl",
+            gpu_jsonl=gpu_jsonl_to_use,
         )
-        logger.info("GPU samples attached", extra={"rows": n_attached})
+        logger.info(
+            "GPU samples attached",
+            extra={"rows": n_attached, "source": str(gpu_jsonl_to_use)},
+        )
 
     # ── Aggregate summaries ─────────────────────────────────
     save_json(summaries, run_dir / "summaries.json")
@@ -870,7 +1055,100 @@ def run(
             "successful_sessions": len([s for s in summaries if s["successful_requests"] > 0]),
         },
     )
+
+    # ── Post-capture telemetry validator (fails the job loudly on bad data) ──
+    _validate_capture_telemetry(
+        trace_path=trace_path,
+        gpu_summary=gpu_summary,
+        run_dir=run_dir,
+        require_gpu=bool((samp_cfg.get("gpu_smi") or {}).get("enabled", True)),
+        require_metrics=bool((samp_cfg.get("server_metrics") or {}).get("enabled", True)),
+    )
     return run_dir
+
+
+def _validate_capture_telemetry(
+    *,
+    trace_path: Path,
+    gpu_summary: Optional[Dict[str, Any]],
+    run_dir: Path,
+    require_gpu: bool,
+    require_metrics: bool,
+) -> None:
+    """Walk the trace and ensure key telemetry fields are populated.
+
+    Writes ``telemetry_validation.json`` for diagnostics, and raises
+    ``RuntimeError`` if a required signal is missing — so SLURM marks the
+    capture as FAILED and we do NOT silently re-train on empty data.
+    """
+    n_total = 0
+    n_running_nonzero = 0
+    n_waiting_nonnull = 0
+    n_gen_tps_nonnull = 0
+    n_kv_nonnull = 0
+    n_gpu_util_nonzero = 0
+
+    if not trace_path.exists():
+        raise RuntimeError(f"trace.jsonl missing: {trace_path}")
+
+    with trace_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            n_total += 1
+            engine = (((rec.get("tags") or {}).get("telemetry") or {}).get("engine") or {})
+            if (rec.get("system_state") or {}).get("active_workers"):
+                n_running_nonzero += 1
+            if engine.get("waiting_mean") is not None:
+                n_waiting_nonnull += 1
+            if engine.get("generation_throughput_mean") is not None:
+                n_gen_tps_nonnull += 1
+            if engine.get("kv_cache_usage_pct_mean") is not None:
+                n_kv_nonnull += 1
+            res = rec.get("resources") or {}
+            util = res.get("gpu_utilization_pct")
+            if util is not None and float(util) > 0.0:
+                n_gpu_util_nonzero += 1
+
+    report = {
+        "trace_rows": n_total,
+        "running_nonzero": n_running_nonzero,
+        "waiting_nonnull": n_waiting_nonnull,
+        "gen_tps_nonnull": n_gen_tps_nonnull,
+        "kv_nonnull": n_kv_nonnull,
+        "gpu_util_nonzero": n_gpu_util_nonzero,
+        "gpu_summary": gpu_summary,
+    }
+    (run_dir / "telemetry_validation.json").write_text(
+        json.dumps(report, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+    errors: List[str] = []
+    if n_total == 0:
+        errors.append("trace.jsonl is empty.")
+    if require_metrics:
+        if n_running_nonzero == 0:
+            errors.append("active_workers (vllm running) is always zero — server /metrics not scraped correctly.")
+        if n_gen_tps_nonnull == 0 and n_kv_nonnull == 0:
+            errors.append("Both generation throughput and KV usage are missing — /metrics scrape produced nothing useful.")
+    if require_gpu and n_gpu_util_nonzero == 0:
+        errors.append(
+            "GPU utilization is zero across the entire trace — the capture node "
+            "probably has no visible GPU (capture must be co-located with the "
+            "server node)."
+        )
+
+    if errors:
+        raise RuntimeError(
+            "Telemetry validation FAILED:\n  - " + "\n  - ".join(errors)
+            + f"\nSee {run_dir / 'telemetry_validation.json'}"
+        )
 
 
 # ── CLI ─────────────────────────────────────────────────────
