@@ -67,9 +67,13 @@ capture:
 # ── 2) Dataset build (feeds the predictors/ pipeline) ────────
 dataset:
   # Glob patterns for trace files emitted by capture runs.
-  # Default expands to every Phase A capture under results/phase_a/captures/.
+  #
+  # Pin a capture *day* (YYYYMMDD in the run folder tag) so multiple ladder
+  # reruns do not get merged into one dataset. After a new full capture, bump
+  # the date or add another line. For ad-hoc experiments you can temporarily
+  # use: "results/phase_a/captures/**/trace.jsonl"
   trace_glob_patterns:
-    - "results/phase_a/captures/**/trace.jsonl"
+    - "results/phase_a/captures/capture-*-20260509*/trace.jsonl"
 
   output_dir: "results/phase_a/datasets"
   dataset_name: "service_cost_phase_a"
