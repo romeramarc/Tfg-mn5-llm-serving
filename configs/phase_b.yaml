@@ -1,0 +1,124 @@
+# ─────────────────────────────────────────────────────────────
+# phase_b.yaml — Phase B configuration
+# ─────────────────────────────────────────────────────────────
+# Phase B (per email plan with Pol) — Quality predictors:
+#
+#   * quality_ex_ante    : P(correct=1 | prompt features + system z)
+#   * quality_post_hoc   : P(correct=1 | prompt + response + uncertainty)
+#
+# Pipeline:
+#   1) bench.run_quality_capture       → Poisson load against
+#                                        GSM8K + MATH-500 with logprobs;
+#                                        emits trace.jsonl scored vs gold.
+#   2) predictors.builders.build_ex_ante_dataset   → ex-ante feature/target
+#   3) predictors.builders.build_post_hoc_dataset  → post-hoc feature/target
+#   4) predictors.training.run_training (×2)        → trains both predictors
+#
+# All paths are relative to the repository root.
+# ─────────────────────────────────────────────────────────────
+
+common:
+  base_url: "http://localhost:8000"     # overridden per-role at launch time
+  seed: 42
+  results_base_dir: "results/phase_b"
+
+# ── 1) Quality capture (open-loop Poisson, with gold + logprobs) ─
+capture:
+  # Per-role roster. One sub-run per role, each targeting a single vLLM
+  # endpoint published in results/routing/endpoints/<role>.url. The five
+  # rungs match configs/models.yaml.
+  roles:
+    - name: "teacher"
+    - name: "student_mid"
+    - name: "student_q3b"
+    - name: "student_small"
+    - name: "student_tiny"
+
+  # Quality benchmarks scored against gold. Each emits its own
+  # benchmark label in the trace (used by the dataset builders).
+  benchmarks:
+    gsm8k:
+      enabled: true
+      dataset_name: "openai/gsm8k"
+      dataset_split: "test"
+      subset_size: 250                # full test set is 1319; cap for cost
+      prompt_template: |
+        Solve the following math problem step by step.
+        Put your final numeric answer after ####.
+
+        Question: {question}
+
+        Answer:
+      answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+    math:
+      enabled: true
+      dataset_name: "HuggingFaceH4/MATH-500"
+      dataset_split: "test"
+      subset_size: 500                # full MATH-500
+      prompt_template: |
+        Solve the following mathematics problem.
+        Put your final answer inside \\boxed{{}}.
+
+        Problem: {problem}
+
+        Solution:
+      answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+
+  # Arrival law: same Poisson process as Phase A so system z-features
+  # are realistic. Two rates give load diversity without over-saturating
+  # the smaller models.
+  arrival_rates_rps: [5, 20]
+
+  # Each rate processes the FULL union (gsm8k_subset + math_subset) once,
+  # in a deterministically shuffled order. So the workload size per λ is
+  # automatically (subset_size_gsm8k + subset_size_math) per role.
+  num_warmup_requests: 30
+  max_inflight: 64                    # async semaphore (open-loop ceiling)
+
+  # Generation parameters (kept identical across roles for comparability).
+  max_tokens: 512                     # room for chain-of-thought
+  temperature: 0.0                    # greedy decoding
+  request_timeout_s: 180.0
+
+  # Logprobs capture: requesting top-k token logprobs unlocks the
+  # uncertainty.* features used by the quality_post_hoc predictor.
+  # k=5 is a good balance between signal and bandwidth.
+  logprobs_top_k: 5
+
+  # Streaming is OFF for Phase B: vLLM streaming + logprobs is fragile
+  # across releases, and we don't need TTFT for the quality predictor.
+  # latency_ms is still measured client-side.
+  stream: false
+
+  # Sidecar samplers (background tasks during the session) — same
+  # configuration as Phase A so traces are directly comparable.
+  samplers:
+    server_metrics:
+      enabled: true                   # vLLM /metrics scrape (Prometheus)
+      interval_s: 0.25                # 4 Hz
+    gpu_smi:
+      enabled: true                   # nvidia-smi --query-gpu loop
+      interval_s: 0.2                 # 5 Hz; sidecar runs on the SERVER node
+                                      # (server_role_phase2.sbatch publishes
+                                      # the path; capture reads it).
+
+# ── 2) Dataset build (feeds the predictors/ pipeline) ────────
+dataset:
+  # Glob patterns for trace files emitted by the quality capture runs.
+  # We use a wildcard date suffix so all captures from the latest launch
+  # are picked up; edit to a specific YYYYMMDD after each full run to
+  # pin the dataset (e.g. "results/phase_b/captures/capture-*-20260520*/trace.jsonl")
+  trace_glob_patterns:
+    - "results/phase_b/captures/capture-*/trace.jsonl"
+
+  output_dir: "results/phase_b/datasets"
+  ex_ante_dataset_name: "quality_ex_ante_phase_b"
+  post_hoc_dataset_name: "quality_post_hoc_phase_b"
+
+# ── 3) Predictor training ────────────────────────────────────
+predictor:
+  output_root: "results/phase_b/predictors"
+  family: "gradient_boosting"         # linear | random_forest | gradient_boosting
+  seed: 42
+  train_ratio: 0.70
+  val_ratio: 0.15                     # test gets 0.15 (1 - train - val)
