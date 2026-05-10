@@ -101,11 +101,13 @@ wait_for_running() {
   local elapsed=0
   while (( elapsed < timeout )); do
     local state node
-    state=$(scontrol show job "${jid}" -o 2>/dev/null | grep -oP 'JobState=\K\S+' || echo "")
+    local show_o
+    show_o=$(scontrol show job "${jid}" -o 2>/dev/null || echo "")
+    state=$(echo "${show_o}" | sed -n 's/.*JobState=\([^ ]*\).*/\1/p')
     case "${state}" in
       RUNNING)
-        node=$(scontrol show job "${jid}" -o | grep -oP 'NodeList=\K\S+' || echo "")
-        if [[ -n "${node}" && "${node}" != "(null)" ]]; then
+        node=$(echo "${show_o}" | sed -n 's/.*NodeList=\([^ ]*\).*/\1/p' | cut -d'+' -f1 | tr -d '()')
+        if [[ -n "${node}" && "${node}" != "null" ]]; then
           echo "${node}"
           return 0
         fi

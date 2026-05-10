@@ -614,6 +614,23 @@ async def _warm_up(
 
 # ── GPU samples post-processing ─────────────────────────────
 
+def _iso_timestamp_to_epoch_seconds(value: Any) -> Optional[float]:
+    """Parse ISO-8601 timestamps from GPU samples / trace rows to UTC epoch seconds."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        text = text.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return float(dt.timestamp())
+    except (ValueError, TypeError, OSError):
+        return None
+
+
 def _attach_gpu_samples(
     rows: List[Dict[str, Any]],
     gpu_jsonl: Path,
@@ -621,6 +638,11 @@ def _attach_gpu_samples(
     """Annotate trace rows with mean GPU utilisation during their lifetime.
 
     Returns ``(records_with_gpu, summary_dict)`` for diagnostics.
+
+    When GPU samples come from a *different* host than the capture client (server-side
+    ``gpu_sampler``), ``ts_monotonic`` values are **not** comparable to the client's
+    ``t_send_monotonic``. In that case we align on UTC wall-clock: sample ``ts`` ISO
+    vs row ``t_send_iso`` when both sides provide parseable timestamps.
     """
     if not gpu_jsonl.exists():
         return 0, None
@@ -642,7 +664,16 @@ def _attach_gpu_samples(
     # serving setup but we keep the average general). If a sample contains no
     # GPU rows (e.g. nvidia-smi unavailable), mark it as unusable so we don't
     # silently turn missing telemetry into zeros.
-    times = np.asarray([float(s["ts_monotonic"]) for s in samples], dtype=float)
+    sample_epochs = [_iso_timestamp_to_epoch_seconds(s.get("ts")) for s in samples]
+    use_wall_clock = (
+        all(e is not None for e in sample_epochs)
+        and rows
+        and all(_iso_timestamp_to_epoch_seconds(r.get("t_send_iso")) is not None for r in rows)
+    )
+    if use_wall_clock:
+        times = np.asarray([float(e) for e in sample_epochs], dtype=float)
+    else:
+        times = np.asarray([float(s["ts_monotonic"]) for s in samples], dtype=float)
     util_list: List[Optional[float]] = []
     for s in samples:
         gpus = s.get("gpus") or []
@@ -668,10 +699,13 @@ def _attach_gpu_samples(
 
     n_attached = 0
     for row in rows:
-        t_send = float(row.get("t_send_monotonic") or 0.0)
         latency_ms = row.get("latency_ms")
         if latency_ms is None:
             continue
+        if use_wall_clock:
+            t_send = float(_iso_timestamp_to_epoch_seconds(row.get("t_send_iso")) or 0.0)
+        else:
+            t_send = float(row.get("t_send_monotonic") or 0.0)
         t_end = t_send + float(latency_ms) / 1000.0
 
         # Closest-window mean — vectorised mask

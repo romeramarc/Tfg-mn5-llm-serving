@@ -48,6 +48,7 @@ import argparse
 import asyncio
 import json
 import math
+import os
 import re
 import subprocess
 import time
@@ -82,6 +83,41 @@ from utils.reproducibility import (
 )
 
 logger = get_logger(__name__)
+
+
+def _wait_for_routing_endpoint_files(
+    role: str,
+    *,
+    require_gpu_publish: bool,
+    timeout_s: float = 900.0,
+    poll_s: float = 3.0,
+) -> None:
+    """Block until the server-side launcher publishes URL (and optionally GPU path) files.
+
+    Avoids a race where the capture job starts before ``server_role_phase2.sbatch``
+    has written ``results/routing/endpoints/<role>.{url,gpu}`` on the shared FS.
+    """
+    base = Path("results/routing/endpoints")
+    url_f = base / f"{role}.url"
+    gpu_f = base / f"{role}.gpu"
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        url_ok = url_f.is_file() and bool(url_f.read_text(encoding="utf-8").strip())
+        gpu_ok = not require_gpu_publish or (
+            gpu_f.is_file() and bool(gpu_f.read_text(encoding="utf-8").strip())
+        )
+        if url_ok and gpu_ok:
+            logger.info(
+                "Routing endpoint files ready",
+                extra={"url_file": str(url_f), "gpu_file": str(gpu_f)},
+            )
+            return
+        time.sleep(poll_s)
+    need = f"{url_f}" + (f" and {gpu_f}" if require_gpu_publish else "")
+    raise RuntimeError(
+        f"Timed out after {timeout_s:.0f}s waiting for {need}. "
+        "Is the matching vLLM server job running and past its startup banner?"
+    )
 
 
 # ── Helpers ─────────────────────────────────────────────────
@@ -698,6 +734,14 @@ def run(
     seed = int(common.get("seed", 42))
     set_seed(seed)
     setup_logging()
+
+    require_gpu_sidecar = bool((samp_cfg.get("gpu_smi") or {}).get("enabled", True))
+    if not base_url_override:
+        _wait_for_routing_endpoint_files(
+            role,
+            require_gpu_publish=require_gpu_sidecar,
+            timeout_s=float(os.environ.get("PHASE_B_ENDPOINT_WAIT_S", "900")),
+        )
 
     base_url = (
         base_url_override
