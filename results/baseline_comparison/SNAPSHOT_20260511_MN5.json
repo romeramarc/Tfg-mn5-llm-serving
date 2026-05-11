@@ -1,0 +1,45 @@
+{
+  "snapshot_id": "MN5-20260511-baseline-battery",
+  "cluster": "MareNostrum 5 (BSC)",
+  "slurm_jobs_reference": {
+    "phase_a_train": "40400325",
+    "phase_b_train": "40400326"
+  },
+  "note_dataset_phase_b": "test_rows=2248 en los CSV de Fase B (~15% de ~15k filas) coherente con configs/phase_b.yaml por defecto (trazas mezcladas). Para evidencia solo-trazas-buenas (7500 filas) repetir train con configs/phase_b_retrain_good_traces_only.yaml y volver a exportar.",
+  "decision": {
+    "refine_families": ["random_forest", "gradient_boosting"],
+    "rationale_short": "RF y GB encabezan o segundo en las tres tablas con brechas claras frente a lineales/MLP/árbol aislado; RF ligeramente por delante en métricas; GB competitivo y con predict_test más barato que RF en Fase A según CSV."
+  },
+  "phase_a_regression_ranked_by_test_mae": [
+    {"rank": 1, "family": "random_forest", "test_mae": 67.3723131362542, "test_rmse": 189.51064156245832, "test_r2": 0.9966095959122486, "fit_time_s": 1.4361851138528436, "predict_time_test_s": 0.09120749402791262},
+    {"rank": 2, "family": "decision_tree", "test_mae": 81.35158904189929, "test_rmse": 236.26069249107795, "test_r2": 0.9947305267475487, "fit_time_s": 0.06298477994278073, "predict_time_test_s": 0.00041309604421257973},
+    {"rank": 3, "family": "gradient_boosting", "test_mae": 111.85531568813204, "test_rmse": 229.96946219703852, "test_r2": 0.9950074249915452, "fit_time_s": 1.054294563131407, "predict_time_test_s": 0.010791759938001633},
+    {"rank": 4, "family": "mlp", "test_mae": 278.19253197602063, "test_rmse": 596.7814646151683, "test_r2": 0.9663786683105761, "fit_time_s": 17.373866440961137, "predict_time_test_s": 0.0015989700332283974},
+    {"rank": 5, "family": "linear", "test_mae": 822.8745283178157, "test_rmse": 1177.0142110926436, "test_r2": 0.8692180910490779, "fit_time_s": 0.011990326922386885, "predict_time_test_s": 0.000192723935469985},
+    {"rank": 6, "family": "lasso", "test_mae": 822.8835557069609, "test_rmse": 1177.0139021996222, "test_r2": 0.8692181596933021, "fit_time_s": 1.0840048908721656, "predict_time_test_s": 0.0002011079341173172},
+    {"rank": 7, "family": "ridge", "test_mae": 856.9347474351976, "test_rmse": 1195.5406178170008, "test_r2": 0.8650686298197527, "fit_time_s": 0.0052547939121723175, "predict_time_test_s": 0.00020424812100827694}
+  ],
+  "phase_b_ex_ante_ranked_by_test_roc_auc": [
+    {"rank": 1, "family": "random_forest", "test_roc_auc": 0.8916210752371427, "test_f1": 0.8087105038428694, "test_accuracy": 0.800711743772242, "fit_time_s": 1.2560465370770544},
+    {"rank": 2, "family": "gradient_boosting", "test_roc_auc": 0.8858899771706312, "test_f1": 0.8038720538720538, "test_accuracy": 0.7927046263345195, "fit_time_s": 1.054360792040825},
+    {"rank": 3, "family": "mlp", "test_roc_auc": 0.8388197461766944, "test_f1": 0.7737348389795065, "test_accuracy": 0.7593416370106761, "fit_time_s": 6.868846760131419},
+    {"rank": 4, "family": "decision_tree", "test_roc_auc": 0.8197857697725852, "test_f1": 0.7871021083092187, "test_accuracy": 0.7709074733096085, "fit_time_s": 0.050563310040161014},
+    {"rank": 5, "family": "logistic_l1", "test_roc_auc": 0.7877937707418238, "test_f1": 0.728238659583163, "test_accuracy": 0.7041814946619217, "fit_time_s": 1.3004905539564788},
+    {"rank": 6, "family": "logistic", "test_roc_auc": 0.7854142267432239, "test_f1": 0.726604004903964, "test_accuracy": 0.7024021352313167, "fit_time_s": 0.938237058930099},
+    {"rank": 7, "family": "logistic_l2", "test_roc_auc": 0.7854142267432239, "test_f1": 0.726604004903964, "test_accuracy": 0.7024021352313167, "fit_time_s": 0.9267748999409378}
+  ],
+  "phase_b_post_hoc_ranked_by_test_roc_auc": [
+    {"rank": 1, "family": "random_forest", "test_roc_auc": 0.9358473354254314, "test_f1": 0.8694922366764583, "test_accuracy": 0.8616548042704626, "fit_time_s": 1.3665452310815454},
+    {"rank": 2, "family": "gradient_boosting", "test_roc_auc": 0.9335525206141363, "test_f1": 0.8644997889404812, "test_accuracy": 0.8572064056939501, "fit_time_s": 1.1339318871032447},
+    {"rank": 3, "family": "mlp", "test_roc_auc": 0.8953796461487417, "test_f1": 0.8226221079691517, "test_accuracy": 0.8158362989323843, "fit_time_s": 6.4721557919401675},
+    {"rank": 4, "family": "logistic_l1", "test_roc_auc": 0.8934138498171196, "test_f1": 0.8312999579301641, "test_accuracy": 0.8216192170818505, "fit_time_s": 4.380269739078358},
+    {"rank": 5, "family": "logistic", "test_roc_auc": 0.8681360449840717, "test_f1": 0.7993182786536004, "test_accuracy": 0.7904804270462633, "fit_time_s": 0.9666487360373139},
+    {"rank": 6, "family": "logistic_l2", "test_roc_auc": 0.8681360449840717, "test_f1": 0.7993182786536004, "test_accuracy": 0.7904804270462633, "fit_time_s": 0.9418349310290068},
+    {"rank": 7, "family": "decision_tree", "test_roc_auc": 0.8403603128486665, "test_f1": 0.8159031979256698, "test_accuracy": 0.8104982206405694, "fit_time_s": 0.11102787987329066}
+  ],
+  "methodology_caveats": [
+    "logistic y logistic_l2 son redundantes en configuración actual (misma métrica).",
+    "Logs sklearn: ConvergenceWarning en Lasso (Fase A); Logistic L2 sin convergencia en max_iter=2000 — baseline válido para ranking; refinado lineal exigiría escalar o más iteraciones.",
+    "Todos los status en CSV fueron 'ok' (sin fallos por familia)."
+  ]
+}
