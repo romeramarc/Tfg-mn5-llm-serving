@@ -10,9 +10,9 @@ Driver script around ``predictors.training.refine``. Reads a YAML with:
   predictors:
     - id: service_cost
       task: regression
-      dataset_jsonl: results/phase_a/dataset/service_cost.dataset.jsonl
-      dataset_meta_json: results/phase_a/dataset/service_cost.dataset_meta.json
-      target_column: latency_s
+      dataset_jsonl: results/phase_a/datasets/service_cost_phase_a.jsonl
+      dataset_meta_json: results/phase_a/datasets/service_cost_phase_a_meta.json
+      target_column: target_service_cost
       seed: 42
       train_ratio: 0.7
       val_ratio: 0.15
@@ -105,7 +105,7 @@ def _metric_lookup(report: Mapping[str, Any], metric: str) -> Optional[float]:
         "test_accuracy_at_threshold": (report.get("test_at_threshold") or {}).get("accuracy"),
         # Timing
         "predict_us_per_row": (report.get("timing") or {}).get("predict_us_per_row"),
-        "fit_seconds": (report.get("search") or {}).get("search_seconds"),
+        "fit_seconds": report.get("search_seconds"),
     }
     val = flat.get(metric)
     if val is None:
@@ -136,7 +136,7 @@ def _row_for_comparison(predictor_id: str, family: str, status: str, report: Opt
             "model_dir": report.get("model_dir"),
             "metrics_json": report.get("metrics_json"),
             "best_cv_score": report.get("best_cv_score"),
-            "best_params": json.dumps(report.get("best_params") or {}, sort_keys=True),
+            "best_params": json.dumps(report.get("best_params") or {}, sort_keys=True, default=str),
             "threshold": report.get("threshold"),
             "threshold_criterion": report.get("threshold_criterion"),
         }
@@ -285,10 +285,9 @@ def run_refinement(cfg_path: Path) -> Dict[str, Any]:
                 row = _row_for_comparison(predictor_id, family, "ok", report, None)
                 row["_report"] = report
                 per_predictor_reports.append(row)
-                print(
-                    f"  -> ok :: {report.get('model_dir')} :: best_cv_score={report.get('best_cv_score'):.4f}",
-                    flush=True,
-                )
+                bcs = report.get("best_cv_score")
+                bcs_s = f"{float(bcs):.4f}" if bcs is not None else "n/a"
+                print(f"  -> ok :: {report.get('model_dir')} :: best_cv_score={bcs_s}", flush=True)
             except Exception as exc:  # noqa: BLE001
                 err = "".join(traceback.format_exception_only(type(exc), exc)).strip()
                 print(f"  -> FAILED :: {err}", flush=True)

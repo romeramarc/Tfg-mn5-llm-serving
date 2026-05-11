@@ -8,11 +8,11 @@ Builds on top of ``predictors.training.common``:
   * For classification, picks an operating threshold on the validation
     split with a configurable criterion (F1, Youden's J, asymmetric
     FP/FN cost, recall floor, precision floor) — never on test.
-  * Reports baseline-at-0.5 vs refined-at-threshold metrics on test so
-    the gain (or absence of it) is explicit.
+  * ``test.global`` keeps sklearn metrics at the default 0.5 cut; see
+    ``test.at_threshold`` for metrics after the validation-tuned cut.
 
 Outputs (per refined model dir):
-  * ``metrics.json``            — full report (search, threshold, val/test)
+  * ``metrics.json``            — full report (search, threshold summary, val/test)
   * ``model_bundle.joblib``     — refined estimator + vectorizer + threshold
   * ``search_results.csv``      — RandomizedSearchCV cv_results_ flattened
   * ``threshold_sweep.csv``     — only for classification
@@ -98,6 +98,49 @@ DEFAULT_SCORING: Dict[str, str] = {
     "classification": "roc_auc",
     "regression": "neg_mean_absolute_error",
 }
+
+
+def _cv_group_id(row: Mapping[str, Any], row_index: int) -> str:
+    """Stable group id for GroupKFold: prefer ``query_id``, else ``run_id``, else synthetic."""
+    q = row.get("query_id")
+    if q is not None and str(q).strip() != "":
+        return str(q)
+    rid = row.get("run_id")
+    if rid is not None and str(rid).strip() != "":
+        return str(rid)
+    return f"row_{row_index}"
+
+
+def _json_sanitize(obj: Any) -> Any:
+    """Recursively convert numpy/sklearn scalars to JSON-serialisable Python types."""
+    if obj is None or isinstance(obj, str):
+        return obj
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, (np.integer, int)):
+        return int(obj)
+    if isinstance(obj, (np.floating, float)):
+        x = float(obj)
+        return None if np.isnan(x) else x
+    if isinstance(obj, np.ndarray):
+        return _json_sanitize(obj.tolist())
+    if isinstance(obj, dict):
+        return {str(k): _json_sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_sanitize(v) for v in obj]
+    try:
+        if obj is np.ma.masked:  # type: ignore[comparison-overlap]
+            return None
+    except (AttributeError, TypeError):
+        pass
+    if hasattr(obj, "item") and callable(getattr(obj, "item")) and not isinstance(obj, (bytes, bytearray, memoryview)):
+        try:
+            return _json_sanitize(obj.item())
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return str(obj)
 
 
 def _empty_estimator(*, task: str, family: str, seed: int) -> Any:
@@ -290,8 +333,7 @@ def _run_random_search(
         for key, vals in cv_results.items():
             if key.startswith("param_"):
                 val = vals[i]
-                # numpy.ma.masked appears for missing params: store as None.
-                row[key] = None if val is None or repr(val) == "masked" else val
+                row[key] = _json_sanitize(val)
         flat_results.append(row)
 
     summary = {
@@ -300,7 +342,7 @@ def _run_random_search(
         "n_splits": int(n_splits),
         "search_seconds": elapsed,
         "best_score": float(search.best_score_),
-        "best_params": {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in search.best_params_.items()},
+        "best_params": {k: _json_sanitize(v) for k, v in search.best_params_.items()},
         "cv_results": flat_results,
     }
     return search.best_estimator_, summary
@@ -343,13 +385,20 @@ def refine_classifier(
     if not train_rows or not val_rows or not test_rows:
         raise ValueError("Empty partition. Adjust split ratios or seed.")
 
+    train_groups = {_cv_group_id(r, i) for i, r in enumerate(train_rows)}
+    if len(train_groups) < int(n_splits):
+        raise ValueError(
+            f"GroupKFold requires at least n_splits={n_splits} distinct group ids in the "
+            f"training partition (query_id / run_id); found {len(train_groups)}."
+        )
+
     vectorizer = build_vectorizer(feature_types)
     X_train_raw = to_feature_matrix(train_rows, feature_columns, feature_types)
     X_train = vectorizer.fit_transform(X_train_raw)
     y_train = np.asarray(
         [int(r[target_column]) for r in train_rows], dtype=int
     )
-    groups_train = [str(r.get("query_id", "")) for r in train_rows]
+    groups_train = [_cv_group_id(r, i) for i, r in enumerate(train_rows)]
 
     best_estimator, search_summary = _run_random_search(
         task="classification",
@@ -447,6 +496,11 @@ def refine_classifier(
         )
     write_predictions_csv(model_dir / "predictions_test.csv", preds)
 
+    # Full sweep is written to threshold_sweep.csv; keep metrics.json compact + JSON-safe.
+    threshold_metrics = {k: v for k, v in threshold_report.items() if k != "sweep"}
+    threshold_metrics["sweep_row_count"] = len(threshold_report["sweep"])
+    threshold_metrics["sweep_csv"] = "threshold_sweep.csv"
+
     # metrics.json
     metrics_payload = {
         "predictor_id": predictor_id,
@@ -467,7 +521,7 @@ def refine_classifier(
             "counts": {"train": len(train_rows), "val": len(val_rows), "test": len(test_rows)},
         },
         "search": search_summary,
-        "threshold": threshold_report,
+        "threshold": threshold_metrics,
         "validation": {"global": val_global},
         "test": {
             "global": test_global,
@@ -481,23 +535,28 @@ def refine_classifier(
             "test_rows": len(test_rows),
         },
     }
-    (model_dir / "metrics.json").write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
+    (model_dir / "metrics.json").write_text(
+        json.dumps(_json_sanitize(metrics_payload), indent=2),
+        encoding="utf-8",
+    )
 
     # refine_config.json (audit trail)
     (model_dir / "refine_config.json").write_text(
         json.dumps(
-            {
-                "predictor_id": predictor_id,
-                "family": family,
-                "search_space": {k: list(v) for k, v in search_space.items()},
-                "n_iter": int(n_iter),
-                "n_splits": int(n_splits),
-                "scoring": scoring,
-                "threshold_criterion": threshold_criterion,
-                "threshold_kwargs": dict(threshold_kwargs),
-                "seed": seed,
-                "timestamp_utc": datetime.now(tz=timezone.utc).isoformat(),
-            },
+            _json_sanitize(
+                {
+                    "predictor_id": predictor_id,
+                    "family": family,
+                    "search_space": {k: list(v) for k, v in search_space.items()},
+                    "n_iter": int(n_iter),
+                    "n_splits": int(n_splits),
+                    "scoring": scoring,
+                    "threshold_criterion": threshold_criterion,
+                    "threshold_kwargs": dict(threshold_kwargs),
+                    "seed": seed,
+                    "timestamp_utc": datetime.now(tz=timezone.utc).isoformat(),
+                }
+            ),
             indent=2,
         ),
         encoding="utf-8",
@@ -524,6 +583,7 @@ def refine_classifier(
         "metrics_json": str(model_dir / "metrics.json"),
         "best_params": search_summary["best_params"],
         "best_cv_score": search_summary["best_score"],
+        "search_seconds": search_summary["search_seconds"],
         "threshold": chosen_threshold,
         "threshold_criterion": threshold_criterion,
         "test_at_threshold": test_at_threshold,
@@ -567,11 +627,18 @@ def refine_regressor(
     if not train_rows or not val_rows or not test_rows:
         raise ValueError("Empty partition. Adjust split ratios or seed.")
 
+    train_groups = {_cv_group_id(r, i) for i, r in enumerate(train_rows)}
+    if len(train_groups) < int(n_splits):
+        raise ValueError(
+            f"GroupKFold requires at least n_splits={n_splits} distinct group ids in the "
+            f"training partition (query_id / run_id); found {len(train_groups)}."
+        )
+
     vectorizer = build_vectorizer(feature_types)
     X_train_raw = to_feature_matrix(train_rows, feature_columns, feature_types)
     X_train = vectorizer.fit_transform(X_train_raw)
     y_train = np.asarray([float(r[target_column]) for r in train_rows], dtype=float)
-    groups_train = [str(r.get("query_id", "")) for r in train_rows]
+    groups_train = [_cv_group_id(r, i) for i, r in enumerate(train_rows)]
 
     best_estimator, search_summary = _run_random_search(
         task="regression",
@@ -669,20 +736,25 @@ def refine_regressor(
             "test_rows": len(test_rows),
         },
     }
-    (model_dir / "metrics.json").write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
+    (model_dir / "metrics.json").write_text(
+        json.dumps(_json_sanitize(metrics_payload), indent=2),
+        encoding="utf-8",
+    )
 
     (model_dir / "refine_config.json").write_text(
         json.dumps(
-            {
-                "predictor_id": predictor_id,
-                "family": family,
-                "search_space": {k: list(v) for k, v in search_space.items()},
-                "n_iter": int(n_iter),
-                "n_splits": int(n_splits),
-                "scoring": scoring,
-                "seed": seed,
-                "timestamp_utc": datetime.now(tz=timezone.utc).isoformat(),
-            },
+            _json_sanitize(
+                {
+                    "predictor_id": predictor_id,
+                    "family": family,
+                    "search_space": {k: list(v) for k, v in search_space.items()},
+                    "n_iter": int(n_iter),
+                    "n_splits": int(n_splits),
+                    "scoring": scoring,
+                    "seed": seed,
+                    "timestamp_utc": datetime.now(tz=timezone.utc).isoformat(),
+                }
+            ),
             indent=2,
         ),
         encoding="utf-8",
@@ -706,6 +778,7 @@ def refine_regressor(
         "metrics_json": str(model_dir / "metrics.json"),
         "best_params": search_summary["best_params"],
         "best_cv_score": search_summary["best_score"],
+        "search_seconds": search_summary["search_seconds"],
         "val_global": val_global,
         "test_global": test_global,
         "timing": metrics_payload["timing"],
