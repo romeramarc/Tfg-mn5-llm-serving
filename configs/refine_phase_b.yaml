@@ -1,0 +1,109 @@
+# ─────────────────────────────────────────────────────────────
+# refine_phase_b.yaml — Phase B refinement (quality predictors)
+# ─────────────────────────────────────────────────────────────
+# This config drives scripts/refine_predictors.py for the two quality
+# predictors. RF and HistGB are tuned with RandomizedSearchCV +
+# GroupKFold-by-query_id, and the operating threshold is picked on the
+# validation split with an asymmetric FP/FN cost criterion (justified
+# below). Selection across families uses the primary metric.
+#
+# Decision asymmetry (FP vs FN) — JUSTIFICATION
+# ─────────────────────────────────────────────────────────────
+# The positive class is "the model's answer is CORRECT". The downstream
+# router uses each predictor to decide whether to:
+#     1) trust a small/cheap model (when p_correct is high), or
+#     2) escalate to the teacher (when p_correct is low).
+#
+#   * False Positive (predict correct=1 but actually 0) → we route to
+#     the cheap model when we should not. Cost: a wrong answer is
+#     served to the user. This directly degrades quality.
+#   * False Negative (predict correct=0 but actually 1) → we route to
+#     the teacher unnecessarily. Cost: extra GPU-seconds + latency,
+#     but quality is preserved.
+#
+# Because the project's stated goal is "Knowledge Distillation y
+# despliegue eficiente", quality cannot be silently degraded. We
+# therefore weight FP higher than FN. We use a 2:1 ratio (fp_cost=2,
+# fn_cost=1) for the ex-ante predictor and a slightly stronger 3:1 for
+# the post-hoc predictor (it sees the actual response and so a FP is
+# more inexcusable). These weights are documented and easy to revise.
+#
+# We also keep "f1" and "youden" as ready-made alternatives in case the
+# memoria wants a symmetric / pure ROC-based comparison.
+# ─────────────────────────────────────────────────────────────
+
+output_root: "results/phase_b/predictors_refined"
+
+# Primary metric: ROC-AUC is threshold-independent and lets us compare
+# raw probability quality across families. Test_f1_at_threshold is also
+# logged so the chosen threshold is visible in REFINEMENT_SELECTION.json.
+primary_metric: "test_roc_auc"
+primary_metric_direction: "max"
+
+predictors:
+  - id: "quality_ex_ante"
+    task: "classification"
+    dataset_jsonl: "results/phase_b/datasets/quality_ex_ante_phase_b.jsonl"
+    dataset_meta_json: "results/phase_b/datasets/quality_ex_ante_phase_b_meta.json"
+    target_column: "target_correct"
+    seed: 42
+    train_ratio: 0.70
+    val_ratio: 0.15
+    n_iter: 30
+    n_splits: 3
+    scoring: "roc_auc"
+    families:
+      - random_forest
+      - gradient_boosting
+    threshold:
+      criterion: "cost"
+      fp_cost: 2.0
+      fn_cost: 1.0
+    search_space:
+      random_forest:
+        n_estimators: [200, 400, 800]
+        max_depth: [null, 10, 20, 40]
+        min_samples_leaf: [1, 2, 5, 10]
+        max_features: ["sqrt", "log2", 0.5]
+        class_weight: ["balanced", "balanced_subsample"]
+      gradient_boosting:
+        learning_rate: [0.03, 0.05, 0.1]
+        max_iter: [200, 400, 800]
+        max_depth: [null, 6, 8, 12]
+        max_leaf_nodes: [15, 31, 63]
+        l2_regularization: [0.0, 1.0e-4, 1.0e-2]
+
+  - id: "quality_post_hoc"
+    task: "classification"
+    dataset_jsonl: "results/phase_b/datasets/quality_post_hoc_phase_b.jsonl"
+    dataset_meta_json: "results/phase_b/datasets/quality_post_hoc_phase_b_meta.json"
+    target_column: "target_correct"
+    seed: 42
+    train_ratio: 0.70
+    val_ratio: 0.15
+    n_iter: 30
+    n_splits: 3
+    scoring: "roc_auc"
+    families:
+      - random_forest
+      - gradient_boosting
+    threshold:
+      # Post-hoc has access to the actual response + uncertainty signals,
+      # so a false positive (declaring a wrong answer "correct") is harder
+      # to forgive. Push the FP cost higher.
+      criterion: "cost"
+      fp_cost: 3.0
+      fn_cost: 1.0
+    search_space:
+      random_forest:
+        n_estimators: [200, 400, 800]
+        max_depth: [null, 10, 20, 40]
+        min_samples_leaf: [1, 2, 5, 10]
+        max_features: ["sqrt", "log2", 0.5]
+        class_weight: ["balanced", "balanced_subsample"]
+      gradient_boosting:
+        learning_rate: [0.03, 0.05, 0.1]
+        max_iter: [200, 400, 800]
+        max_depth: [null, 6, 8, 12]
+        max_leaf_nodes: [15, 31, 63]
+        l2_regularization: [0.0, 1.0e-4, 1.0e-2]
