@@ -32,7 +32,7 @@ if str(REPO_ROOT) not in sys.path:  # allow `python scripts/phase_b_train.py`
 
 from predictors.builders.build_ex_ante_dataset import build_ex_ante_dataset
 from predictors.builders.build_post_hoc_dataset import build_post_hoc_dataset
-from predictors.training.common import run_training
+from predictors.training.common import resolve_model_families, run_baseline_battery
 from utils.config_loader import load_yaml
 from utils.logging import get_logger, setup_logging
 
@@ -124,43 +124,51 @@ def main() -> None:
             "cannot be trained."
         )
 
-    family = str(pred_cfg.get("family", "gradient_boosting"))
+    families = resolve_model_families(pred_cfg)
     output_root = Path(pred_cfg.get("output_root", "results/phase_b/predictors"))
     seed = int(pred_cfg.get("seed", 42))
     train_ratio = float(pred_cfg.get("train_ratio", 0.7))
     val_ratio = float(pred_cfg.get("val_ratio", 0.15))
 
-    # ── 3) Train quality_ex_ante predictor ───────────────────
     ex_ante_jsonl = output_dir / f"{ex_ante_name}.jsonl"
     ex_ante_meta = output_dir / f"{ex_ante_name}_meta.json"
-    train_report_ex_ante = run_training(
+    post_hoc_jsonl = output_dir / f"{post_hoc_name}.jsonl"
+    post_hoc_meta = output_dir / f"{post_hoc_name}_meta.json"
+
+    ex_ante_battery = run_baseline_battery(
         predictor_id="quality_ex_ante",
         task="classification",
         dataset_jsonl=ex_ante_jsonl,
         dataset_meta_json=ex_ante_meta,
         target_column="target_correct",
-        model_family=family,
+        families=families,
         output_root=output_root,
         seed=seed,
         train_ratio=train_ratio,
         val_ratio=val_ratio,
+        comparison_csv=output_root / "quality_ex_ante_baseline_comparison.csv",
+        logger=logger,
     )
-
-    # ── 4) Train quality_post_hoc predictor ──────────────────
-    post_hoc_jsonl = output_dir / f"{post_hoc_name}.jsonl"
-    post_hoc_meta = output_dir / f"{post_hoc_name}_meta.json"
-    train_report_post_hoc = run_training(
+    post_hoc_battery = run_baseline_battery(
         predictor_id="quality_post_hoc",
         task="classification",
         dataset_jsonl=post_hoc_jsonl,
         dataset_meta_json=post_hoc_meta,
         target_column="target_correct",
-        model_family=family,
+        families=families,
         output_root=output_root,
         seed=seed,
         train_ratio=train_ratio,
         val_ratio=val_ratio,
+        comparison_csv=output_root / "quality_post_hoc_baseline_comparison.csv",
+        logger=logger,
     )
+
+    def _collapse(battery: Dict[str, Any]) -> Any:
+        # Preserve the old (single-model) JSON layout when no battery is needed.
+        if len(families) == 1 and not battery["errors"]:
+            return battery["by_family"][families[0]]
+        return battery
 
     final = {
         "build": {
@@ -168,8 +176,8 @@ def main() -> None:
             "post_hoc": post_hoc_report,
         },
         "train": {
-            "ex_ante": train_report_ex_ante,
-            "post_hoc": train_report_post_hoc,
+            "ex_ante": _collapse(ex_ante_battery),
+            "post_hoc": _collapse(post_hoc_battery),
         },
     }
     print(json.dumps(final, indent=2, default=str))

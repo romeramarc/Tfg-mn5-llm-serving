@@ -11,7 +11,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train service-cost predictor")
     parser.add_argument("--dataset", default="results/predictors/datasets/service_cost_iter2_real_hardened.jsonl")
     parser.add_argument("--meta", default="results/predictors/datasets/service_cost_iter2_real_hardened_meta.json")
-    parser.add_argument("--family", choices=["linear", "random_forest", "gradient_boosting"], default="random_forest")
+    parser.add_argument(
+        "--family",
+        choices=[
+            "linear",
+            "ridge",
+            "lasso",
+            "decision_tree",
+            "random_forest",
+            "gradient_boosting",
+            "mlp",
+        ],
+        default="random_forest",
+    )
     parser.add_argument("--output-root", default="results/predictors/models")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--train-ratio", type=float, default=0.7)

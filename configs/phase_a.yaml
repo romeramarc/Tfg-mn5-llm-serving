@@ -94,7 +94,21 @@ dataset:
 # ── 3) Predictor training ────────────────────────────────────
 predictor:
   output_root: "results/phase_a/predictors"
-  family: "gradient_boosting"         # linear | random_forest | gradient_boosting
+  # If ``families`` is absent or empty, only ``family`` below is trained.
+  # Supported regression families:
+  #   linear | ridge | lasso | decision_tree | random_forest | gradient_boosting | mlp
+  family: "gradient_boosting"
+  # Baseline battery — broad but cheap, no hyperparameter tuning yet.
+  # Writes results/phase_a/predictors/service_cost_baseline_comparison.csv
+  # with one row per family and per-model timings.
+  families:
+    - linear              # plain LinearRegression (baseline floor)
+    - ridge               # L2-regularised linear
+    - lasso               # L1-regularised linear
+    - decision_tree       # single CART tree baseline
+    - random_forest       # bagging ensemble
+    - gradient_boosting   # boosting ensemble (HistGradientBoosting)
+    - mlp                 # small feed-forward network (StandardScaler + MLP)
   seed: 42
   train_ratio: 0.70
   val_ratio: 0.15                     # test gets 0.15 (1 - train - val)

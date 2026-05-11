@@ -119,7 +119,21 @@ dataset:
 # ── 3) Predictor training ────────────────────────────────────
 predictor:
   output_root: "results/phase_b/predictors"
-  family: "gradient_boosting"         # linear | random_forest | gradient_boosting
+  # Supported classification families:
+  #   logistic | logistic_l2 | logistic_l1 | linear (alias of logistic_l2)
+  #   decision_tree | random_forest | gradient_boosting | mlp
+  family: "gradient_boosting"
+  # Baseline battery — broad but cheap, no hyperparameter tuning yet.
+  # Writes results/phase_b/predictors/quality_{ex_ante,post_hoc}_baseline_comparison.csv
+  # with one row per family and per-model timings.
+  families:
+    - logistic            # plain logistic regression (sklearn default L2)
+    - logistic_l2         # explicit L2-regularised logistic
+    - logistic_l1         # L1-regularised logistic (liblinear)
+    - decision_tree       # single CART tree baseline
+    - random_forest       # bagging ensemble
+    - gradient_boosting   # boosting ensemble (HistGradientBoosting)
+    - mlp                 # small feed-forward network (StandardScaler + MLP)
   seed: 42
   train_ratio: 0.70
   val_ratio: 0.15                     # test gets 0.15 (1 - train - val)

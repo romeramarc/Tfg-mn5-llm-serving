@@ -4,6 +4,7 @@ import csv
 from datetime import datetime, timezone
 import hashlib
 import json
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -16,8 +17,17 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.inspection import permutation_importance
+from sklearn.linear_model import (
+    Lasso,
+    LinearRegression,
+    LogisticRegression,
+    Ridge,
+)
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from distill.dataset_utils import read_jsonl
 from predictors.dataset_common import META_COLUMNS
@@ -27,6 +37,71 @@ from predictors.training.metrics import (
     grouped_metrics_regression,
     regression_metrics,
 )
+
+SUPPORTED_MODEL_FAMILIES = frozenset(
+    {
+        # Linear baselines
+        "linear",          # plain LinearRegression / LogisticRegression default (kept for back-compat)
+        "logistic",        # LogisticRegression w/o explicit penalty arg (classification only)
+        "logistic_l2",     # LogisticRegression with L2 penalty (classification only)
+        "logistic_l1",     # LogisticRegression with L1 penalty (classification only)
+        "ridge",           # Ridge regression (regression only)
+        "lasso",           # Lasso regression (regression only)
+        # Trees & ensembles
+        "decision_tree",   # single CART tree baseline
+        "random_forest",   # bagging
+        "gradient_boosting",  # boosting (HistGradientBoosting*)
+        # Neural baseline
+        "mlp",
+    }
+)
+
+# Default baseline batteries (kept simple, no tuning yet).
+DEFAULT_CLASSIFICATION_BASELINES: Tuple[str, ...] = (
+    "logistic",
+    "logistic_l2",
+    "logistic_l1",
+    "decision_tree",
+    "random_forest",
+    "gradient_boosting",
+    "mlp",
+)
+DEFAULT_REGRESSION_BASELINES: Tuple[str, ...] = (
+    "linear",
+    "ridge",
+    "lasso",
+    "decision_tree",
+    "random_forest",
+    "gradient_boosting",
+    "mlp",
+)
+
+
+def resolve_model_families(pred_cfg: Dict[str, Any]) -> List[str]:
+    """Return model families to train from YAML ``predictor`` block.
+
+    If ``families`` is a non-empty list, each entry is trained in order
+    (same dataset, same group-based split). Otherwise a single-element
+    list containing ``family`` (default ``gradient_boosting``).
+    """
+    raw = pred_cfg.get("families")
+    if isinstance(raw, list) and len(raw) > 0:
+        out = [str(x).strip() for x in raw if str(x).strip()]
+        if out:
+            bad = sorted(set(out) - SUPPORTED_MODEL_FAMILIES)
+            if bad:
+                raise ValueError(
+                    f"Unsupported predictor.families entries: {bad}. "
+                    f"Supported: {sorted(SUPPORTED_MODEL_FAMILIES)}"
+                )
+            return out
+    fam = str(pred_cfg.get("family", "gradient_boosting")).strip()
+    if fam not in SUPPORTED_MODEL_FAMILIES:
+        raise ValueError(
+            f"Unsupported predictor.family '{fam}'. "
+            f"Supported: {sorted(SUPPORTED_MODEL_FAMILIES)}"
+        )
+    return [fam]
 
 
 def run_training(
@@ -44,6 +119,11 @@ def run_training(
 ) -> Dict[str, Any]:
     if task not in {"classification", "regression"}:
         raise ValueError(f"Unsupported task: {task}")
+    if model_family not in SUPPORTED_MODEL_FAMILIES:
+        raise ValueError(
+            f"Unsupported model_family '{model_family}'. "
+            f"Supported: {sorted(SUPPORTED_MODEL_FAMILIES)}"
+        )
 
     rows = read_jsonl(dataset_jsonl)
     if not rows:
@@ -74,7 +154,10 @@ def run_training(
     y_train = np.asarray([float(row[target_column]) for row in train_rows], dtype=float)
 
     X_train_enc = vectorizer.fit_transform(X_train)
-    estimator.fit(X_train_enc, y_train if task == "regression" else y_train.astype(int))
+    y_train_fit = y_train if task == "regression" else y_train.astype(int)
+    t_fit_start = time.perf_counter()
+    estimator.fit(X_train_enc, y_train_fit)
+    fit_time_s = float(time.perf_counter() - t_fit_start)
 
     val_eval = evaluate_partition(
         task=task,
@@ -93,6 +176,18 @@ def run_training(
         feature_columns=feature_columns,
         feature_types=feature_types,
         target_column=target_column,
+    )
+
+    # Standalone test-set predict timing (averages out metric/transform overhead
+    # so per-row inference time is reported on the model itself).
+    X_test_raw = to_feature_matrix(test_rows, feature_columns, feature_types)
+    X_test_enc = vectorizer.transform(X_test_raw)
+    t_pred_start = time.perf_counter()
+    estimator.predict(X_test_enc)
+    predict_time_test_s = float(time.perf_counter() - t_pred_start)
+    n_test_rows = len(test_rows)
+    predict_us_per_row = (
+        float(predict_time_test_s / n_test_rows * 1e6) if n_test_rows > 0 else None
     )
 
     model_dir = make_model_dir(output_root=output_root, predictor_id=predictor_id, model_family=model_family)
@@ -137,6 +232,12 @@ def run_training(
         },
         "validation": val_eval["metrics"],
         "test": test_eval["metrics"],
+        "timing": {
+            "fit_time_s": fit_time_s,
+            "predict_time_test_s": predict_time_test_s,
+            "predict_us_per_row": predict_us_per_row,
+            "test_rows": n_test_rows,
+        },
     }
 
     metrics_path = model_dir / "metrics.json"
@@ -205,7 +306,191 @@ def run_training(
         "split_assignments_csv": str(split_csv),
         "bundle": str(bundle_path),
         "config": str(config_path),
+        "fit_time_s": fit_time_s,
+        "predict_time_test_s": predict_time_test_s,
+        "predict_us_per_row": predict_us_per_row,
+        "test_rows": n_test_rows,
     }
+
+
+def run_baseline_battery(
+    *,
+    predictor_id: str,
+    task: str,
+    dataset_jsonl: Path,
+    dataset_meta_json: Optional[Path],
+    target_column: str,
+    families: Sequence[str],
+    output_root: Path,
+    seed: int,
+    train_ratio: float,
+    val_ratio: float,
+    comparison_csv: Optional[Path] = None,
+    logger: Any = None,
+) -> Dict[str, Any]:
+    """Train each family in ``families`` and aggregate into a single report.
+
+    Per-family failures are caught and recorded so a single broken model
+    does not abort the rest of the baseline comparison. When more than one
+    family is requested (or ``comparison_csv`` is given) a tabular summary
+    with one row per family is written to disk.
+    """
+    by_family: Dict[str, Any] = {}
+    errors: Dict[str, Any] = {}
+    rows_summary: List[Dict[str, Any]] = []
+    for fam in families:
+        if logger is not None:
+            try:
+                logger.info(
+                    "Training baseline",
+                    extra={"predictor_id": predictor_id, "family": fam},
+                )
+            except Exception:  # logging extras should never abort training
+                pass
+        try:
+            report = run_training(
+                predictor_id=predictor_id,
+                task=task,
+                dataset_jsonl=dataset_jsonl,
+                dataset_meta_json=dataset_meta_json,
+                target_column=target_column,
+                model_family=fam,
+                output_root=output_root,
+                seed=seed,
+                train_ratio=train_ratio,
+                val_ratio=val_ratio,
+            )
+            by_family[fam] = report
+            rows_summary.append(
+                _comparison_row(
+                    predictor_id=predictor_id,
+                    task=task,
+                    family=fam,
+                    report=report,
+                    status="ok",
+                    error=None,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — baseline isolation by design
+            err = {"type": type(exc).__name__, "message": str(exc)}
+            errors[fam] = err
+            rows_summary.append(
+                _comparison_row(
+                    predictor_id=predictor_id,
+                    task=task,
+                    family=fam,
+                    report=None,
+                    status="failed",
+                    error=err,
+                )
+            )
+            if logger is not None:
+                try:
+                    logger.exception(
+                        "Baseline family failed",
+                        extra={"predictor_id": predictor_id, "family": fam},
+                    )
+                except Exception:
+                    pass
+
+    if comparison_csv is not None and rows_summary:
+        write_comparison_table_csv(comparison_csv, rows_summary)
+
+    return {
+        "predictor_id": predictor_id,
+        "task": task,
+        "families": list(families),
+        "by_family": by_family,
+        "errors": errors,
+        "comparison_csv": str(comparison_csv) if comparison_csv else None,
+    }
+
+
+def _comparison_row(
+    *,
+    predictor_id: str,
+    task: str,
+    family: str,
+    report: Optional[Dict[str, Any]],
+    status: str,
+    error: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    row: Dict[str, Any] = {
+        "predictor_id": predictor_id,
+        "task": task,
+        "model_family": family,
+        "status": status,
+        "error_type": (error or {}).get("type"),
+        "error_message": (error or {}).get("message"),
+        "fit_time_s": None,
+        "predict_time_test_s": None,
+        "predict_us_per_row": None,
+        "test_rows": None,
+        "model_dir": None,
+        "metrics_json": None,
+    }
+    if report is None:
+        return row
+    row.update(
+        {
+            "fit_time_s": report.get("fit_time_s"),
+            "predict_time_test_s": report.get("predict_time_test_s"),
+            "predict_us_per_row": report.get("predict_us_per_row"),
+            "test_rows": report.get("test_rows"),
+            "model_dir": report.get("model_dir"),
+            "metrics_json": report.get("metrics_json"),
+        }
+    )
+    metrics_path = report.get("metrics_json")
+    if not metrics_path:
+        return row
+    try:
+        payload = json.loads(Path(metrics_path).read_text(encoding="utf-8"))
+    except Exception:
+        return row
+    test_global = (payload.get("test") or {}).get("global") or {}
+    val_global = (payload.get("validation") or {}).get("global") or {}
+    if task == "classification":
+        for key in (
+            "accuracy",
+            "precision",
+            "recall",
+            "f1",
+            "roc_auc",
+            "average_precision",
+            "brier",
+            "log_loss",
+            "ece_abs",
+            "positive_rate",
+        ):
+            row[f"test_{key}"] = test_global.get(key)
+            row[f"val_{key}"] = val_global.get(key)
+    else:
+        for key in ("mae", "rmse", "r2", "mape"):
+            row[f"test_{key}"] = test_global.get(key)
+            row[f"val_{key}"] = val_global.get(key)
+    return row
+
+
+def write_comparison_table_csv(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
+    """Write a baseline comparison table with one row per model family."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        path.write_text("", encoding="utf-8")
+        return
+    columns: List[str] = []
+    seen = set()
+    for row in rows:
+        for key in row.keys():
+            if key in seen:
+                continue
+            seen.add(key)
+            columns.append(key)
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=columns)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key) for key in columns})
 
 
 def evaluate_partition(
@@ -351,9 +636,43 @@ def build_vectorizer(feature_types: Dict[str, str]) -> DictVectorizer:
 
 
 def build_estimator(*, task: str, family: str, seed: int) -> Any:
+    """Construct a fresh estimator for a given baseline family.
+
+    Hyperparameters are deliberately fixed and modest: this is a baseline
+    comparison phase, not a tuned final model. Anything heavier would need
+    a separate grid/Bayesian search step elsewhere.
+    """
     if task == "classification":
-        if family == "linear":
-            return LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed)
+        if family in ("linear", "logistic", "logistic_l2"):
+            # Default logistic regression (L2-regularised). ``linear`` kept as
+            # back-compat alias for the previous classification baseline.
+            return LogisticRegression(
+                penalty="l2",
+                C=1.0,
+                max_iter=2000,
+                class_weight="balanced",
+                random_state=seed,
+                solver="lbfgs",
+                n_jobs=-1,
+            )
+        if family == "logistic_l1":
+            # L1 logistic regression — liblinear is the canonical small-data solver
+            # for L1 and supports class_weight="balanced".
+            return LogisticRegression(
+                penalty="l1",
+                C=1.0,
+                max_iter=2000,
+                class_weight="balanced",
+                random_state=seed,
+                solver="liblinear",
+            )
+        if family == "decision_tree":
+            return DecisionTreeClassifier(
+                max_depth=12,
+                min_samples_leaf=5,
+                class_weight="balanced",
+                random_state=seed,
+            )
         if family == "random_forest":
             return RandomForestClassifier(
                 n_estimators=400,
@@ -369,9 +688,40 @@ def build_estimator(*, task: str, family: str, seed: int) -> Any:
                 max_iter=400,
                 random_state=seed,
             )
+        if family == "mlp":
+            # Small feed-forward net + scaled dense inputs (DictVectorizer is dense).
+            return Pipeline(
+                [
+                    ("scaler", StandardScaler()),
+                    (
+                        "mlp",
+                        MLPClassifier(
+                            hidden_layer_sizes=(128, 64),
+                            activation="relu",
+                            alpha=1e-4,
+                            max_iter=500,
+                            early_stopping=True,
+                            validation_fraction=0.1,
+                            n_iter_no_change=25,
+                            random_state=seed,
+                        ),
+                    ),
+                ]
+            )
     else:
         if family == "linear":
+            # Plain (unregularised) least squares — baseline floor.
+            return LinearRegression(n_jobs=-1)
+        if family == "ridge":
             return Ridge(alpha=1.0, random_state=seed)
+        if family == "lasso":
+            return Lasso(alpha=1e-3, random_state=seed, max_iter=10000)
+        if family == "decision_tree":
+            return DecisionTreeRegressor(
+                max_depth=12,
+                min_samples_leaf=5,
+                random_state=seed,
+            )
         if family == "random_forest":
             return RandomForestRegressor(
                 n_estimators=500,
@@ -385,6 +735,25 @@ def build_estimator(*, task: str, family: str, seed: int) -> Any:
                 learning_rate=0.05,
                 max_iter=500,
                 random_state=seed,
+            )
+        if family == "mlp":
+            return Pipeline(
+                [
+                    ("scaler", StandardScaler()),
+                    (
+                        "mlp",
+                        MLPRegressor(
+                            hidden_layer_sizes=(128, 64),
+                            activation="relu",
+                            alpha=1e-4,
+                            max_iter=500,
+                            early_stopping=True,
+                            validation_fraction=0.1,
+                            n_iter_no_change=25,
+                            random_state=seed,
+                        ),
+                    ),
+                ]
             )
 
     raise ValueError(f"Unsupported estimator family '{family}' for task '{task}'")
@@ -472,8 +841,15 @@ def make_model_dir(*, output_root: Path, predictor_id: str, model_family: str) -
     }
     family_aliases = {
         "linear": "lin",
+        "logistic": "log",
+        "logistic_l2": "logl2",
+        "logistic_l1": "logl1",
+        "ridge": "ridge",
+        "lasso": "lasso",
+        "decision_tree": "dt",
         "random_forest": "rf",
         "gradient_boosting": "gb",
+        "mlp": "mlp",
     }
     safe_predictor = predictor_aliases.get(predictor_id, predictor_id.replace("_", "-")[:12])
     safe_family = family_aliases.get(model_family, model_family.replace("_", "-")[:12])

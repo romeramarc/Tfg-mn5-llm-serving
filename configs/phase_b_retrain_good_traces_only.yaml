@@ -80,6 +80,14 @@ dataset:
 predictor:
   output_root: "results/phase_b/predictors"
   family: "gradient_boosting"
+  families:
+    - logistic
+    - logistic_l2
+    - logistic_l1
+    - decision_tree
+    - random_forest
+    - gradient_boosting
+    - mlp
   seed: 42
   train_ratio: 0.70
   val_ratio: 0.15

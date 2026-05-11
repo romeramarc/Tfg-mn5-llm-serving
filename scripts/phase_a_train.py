@@ -28,7 +28,7 @@ if str(REPO_ROOT) not in sys.path:  # allow `python scripts/phase_a_train.py`
     sys.path.insert(0, str(REPO_ROOT))
 
 from predictors.builders.build_cost_dataset import build_cost_dataset
-from predictors.training.common import run_training
+from predictors.training.common import resolve_model_families, run_baseline_battery
 from utils.config_loader import load_yaml
 from utils.logging import get_logger, setup_logging
 
@@ -104,19 +104,34 @@ def main() -> None:
     dataset_jsonl = output_dir / f"{dataset_name}.jsonl"
     dataset_meta = output_dir / f"{dataset_name}_meta.json"
 
-    # ── 2) Train predictor ───────────────────────────────────
-    train_report = run_training(
+    # ── 2) Train predictor(s) — baseline battery (multi-family) ────────
+    families = resolve_model_families(pred_cfg)
+    out_root = Path(pred_cfg.get("output_root", "results/phase_a/predictors"))
+    seed = int(pred_cfg.get("seed", 42))
+    train_ratio = float(pred_cfg.get("train_ratio", 0.7))
+    val_ratio = float(pred_cfg.get("val_ratio", 0.15))
+
+    comparison_csv = out_root / "service_cost_baseline_comparison.csv"
+    battery = run_baseline_battery(
         predictor_id="service_cost",
         task="regression",
         dataset_jsonl=dataset_jsonl,
         dataset_meta_json=dataset_meta,
         target_column="target_service_cost",
-        model_family=str(pred_cfg.get("family", "gradient_boosting")),
-        output_root=Path(pred_cfg.get("output_root", "results/phase_a/predictors")),
-        seed=int(pred_cfg.get("seed", 42)),
-        train_ratio=float(pred_cfg.get("train_ratio", 0.7)),
-        val_ratio=float(pred_cfg.get("val_ratio", 0.15)),
+        families=families,
+        output_root=out_root,
+        seed=seed,
+        train_ratio=train_ratio,
+        val_ratio=val_ratio,
+        comparison_csv=comparison_csv,
+        logger=logger,
     )
+
+    # Preserve previous JSON layout when exactly one family was requested.
+    if len(families) == 1 and not battery["errors"]:
+        train_report: Any = battery["by_family"][families[0]]
+    else:
+        train_report = battery
 
     final = {
         "build": build_report,
