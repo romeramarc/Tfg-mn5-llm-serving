@@ -108,6 +108,7 @@ dataset:
   # We use a wildcard date suffix so all captures from the latest launch
   # are picked up; edit to a specific YYYYMMDD after each full run to
   # pin the dataset (e.g. "results/phase_b/captures/capture-*-20260520*/trace.jsonl")
+  # Retrain on GPU-valid traces only (excl. failed older folders): configs/phase_b_retrain_good_traces_only.yaml
   trace_glob_patterns:
     - "results/phase_b/captures/capture-*/trace.jsonl"
 

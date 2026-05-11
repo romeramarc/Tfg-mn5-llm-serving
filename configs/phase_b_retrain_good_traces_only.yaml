@@ -1,0 +1,85 @@
+# ─────────────────────────────────────────────────────────────
+# phase_b_retrain_good_traces_only.yaml
+# ─────────────────────────────────────────────────────────────
+# Same as phase_b.yaml except dataset ingestion: only capture runs whose
+# UTC folder suffix matches 20260510T141* (successful BSC run with GPU
+# rows attached per request). Excludes older capture-*-20260510T134* traces.
+#
+# After a NEW capture day, update trace_glob_patterns to that day's good
+# suffix, or list explicit paths per role.
+#
+# Usage (repo root, env activated — see env/setup_env.sh):
+#   python scripts/phase_b_train.py --config configs/phase_b_retrain_good_traces_only.yaml
+#
+# SLURM:
+#   PHASE_B_CONFIG=configs/phase_b_retrain_good_traces_only.yaml sbatch slurm/phase_b_train.sbatch
+# ─────────────────────────────────────────────────────────────
+
+common:
+  base_url: "http://localhost:8000"
+  seed: 42
+  results_base_dir: "results/phase_b"
+
+capture:
+  roles:
+    - name: "teacher"
+    - name: "student_mid"
+    - name: "student_q3b"
+    - name: "student_small"
+    - name: "student_tiny"
+  benchmarks:
+    gsm8k:
+      enabled: true
+      dataset_name: "openai/gsm8k"
+      dataset_split: "test"
+      subset_size: 250
+      prompt_template: |
+        Solve the following math problem step by step.
+        Put your final numeric answer after ####.
+
+        Question: {question}
+
+        Answer:
+      answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+    math:
+      enabled: true
+      dataset_name: "HuggingFaceH4/MATH-500"
+      dataset_split: "test"
+      subset_size: 500
+      prompt_template: |
+        Solve the following mathematics problem.
+        Put your final answer inside \\boxed{{}}.
+
+        Problem: {problem}
+
+        Solution:
+      answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+  arrival_rates_rps: [5, 20]
+  num_warmup_requests: 30
+  max_inflight: 64
+  max_tokens: 512
+  temperature: 0.0
+  request_timeout_s: 180.0
+  logprobs_top_k: 5
+  stream: false
+  samplers:
+    server_metrics:
+      enabled: true
+      interval_s: 0.25
+    gpu_smi:
+      enabled: true
+      interval_s: 0.2
+
+dataset:
+  trace_glob_patterns:
+    - "results/phase_b/captures/capture-*-20260510T141*/trace.jsonl"
+  output_dir: "results/phase_b/datasets"
+  ex_ante_dataset_name: "quality_ex_ante_phase_b_clean"
+  post_hoc_dataset_name: "quality_post_hoc_phase_b_clean"
+
+predictor:
+  output_root: "results/phase_b/predictors"
+  family: "gradient_boosting"
+  seed: 42
+  train_ratio: 0.70
+  val_ratio: 0.15
