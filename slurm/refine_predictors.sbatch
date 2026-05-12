@@ -14,6 +14,11 @@
 # cost criterion documented in configs/refine_phase_b.yaml.
 #
 # CPU-only — refinement is dominated by tree builds, no GPU required.
+#
+# Wall time: 6 model searches (A: RF+GB, B: 2× RF+GB) with n_iter=30 and
+# 3-fold GroupKFold can exceed 4h on busy GPP nodes; a prior MN5 run hit
+# SLURM TIMEOUT mid Phase-A GB. Keep this comfortably above worst case.
+# Combined job: 24h wall clock (Phase A+B in one submission).
 # ─────────────────────────────────────────────────────────────
 #SBATCH --job-name=refine-predictors
 #SBATCH --output=logs/refine-predictors-%j.out
@@ -23,7 +28,7 @@
 #SBATCH --qos=gp_bsccs
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --time=04:00:00
+#SBATCH --time=24:00:00
 
 set -euo pipefail
 

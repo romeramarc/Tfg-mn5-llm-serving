@@ -149,17 +149,23 @@ def _empty_estimator(*, task: str, family: str, seed: int) -> Any:
     Kept here (instead of reusing ``build_estimator`` from ``common``)
     so the refined run has explicit, audit-friendly defaults for n_jobs
     and random_state.
+
+    **Important:** ``RandomizedSearchCV`` is constructed with ``n_jobs=-1``
+    to parallelise across CV splits / candidates. Each inner estimator must
+    therefore use ``n_jobs=1``; otherwise RandomForest would spawn one
+    full-node parallel fit per concurrent trial (nested oversubscription),
+    which can make wall time explode by an order of magnitude on HPC nodes.
     """
     if task == "classification":
         if family == "random_forest":
-            return RandomForestClassifier(random_state=seed, n_jobs=-1)
+            return RandomForestClassifier(random_state=seed, n_jobs=1)
         if family == "gradient_boosting":
-            return HistGradientBoostingClassifier(random_state=seed)
+            return HistGradientBoostingClassifier(random_state=seed, n_jobs=1)
     else:
         if family == "random_forest":
-            return RandomForestRegressor(random_state=seed, n_jobs=-1)
+            return RandomForestRegressor(random_state=seed, n_jobs=1)
         if family == "gradient_boosting":
-            return HistGradientBoostingRegressor(random_state=seed)
+            return HistGradientBoostingRegressor(random_state=seed, n_jobs=1)
     raise ValueError(f"Refinement only supports RF/GB; got family={family} task={task}")
 
 
