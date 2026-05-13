@@ -18,7 +18,7 @@
 # Wall time: 6 model searches (A: RF+GB, B: 2× RF+GB) with n_iter=30 and
 # 3-fold GroupKFold can exceed 4h on busy GPP nodes; a prior MN5 run hit
 # SLURM TIMEOUT mid Phase-A GB. Keep this comfortably above worst case.
-# Combined job: 24h wall clock (Phase A+B in one submission).
+# Combined job: 12h wall clock (Phase A+B in one submission).
 # ─────────────────────────────────────────────────────────────
 #SBATCH --job-name=refine-predictors
 #SBATCH --output=logs/refine-predictors-%j.out
@@ -28,7 +28,7 @@
 #SBATCH --qos=gp_bsccs
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 
 set -euo pipefail
 
