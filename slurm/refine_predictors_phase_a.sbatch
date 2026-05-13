@@ -1,5 +1,5 @@
 #!/bin/bash
-# SLURM — Refine Phase A only (service_cost RF + GB). Same resources as full refine.
+# SLURM — Refine Phase A only (service_cost RF + GB). Lighter than full refine.
 #SBATCH --job-name=refine-ph-a
 #SBATCH --output=logs/refine-phase-a-%j.out
 #SBATCH --error=logs/refine-phase-a-%j.err
@@ -7,8 +7,8 @@
 #SBATCH --account=bsc98
 #SBATCH --qos=gp_bsccs
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
-#SBATCH --time=12:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --time=06:00:00
 
 set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"

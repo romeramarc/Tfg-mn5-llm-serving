@@ -7,8 +7,8 @@
 #SBATCH --account=bsc98
 #SBATCH --qos=gp_bsccs
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
-#SBATCH --time=12:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --time=08:00:00
 
 set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"

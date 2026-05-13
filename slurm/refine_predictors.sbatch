@@ -18,7 +18,10 @@
 # Wall time: 6 model searches (A: RF+GB, B: 2× RF+GB) with n_iter=30 and
 # 3-fold GroupKFold can exceed 4h on busy GPP nodes; a prior MN5 run hit
 # SLURM TIMEOUT mid Phase-A GB. Keep this comfortably above worst case.
-# Combined job: 12h wall clock (Phase A+B in one submission).
+# Combined job: 8h wall clock (Phase A+B in one submission).
+# Scheduling: 16 CPUs matches CV parallelism (n_splits=3, n_jobs=-1) and is
+# easier to place on GPP than 32 CPUs for 12h; other CPU jobs in this repo
+# typically request 16-20 cores.
 # ─────────────────────────────────────────────────────────────
 #SBATCH --job-name=refine-predictors
 #SBATCH --output=logs/refine-predictors-%j.out
@@ -27,8 +30,8 @@
 #SBATCH --account=bsc98
 #SBATCH --qos=gp_bsccs
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
-#SBATCH --time=12:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --time=08:00:00
 
 set -euo pipefail
 
