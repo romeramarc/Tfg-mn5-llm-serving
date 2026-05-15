@@ -1,0 +1,61 @@
+# Phase B capture — 1.5B pre-KD only (student_small_base).
+# Same benchmarks / load as phase_b.yaml; feeds ex-ante + post-hoc builders later.
+common:
+  base_url: "http://localhost:8000"
+  seed: 42
+  results_base_dir: "results/phase_b"
+
+capture:
+  roles:
+    - name: "student_small_base"
+  benchmarks:
+    gsm8k:
+      enabled: true
+      dataset_name: "openai/gsm8k"
+      dataset_split: "test"
+      subset_size: 250
+      prompt_template: |
+        Solve the following math problem step by step.
+        Put your final numeric answer after ####.
+
+        Question: {question}
+
+        Answer:
+      answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+    math:
+      enabled: true
+      dataset_name: "HuggingFaceH4/MATH-500"
+      dataset_split: "test"
+      subset_size: 500
+      prompt_template: |
+        Solve the following mathematics problem.
+        Put your final answer inside \\boxed{{}}.
+
+        Problem: {problem}
+
+        Solution:
+      answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+  arrival_rates_rps: [5, 20]
+  num_warmup_requests: 30
+  max_inflight: 64
+  max_tokens: 512
+  temperature: 0.0
+  request_timeout_s: 180.0
+  logprobs_top_k: 5
+  stream: false
+  samplers:
+    server_metrics:
+      enabled: true
+      interval_s: 0.25
+    gpu_smi:
+      enabled: true
+      interval_s: 0.2
+
+dataset:
+  trace_glob_patterns: []
+  output_dir: "results/phase_b/datasets"
+  ex_ante_dataset_name: "quality_ex_ante_phase_b_ladder_base"
+  post_hoc_dataset_name: "quality_post_hoc_phase_b_ladder_base"
+
+predictor:
+  output_root: "results/phase_b/predictors"

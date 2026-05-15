@@ -1,0 +1,38 @@
+# Phase A capture — 1.5B pre-KD only (student_small_base).
+# Same workload as phase_a.yaml; does not re-capture the distilled student_small.
+common:
+  base_url: "http://localhost:8000"
+  seed: 42
+  results_base_dir: "results/phase_a"
+
+capture:
+  prompts_file: "configs/prompts.jsonl"
+  roles:
+    - name: "student_small_base"
+  arrival_rates_rps: [1, 2, 5, 10, 20, 40]
+  num_requests_per_rate: 600
+  num_warmup_requests: 60
+  max_inflight: 256
+  max_tokens: 256
+  temperature: 0.0
+  request_timeout_s: 120.0
+  stream: true
+  include_usage: true
+  samplers:
+    server_metrics:
+      enabled: true
+      interval_s: 0.25
+    gpu_smi:
+      enabled: true
+      interval_s: 0.2
+
+# Dataset section unused at capture time; train uses phase_a_train_ladder_base_1p5b.yaml
+dataset:
+  trace_glob_patterns: []
+  output_dir: "results/phase_a/datasets"
+  dataset_name: "service_cost_phase_a_ladder_base"
+  cost_mode: "latency_ms"
+  feature_policy: "extended_operational"
+
+predictor:
+  output_root: "results/phase_a/predictors"

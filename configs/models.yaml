@@ -5,9 +5,10 @@
 # One of the rungs is OUR distilled student (full fine-tuning, exp.6).
 #
 # Roles (smallest → largest):
-#   student_tiny    : Qwen2.5-0.5B-Instruct  (base)
-#   student_small   : 1.5B distilled (full fine-tuning, exp.6)  ← our model
-#   student_q3b     : Qwen2.5-3B-Instruct    (base)
+#   student_tiny       : Qwen2.5-0.5B-Instruct  (base)
+#   student_small      : 1.5B distilled (full fine-tuning, exp.6)  ← our model
+#   student_small_base : Qwen2.5-1.5B-Instruct (pre-KD baseline, same ladder slot)
+#   student_q3b        : Qwen2.5-3B-Instruct    (base)
 #   student_mid     : Qwen2.5-7B-Instruct    (base)
 #   teacher         : Qwen2.5-14B-Instruct   (base)
 #
@@ -47,6 +48,15 @@ student_q3b:
 # the path below — the format is sft-full-qwen2.5-1.5b-v6-<TS>/final_model.
 student_small:
   name: "results/distill/sft-full-qwen2.5-1.5b-v6-20260423T121313Z/final_model"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+# Pre-KD 1.5B baseline (HuggingFace instruct). Used for capture-only runs that
+# fill the same ladder slot without replacing distilled checkpoints.
+student_small_base:
+  name: "Qwen/Qwen2.5-1.5B-Instruct"
   revision: "main"
   dtype: "auto"
   trust_remote_code: false

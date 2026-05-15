@@ -1,0 +1,34 @@
+# Phase B train — ladder with pre-KD 1.5B (good GPU traces for other rungs + new base capture).
+# Bump trace_glob suffix for student_small_base after capture if you pin by date.
+common:
+  seed: 42
+  results_base_dir: "results/phase_b"
+
+capture:
+  roles: []
+
+dataset:
+  trace_glob_patterns:
+    - "results/phase_b/captures/capture-teacher-20260510T141*/trace.jsonl"
+    - "results/phase_b/captures/capture-student_mid-20260510T141*/trace.jsonl"
+    - "results/phase_b/captures/capture-student_q3b-20260510T141*/trace.jsonl"
+    - "results/phase_b/captures/capture-student_tiny-20260510T141*/trace.jsonl"
+    - "results/phase_b/captures/capture-student_small_base-*/trace.jsonl"
+  output_dir: "results/phase_b/datasets"
+  ex_ante_dataset_name: "quality_ex_ante_phase_b_ladder_base"
+  post_hoc_dataset_name: "quality_post_hoc_phase_b_ladder_base"
+
+predictor:
+  output_root: "results/phase_b/predictors"
+  family: "gradient_boosting"
+  families:
+    - logistic
+    - logistic_l2
+    - logistic_l1
+    - decision_tree
+    - random_forest
+    - gradient_boosting
+    - mlp
+  seed: 42
+  train_ratio: 0.70
+  val_ratio: 0.15

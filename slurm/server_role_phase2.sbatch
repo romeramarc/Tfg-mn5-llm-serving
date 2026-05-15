@@ -25,13 +25,13 @@ set -euo pipefail
 
 ROLE="${ROLE:-}"
 if [[ -z "${ROLE}" ]]; then
-  echo "ERROR: ROLE is required (teacher|student_mid|student_q3b|student_small|student_tiny)."
+  echo "ERROR: ROLE is required (teacher|student_mid|student_q3b|student_small|student_small_base|student_tiny)."
   echo "Example: sbatch --export=ALL,ROLE=teacher slurm/server_role_phase2.sbatch"
   exit 1
 fi
 
 case "${ROLE}" in
-  teacher|student_mid|student_q3b|student_small|student_tiny) ;;
+  teacher|student_mid|student_q3b|student_small|student_small_base|student_tiny) ;;
   *)
     echo "ERROR: invalid ROLE='${ROLE}'."
     exit 1
@@ -49,8 +49,9 @@ case "${ROLE}" in
   teacher)        PORT_BASE=8000 ;;
   student_mid)    PORT_BASE=8100 ;;
   student_q3b)    PORT_BASE=8150 ;;
-  student_small)  PORT_BASE=8200 ;;
-  student_tiny)   PORT_BASE=8250 ;;
+  student_small)       PORT_BASE=8200 ;;
+  student_small_base)  PORT_BASE=8210 ;;
+  student_tiny)        PORT_BASE=8250 ;;
 esac
 PORT_SPAN=100
 PORT_END=$((PORT_BASE + PORT_SPAN - 1))

@@ -31,6 +31,7 @@
 #   ROLES              space-separated role list (default: read from YAML)
 #   SERVER_WAIT_S      max seconds to wait for each server to RUN (default: 1800)
 #   COLOC_CAPTURE      "1" → submit captures with --nodelist=<server-node>
+#   SKIP_TRAIN         "1" → capture only, do not submit phase_b_train.sbatch
 # ─────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -160,12 +161,26 @@ done
 
 CAPTURE_JOBS_DEP=$(IFS=:; echo "${CAPTURE_JOBS_LIST[*]}")
 
-# ── 5) Train predictors after every capture has finished OK ─
-JOB_TRAIN=$(sbatch --parsable \
-                   --dependency=afterok:${CAPTURE_JOBS_DEP} \
-                   --export="ALL,PROJECT_DIR=${PROJECT_DIR},PHASE_B_CONFIG=${PHASE_B_CONFIG}" \
-                   slurm/phase_b_train.sbatch)
-echo "train predictors: ${JOB_TRAIN} (afterok of captures)"
+LAUNCH_ENV_FILE="${PROJECT_DIR}/logs/last_phase_b_capture.env"
+: > "${LAUNCH_ENV_FILE}"
+idx=0
+for role in ${ROLES}; do
+  echo "CAPTURE_JOB_${role}=${CAPTURE_JOBS_LIST[$idx]}" >> "${LAUNCH_ENV_FILE}"
+  (( idx++ )) || true
+done
+echo "Wrote capture job ids → ${LAUNCH_ENV_FILE}"
+
+JOB_TRAIN=""
+if [[ "${SKIP_TRAIN:-0}" == "1" ]]; then
+  echo "SKIP_TRAIN=1 — not submitting phase_b_train.sbatch"
+else
+  # ── 5) Train predictors after every capture has finished OK ─
+  JOB_TRAIN=$(sbatch --parsable \
+                     --dependency=afterok:${CAPTURE_JOBS_DEP} \
+                     --export="ALL,PROJECT_DIR=${PROJECT_DIR},PHASE_B_CONFIG=${PHASE_B_CONFIG}" \
+                     slurm/phase_b_train.sbatch)
+  echo "train predictors: ${JOB_TRAIN} (afterok of captures)"
+fi
 
 # ── 6) Auto-cleanup of long-running servers when captures end ─
 SERVER_JOBS_SCANCEL_ARGS="${SERVER_JOBS_LIST[*]}"
@@ -186,13 +201,18 @@ done
 for jid in "${CAPTURE_JOBS_LIST[@]}"; do
   echo "  capture:                 ${jid}"
 done
-echo "  train predictors:        ${JOB_TRAIN}"
+if [[ -n "${JOB_TRAIN}" ]]; then
+  echo "  train predictors:        ${JOB_TRAIN}"
+fi
 echo "  auto-cleanup (scancel):  ${JOB_CLEANUP}"
+echo "  capture env file:        ${LAUNCH_ENV_FILE}"
 echo ""
 echo "Monitor:"
 echo "  squeue -u \$USER -o '%.18i %.20j %.2t %.10M %.20R'"
 echo "  tail -f logs/phase-b-capture-*.out"
-echo "  tail -f logs/phase-b-train-${JOB_TRAIN}.out"
+if [[ -n "${JOB_TRAIN}" ]]; then
+  echo "  tail -f logs/phase-b-train-${JOB_TRAIN}.out"
+fi
 echo ""
 echo "Manual stop (if you must):"
 echo "  scancel ${SERVER_JOBS_SCANCEL_ARGS}"

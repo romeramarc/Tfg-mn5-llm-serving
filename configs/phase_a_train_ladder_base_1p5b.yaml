@@ -1,0 +1,38 @@
+# Phase A train — 5-rung ladder with pre-KD 1.5B (no distilled student_small traces).
+# Run AFTER capture-student_small_base-* completes. Then baseline + refine as usual.
+common:
+  seed: 42
+  results_base_dir: "results/phase_a"
+
+capture:
+  roles: []
+
+dataset:
+  trace_glob_patterns:
+    - "results/phase_a/captures/capture-teacher-20260509*/trace.jsonl"
+    - "results/phase_a/captures/capture-student_mid-20260509*/trace.jsonl"
+    - "results/phase_a/captures/capture-student_q3b-20260509*/trace.jsonl"
+    - "results/phase_a/captures/capture-student_tiny-20260509*/trace.jsonl"
+    - "results/phase_a/captures/capture-student_small_base-*/trace.jsonl"
+  output_dir: "results/phase_a/datasets"
+  dataset_name: "service_cost_phase_a_ladder_base"
+  cost_mode: "latency_ms"
+  latency_weight: 1.0
+  gpu_seconds_weight: 0.0
+  energy_weight: 0.0
+  feature_policy: "extended_operational"
+
+predictor:
+  output_root: "results/phase_a/predictors"
+  family: "gradient_boosting"
+  families:
+    - linear
+    - ridge
+    - lasso
+    - decision_tree
+    - random_forest
+    - gradient_boosting
+    - mlp
+  seed: 42
+  train_ratio: 0.70
+  val_ratio: 0.15
