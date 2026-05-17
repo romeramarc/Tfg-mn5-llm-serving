@@ -117,9 +117,9 @@ workload:
 predictors:
   cost_policy: "strict_ex_ante"
   bundles:
-    quality_ex_ante: "results/phase_a/predictors_refined/refined-qea-rf-20260515T014429Z/bundle.joblib"
-    quality_post_hoc: "results/phase_a/predictors_refined/refined-qph-rf-20260515T014517Z/bundle.joblib"
-    service_cost: "results/phase_a/predictors_refined/refined-sc-rf-20260515T014348Z/bundle.joblib"
+    quality_ex_ante: "results/phase_b/predictors_refined/refined-qea-rf-20260515T014429Z/model_bundle.joblib"
+    quality_post_hoc: "results/phase_b/predictors_refined/refined-qph-rf-20260515T014517Z/model_bundle.joblib"
+    service_cost: "results/phase_a/predictors_refined/refined-sc-rf-20260515T014348Z/model_bundle.joblib"
   thresholds:
     quality_ex_ante: 0.632
     quality_post_hoc: 0.716

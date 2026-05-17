@@ -37,7 +37,7 @@ submit_servers() {
       --job-name="vllm-${role}" \
       --export=ALL,ROLE="${role}",PROJECT_DIR="${PROJECT_DIR}" \
       slurm/server_role_phase2.sbatch)
-    echo "Server ${role}: job ${jid}"
+    echo "Server ${role}: job ${jid}" >&2
     job_ids+=("${jid}")
   done
   printf '%s\n' "${job_ids[@]}"
@@ -90,7 +90,7 @@ submit_clients() {
       --time="${tlimit}" \
       --export=ALL,SYSTEM_ID="${sys}",PROJECT_DIR="${PROJECT_DIR}",EVAL_CONFIG="${EVAL_CONFIG}",PROMPT_POOL="${PROMPT_POOL}" \
       slurm/eval_holdout.sbatch)
-    echo "Eval ${sys}: job ${jid} (time=${tlimit})"
+    echo "Eval ${sys}: job ${jid} (time=${tlimit})" >&2
   done
 }
 
@@ -106,9 +106,10 @@ case "${MODE}" in
   all)
     mapfile -t SIDS < <(submit_servers)
     dep=$(IFS=:; echo "${SIDS[*]}")
-    build_prompt_pool
+    echo "Server job IDs: ${dep}" >&2
+    build_prompt_pool >&2
     submit_clients "${dep}"
-    echo "Chained eval jobs depend on server jobs: ${dep}"
+    echo "Chained eval jobs depend on server jobs: ${dep}" >&2
     ;;
   *)
     echo "Usage: bash slurm/launch_eval_holdout.sh {servers|clients|all}"

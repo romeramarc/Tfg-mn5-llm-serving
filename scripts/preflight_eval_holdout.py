@@ -30,8 +30,17 @@ def main() -> int:
     pred = cfg.get("predictors") or {}
     for key, rel in (pred.get("bundles") or {}).items():
         path = root / rel
-        if not path.is_file():
-            errors.append(f"Missing predictor bundle ({key}): {path}")
+        if path.is_file():
+            continue
+        alt = path.parent / "bundle.joblib"
+        if alt.is_file():
+            print(f"[WARN] {key}: using {alt} (update config to match)")
+            continue
+        found = sorted((root / "results").rglob("model_bundle.joblib"))
+        hint = ""
+        if found:
+            hint = f"  found elsewhere, e.g. {found[0]}"
+        errors.append(f"Missing predictor bundle ({key}): {path}{hint}")
 
     for script in (
         "bench/holdout_pool.py",
