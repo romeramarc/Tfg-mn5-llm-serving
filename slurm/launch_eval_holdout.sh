@@ -5,7 +5,10 @@
 # Usage (from login node, inside tmux/screen):
 #   bash slurm/launch_eval_holdout.sh servers     # 5 vLLM servers (24h)
 #   bash slurm/launch_eval_holdout.sh clients     # 5 eval jobs (after servers)
-#   bash slurm/launch_eval_holdout.sh all          # servers then chained clients
+#   bash slurm/launch_eval_holdout.sh all          # servers + evals (afterbegin)
+#
+# Eval jobs use afterbegin (not afterok): they start once servers *begin*,
+# while vLLM is still running. afterok would wait 24h until servers exit.
 #
 # Environment:
 #   PROJECT_DIR, EVAL_CONFIG, PROMPT_POOL, SERVER_WAIT_S (default 7200)
@@ -75,7 +78,7 @@ submit_clients() {
   local dep="$1"
   local -a dep_flag=()
   if [[ -n "${dep}" ]]; then
-    dep_flag=(--dependency=afterok:"${dep}")
+    dep_flag=(--dependency=afterbegin:"${dep}")
   fi
   for sys in "${SYSTEMS[@]}"; do
     case "${sys}" in
@@ -109,7 +112,8 @@ case "${MODE}" in
     echo "Server job IDs: ${dep}" >&2
     build_prompt_pool >&2
     submit_clients "${dep}"
-    echo "Chained eval jobs depend on server jobs: ${dep}" >&2
+    echo "Eval jobs start afterbegin server jobs: ${dep}" >&2
+    echo "You can disconnect; check later: squeue -u \$USER  and  ls results/routing_eval_holdout/" >&2
     ;;
   *)
     echo "Usage: bash slurm/launch_eval_holdout.sh {servers|clients|all}"
