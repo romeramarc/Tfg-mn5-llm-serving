@@ -1,0 +1,146 @@
+# ─────────────────────────────────────────────────────────────
+# routing_eval_holdout.yaml — Evaluación final (única corrida, MN5)
+# ─────────────────────────────────────────────────────────────
+# Una sola batería: ~600 prompts holdout, Poisson λ=5, cinco sistemas
+# en cinco jobs SLURM separados. Sin smoke ni segunda pasada λ=20.
+#
+# HOLDOUT: GSM8K test id>=250 (no visto en captura Fase B);
+#           Hendrycks MATH train (disjoint de MATH-500).
+#
+# Calendario orientativo (mitad mayo → entrega mitad junio):
+#   Semana 1 — implementar runner + políticas (bloqueante).
+#   Semana 2-3 — lanzar 5 jobs en MN5 en cuanto esté el código.
+#   Semana 4 — tablas/memoria con summaries ya generados.
+# ─────────────────────────────────────────────────────────────
+
+common:
+  seed: 42
+  results_base_dir: "results/routing_eval_holdout"
+
+# ── MN5: un job por sistema (no un bloque multi-día) ───────────
+#  sysB_only_tiny         1 GPU   --time=04:00:00
+#  sysA_only_teacher      1 GPU   --time=08:00:00
+#  sysD_cascade_distilled 5 GPU   --time=14:00:00
+#  sysC_routing_distilled 5 GPU   --time=12:00:00
+#  sysE_routing_cascade.. 5 GPU   --time=14:00:00
+# Mismo prompt_pool.jsonl (seed 42) para los cinco.
+
+execution_plan:
+  one_job_per_system: true
+  shared_prompt_pool: "results/routing_eval_holdout/prompt_pool.jsonl"
+  endpoint_dir: "results/routing/endpoints"
+  endpoint_wait_s: 1200
+  # Prompt mix: GSM8K holdout + Hendrycks train, stratified short/medium/long.
+  # Launch:  bash slurm/launch_eval_holdout.sh all   (from tmux; SERVER_WAIT_S=7200)
+
+systems:
+  - id: "sysA_only_teacher"
+    policy: "always_teacher"
+    roles: ["teacher"]
+
+  - id: "sysB_only_tiny"
+    policy: "always_student_tiny"
+    roles: ["student_tiny"]
+
+  - id: "sysC_routing_distilled"
+    policy: "routing_predictive"
+    roles: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+
+  - id: "sysD_cascade_distilled"
+    policy: "cascade_five_rung"
+    roles: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+
+  - id: "sysE_routing_cascade_distilled"
+    policy: "routing_plus_cascade"
+    roles: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+
+# ~600 prompts total — equilibrio estadístico / tiempo (~±4% accuracy global)
+benchmarks:
+  gsm8k_holdout:
+    enabled: true
+    benchmark_label: "gsm8k"
+    dataset_name: "openai/gsm8k"
+    dataset_config: "main"
+    dataset_split: "test"
+    min_example_id: 250
+    subset_size: 300
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+
+  hendrycks_math_holdout:
+    enabled: true
+    benchmark_label: "math"
+    dataset_name: "EleutherAI/hendrycks_math"
+    dataset_subjects:
+      - algebra
+      - counting_and_probability
+      - geometry
+      - intermediate_algebra
+      - number_theory
+      - prealgebra
+      - precalculus
+    dataset_split: "train"
+    subset_size: 300
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+    answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+
+workload:
+  arrival_rates_rps: [5]
+  num_warmup_requests: 15
+  max_inflight: 48
+  shuffle_per_rate: true
+  max_tokens: 512
+  temperature: 0.0
+  request_timeout_s: 180.0
+  logprobs_top_k: 5
+  stream: false
+  samplers:
+    server_metrics:
+      enabled: true
+      interval_s: 0.25
+    gpu_smi:
+      enabled: true
+      interval_s: 0.2
+
+predictors:
+  cost_policy: "strict_ex_ante"
+  bundles:
+    quality_ex_ante: "results/phase_a/predictors_refined/refined-qea-rf-20260515T014429Z/bundle.joblib"
+    quality_post_hoc: "results/phase_a/predictors_refined/refined-qph-rf-20260515T014517Z/bundle.joblib"
+    service_cost: "results/phase_a/predictors_refined/refined-sc-rf-20260515T014348Z/bundle.joblib"
+  thresholds:
+    quality_ex_ante: 0.632
+    quality_post_hoc: 0.716
+
+policy_params:
+  routing_predictive:
+    cost_weight_lambda: 0.001
+    candidate_rungs: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    min_quality_floor: 0.55
+  cascade_five_rung:
+    rung_order: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    post_hoc_threshold: 0.716
+    per_rung_timeout_ms: [3000, 4000, 6000, 8000, 120000]
+  routing_plus_cascade:
+    cost_weight_lambda: 0.001
+    candidate_rungs: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    min_quality_floor: 0.55
+    post_hoc_threshold: 0.716
+    rung_order: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    per_rung_timeout_ms: [3000, 4000, 6000, 8000, 120000]
+
+output:
+  per_request_jsonl: "per_request.jsonl"
+  summary_json: "summary.json"

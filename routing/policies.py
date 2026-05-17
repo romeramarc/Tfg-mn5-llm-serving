@@ -540,11 +540,300 @@ async def cascade_three_tier(
     )
 
 
+# ── Policy: Always student_tiny ───────────────────────────
+
+async def always_student_tiny(
+    client: httpx.AsyncClient,
+    prompt: str,
+    ctx: Dict[str, Any],
+) -> RoutingDecision:
+    """Route every request to student_tiny (0.5B)."""
+    request_id = ctx.get("request_id", "")
+    ep = ctx["endpoints"]["student_tiny"]
+    data = await _query_endpoint_with_status(
+        client, ep["base_url"], ep["model"], prompt,
+        ctx.get("max_tokens", 256), ctx.get("temperature", 0.0),
+        logprobs=ctx.get("logprobs_top_k"),
+        timeout=ctx.get("request_timeout_s", 120.0),
+    )
+    text, _, _, _ = _extract_choice_fields(data)
+    reason = "always_student_tiny" if not data.get("_error") else "student_tiny_error"
+    return RoutingDecision(
+        request_id=request_id,
+        selected_model=ep["model"],
+        latency_ms=data.get("_latency_ms", 0.0),
+        response_text=text,
+        confidence=None,
+        reason=reason,
+        metadata={"error": data.get("_error")},
+        attempts=[_build_attempt("student_tiny", ep, data, reason)],
+    )
+
+
+def _timeout_for_stage(ctx: Dict[str, Any], stage: str) -> float:
+    order = ctx.get("rung_order") or []
+    timeouts = ctx.get("per_rung_timeout_ms") or []
+    if stage in order and timeouts:
+        idx = order.index(stage)
+        if idx < len(timeouts):
+            return float(timeouts[idx]) / 1000.0
+    return float(ctx.get("request_timeout_s", 120.0))
+
+
+def _z_ctx(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    return dict(ctx.get("z_metrics") or {})
+
+
+async def _generate_at_stage(
+    client: httpx.AsyncClient,
+    prompt: str,
+    ctx: Dict[str, Any],
+    stage: str,
+    *,
+    with_logprobs: bool = True,
+) -> tuple[Dict[str, Any], Dict[str, Any], str, int, list]:
+    ep = ctx["endpoints"][stage]
+    logprobs_k = ctx.get("logprobs_top_k", 5) if with_logprobs else None
+    data = await _query_endpoint_with_status(
+        client,
+        ep["base_url"],
+        ep["model"],
+        prompt,
+        ctx.get("max_tokens", 512),
+        ctx.get("temperature", 0.0),
+        logprobs=logprobs_k,
+        timeout=_timeout_for_stage(ctx, stage),
+    )
+    text, out_tokens, _, top_logprobs = _extract_choice_fields(data)
+    return data, ep, text, out_tokens, top_logprobs
+
+
+# ── Policy: 5-rung cascade (post-hoc predictor) ───────────
+
+async def cascade_five_rung(
+    client: httpx.AsyncClient,
+    prompt: str,
+    ctx: Dict[str, Any],
+) -> RoutingDecision:
+    """Start at the smallest rung; escalate while post-hoc quality is below threshold."""
+    from bench.run_quality_capture import _uncertainty_from_logprobs
+    from routing.predictor_runtime import build_trace
+
+    request_id = ctx.get("request_id", "")
+    meta = ctx.get("prompt_metadata") or {}
+    benchmark = str(meta.get("benchmark", ""))
+    example_id = str(meta.get("example_id", ""))
+    suite = ctx.get("predictor_suite")
+    rung_order = list(ctx.get("rung_order") or [
+        "student_tiny", "student_small", "student_q3b", "student_mid", "teacher",
+    ])
+    post_hoc_threshold = float(ctx.get("post_hoc_threshold", 0.716))
+
+    total_latency = 0.0
+    attempts: list[Dict[str, Any]] = []
+    last_conf: Optional[float] = None
+    last_text = ""
+    last_model = ""
+
+    for stage in rung_order:
+        data, ep, text, out_tokens, top_logprobs = await _generate_at_stage(
+            client, prompt, ctx, stage, with_logprobs=True,
+        )
+        total_latency += float(data.get("_latency_ms", 0.0))
+        choices = data.get("choices") or []
+        logprobs_payload = (choices[0].get("logprobs") if choices else None)
+        uncertainty = _uncertainty_from_logprobs(logprobs_payload)
+
+        last_text = text
+        last_model = ep["model"]
+
+        if data.get("_error"):
+            attempts.append(_build_attempt(stage, ep, data, "error_escalate"))
+            if stage == "teacher":
+                break
+            continue
+
+        if stage == "teacher" or suite is None:
+            attempts.append(_build_attempt(stage, ep, data, "accepted_final"))
+            return RoutingDecision(
+                request_id=request_id,
+                selected_model=ep["model"],
+                latency_ms=total_latency,
+                response_text=text,
+                confidence=last_conf,
+                reason="accepted_teacher" if stage == "teacher" else "accepted_no_predictor",
+                metadata={"route_path": "->".join(a["stage"] for a in attempts)},
+                attempts=attempts,
+            )
+
+        trace = build_trace(
+            prompt=prompt,
+            benchmark=benchmark,
+            example_id=example_id,
+            request_id=request_id,
+            role=stage,
+            model_name=ep["model"],
+            z_metrics=_z_ctx(ctx),
+            inflight_at_send=ctx.get("inflight_at_send"),
+            recent_p50_latency_ms=ctx.get("recent_p50_latency_ms"),
+            max_tokens=int(ctx.get("max_tokens", 512)),
+            temperature=float(ctx.get("temperature", 0.0)),
+            response_text=text,
+            output_tokens=out_tokens,
+            latency_ms=data.get("_latency_ms"),
+            uncertainty=uncertainty,
+        )
+        prob = suite.post_hoc_probability(trace)
+        last_conf = prob
+        if prob >= post_hoc_threshold:
+            attempts.append(_build_attempt(
+                stage, ep, data, "accepted_post_hoc", prob, post_hoc_threshold,
+            ))
+            return RoutingDecision(
+                request_id=request_id,
+                selected_model=ep["model"],
+                latency_ms=total_latency,
+                response_text=text,
+                confidence=prob,
+                reason="accepted_post_hoc",
+                metadata={
+                    "route_path": "->".join(a["stage"] for a in attempts),
+                    "post_hoc_probability": prob,
+                },
+                attempts=attempts,
+            )
+
+        attempts.append(_build_attempt(
+            stage, ep, data, "escalate_post_hoc", prob, post_hoc_threshold,
+        ))
+
+    return RoutingDecision(
+        request_id=request_id,
+        selected_model=last_model,
+        latency_ms=total_latency,
+        response_text=last_text,
+        confidence=last_conf,
+        reason="cascade_exhausted",
+        metadata={"route_path": "->".join(a.get("stage", "") for a in attempts)},
+        attempts=attempts,
+    )
+
+
+def _pick_rung_by_routing(
+    prompt: str,
+    ctx: Dict[str, Any],
+) -> str:
+    from routing.predictor_runtime import build_trace
+
+    suite = ctx.get("predictor_suite")
+    if suite is None:
+        return "teacher"
+
+    meta = ctx.get("prompt_metadata") or {}
+    benchmark = str(meta.get("benchmark", ""))
+    example_id = str(meta.get("example_id", ""))
+    request_id = str(ctx.get("request_id", ""))
+    candidates = list(ctx.get("candidate_rungs") or [
+        "student_tiny", "student_small", "student_q3b", "student_mid", "teacher",
+    ])
+    lam = float(ctx.get("cost_weight_lambda", 0.001))
+    floor = float(ctx.get("min_quality_floor", 0.55))
+
+    best_rung = candidates[-1]
+    best_util = float("-inf")
+    scores: Dict[str, Dict[str, float]] = {}
+
+    for stage in candidates:
+        ep = ctx["endpoints"][stage]
+        trace = build_trace(
+            prompt=prompt,
+            benchmark=benchmark,
+            example_id=example_id,
+            request_id=request_id,
+            role=stage,
+            model_name=ep["model"],
+            z_metrics=_z_ctx(ctx),
+            inflight_at_send=ctx.get("inflight_at_send"),
+            recent_p50_latency_ms=ctx.get("recent_p50_latency_ms"),
+            max_tokens=int(ctx.get("max_tokens", 512)),
+            temperature=float(ctx.get("temperature", 0.0)),
+        )
+        q = suite.ex_ante_probability(trace)
+        cost = suite.predicted_cost(trace)
+        util = q - lam * cost
+        scores[stage] = {"quality": q, "cost": cost, "utility": util}
+        if util > best_util:
+            best_util = util
+            best_rung = stage
+
+    if scores.get(best_rung, {}).get("quality", 0.0) < floor:
+        best_rung = "teacher"
+    ctx.setdefault("routing_scores", scores)
+    ctx["routing_selected_rung"] = best_rung
+    return best_rung
+
+
+async def routing_predictive(
+    client: httpx.AsyncClient,
+    prompt: str,
+    ctx: Dict[str, Any],
+) -> RoutingDecision:
+    """Choose a rung with ex-ante quality + service cost, then generate once."""
+    request_id = ctx.get("request_id", "")
+    stage = _pick_rung_by_routing(prompt, ctx)
+    data, ep, text, _, _ = await _generate_at_stage(
+        client, prompt, ctx, stage, with_logprobs=False,
+    )
+    reason = "routing_predictive" if not data.get("_error") else "routing_predictive_error"
+    return RoutingDecision(
+        request_id=request_id,
+        selected_model=ep["model"],
+        latency_ms=data.get("_latency_ms", 0.0),
+        response_text=text,
+        confidence=None,
+        reason=reason,
+        metadata={
+            "selected_rung": stage,
+            "routing_scores": ctx.get("routing_scores"),
+        },
+        attempts=[_build_attempt(stage, ep, data, reason)],
+    )
+
+
+async def routing_plus_cascade(
+    client: httpx.AsyncClient,
+    prompt: str,
+    ctx: Dict[str, Any],
+) -> RoutingDecision:
+    """Routing picks entry rung; post-hoc cascade escalates if needed."""
+    entry = _pick_rung_by_routing(prompt, ctx)
+    rung_order = list(ctx.get("rung_order") or [
+        "student_tiny", "student_small", "student_q3b", "student_mid", "teacher",
+    ])
+    if entry not in rung_order:
+        rung_order = [entry] + [r for r in rung_order if r != entry]
+    else:
+        rung_order = rung_order[rung_order.index(entry):]
+
+    sub_ctx = dict(ctx)
+    sub_ctx["rung_order"] = rung_order
+    decision = await cascade_five_rung(client, prompt, sub_ctx)
+    meta = dict(decision.metadata or {})
+    meta["entry_rung"] = entry
+    decision.metadata = meta
+    decision.reason = f"routing_plus_cascade:{decision.reason}"
+    return decision
+
+
 # ── Registry ───────────────────────────────────────────────
 
 POLICIES = {
     "always_teacher": always_teacher,
+    "always_student_tiny": always_student_tiny,
     "cascading": cascading,
     "confidence": confidence_routing,
     "cascade_three_tier": cascade_three_tier,
+    "cascade_five_rung": cascade_five_rung,
+    "routing_predictive": routing_predictive,
+    "routing_plus_cascade": routing_plus_cascade,
 }

@@ -29,10 +29,12 @@ class PredictorBundle:
 
         if self.task == "classification":
             prob = float(predict_probability(self.estimator, xt)[0])
-            label = 1 if prob >= 0.5 else 0
+            threshold = float(self.payload.get("threshold", 0.5))
+            label = 1 if prob >= threshold else 0
             return {
                 "probability": prob,
                 "label": float(label),
+                "threshold": threshold,
             }
 
         pred = float(np.asarray(self.estimator.predict(xt), dtype=float)[0])

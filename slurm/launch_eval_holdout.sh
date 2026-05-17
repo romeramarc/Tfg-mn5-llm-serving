@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# ------------------------------------------------------------------
+# Queue holdout evaluation on MN5.
+#
+# Usage (from login node, inside tmux/screen):
+#   bash slurm/launch_eval_holdout.sh servers     # 5 vLLM servers (24h)
+#   bash slurm/launch_eval_holdout.sh clients     # 5 eval jobs (after servers)
+#   bash slurm/launch_eval_holdout.sh all          # servers then chained clients
+#
+# Environment:
+#   PROJECT_DIR, EVAL_CONFIG, PROMPT_POOL, SERVER_WAIT_S (default 7200)
+# ------------------------------------------------------------------
+set -euo pipefail
+
+PROJECT_DIR="${PROJECT_DIR:-/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving}"
+cd "${PROJECT_DIR}"
+mkdir -p logs results/routing/endpoints results/routing_eval_holdout
+
+MODE="${1:-all}"
+EVAL_CONFIG="${EVAL_CONFIG:-configs/routing_eval_holdout.yaml}"
+PROMPT_POOL="${PROMPT_POOL:-results/routing_eval_holdout/prompt_pool.jsonl}"
+SERVER_WAIT_S="${SERVER_WAIT_S:-7200}"
+
+ALL_ROLES=(teacher student_mid student_q3b student_small student_tiny)
+SYSTEMS=(
+  sysB_only_tiny
+  sysA_only_teacher
+  sysD_cascade_distilled
+  sysC_routing_distilled
+  sysE_routing_cascade_distilled
+)
+
+submit_servers() {
+  local -a job_ids=()
+  for role in "${ALL_ROLES[@]}"; do
+    jid=$(sbatch --parsable \
+      --job-name="vllm-${role}" \
+      --export=ALL,ROLE="${role}",PROJECT_DIR="${PROJECT_DIR}" \
+      slurm/server_role_phase2.sbatch)
+    echo "Server ${role}: job ${jid}"
+    job_ids+=("${jid}")
+  done
+  printf '%s\n' "${job_ids[@]}"
+}
+
+wait_for_endpoints() {
+  local deadline=$((SECONDS + SERVER_WAIT_S))
+  for role in "${ALL_ROLES[@]}"; do
+    file="results/routing/endpoints/${role}.url"
+    echo "Waiting for ${file} (up to ${SERVER_WAIT_S}s)..."
+    while (( SECONDS < deadline )); do
+      if [[ -s "${file}" ]]; then
+        echo "  OK ${role}"
+        break
+      fi
+      sleep 10
+    done
+    if [[ ! -s "${file}" ]]; then
+      echo "ERROR: timeout waiting for ${file}"
+      exit 1
+    fi
+  done
+}
+
+build_prompt_pool() {
+  if [[ ! -s "${PROMPT_POOL}" ]]; then
+    echo "Building prompt pool..."
+    python -m bench.holdout_pool --config "${EVAL_CONFIG}" --output "${PROMPT_POOL}"
+  else
+    echo "Prompt pool exists: ${PROMPT_POOL}"
+  fi
+}
+
+submit_clients() {
+  local dep="$1"
+  local -a dep_flag=()
+  if [[ -n "${dep}" ]]; then
+    dep_flag=(--dependency=afterok:"${dep}")
+  fi
+  for sys in "${SYSTEMS[@]}"; do
+    case "${sys}" in
+      sysB_only_tiny)        tlimit="04:00:00" ;;
+      sysA_only_teacher)     tlimit="08:00:00" ;;
+      sysC_routing_distilled) tlimit="12:00:00" ;;
+      *)                     tlimit="14:00:00" ;;
+    esac
+    jid=$(sbatch --parsable \
+      "${dep_flag[@]}" \
+      --job-name="eval-${sys}" \
+      --time="${tlimit}" \
+      --export=ALL,SYSTEM_ID="${sys}",PROJECT_DIR="${PROJECT_DIR}",EVAL_CONFIG="${EVAL_CONFIG}",PROMPT_POOL="${PROMPT_POOL}" \
+      slurm/eval_holdout.sbatch)
+    echo "Eval ${sys}: job ${jid} (time=${tlimit})"
+  done
+}
+
+case "${MODE}" in
+  servers)
+    submit_servers > logs/launch-eval-holdout-servers.ids
+    echo "Servers submitted. When all .url files exist, run: bash slurm/launch_eval_holdout.sh clients"
+    ;;
+  clients)
+    build_prompt_pool
+    submit_clients ""
+    ;;
+  all)
+    mapfile -t SIDS < <(submit_servers)
+    dep=$(IFS=:; echo "${SIDS[*]}")
+    build_prompt_pool
+    submit_clients "${dep}"
+    echo "Chained eval jobs depend on server jobs: ${dep}"
+    ;;
+  *)
+    echo "Usage: bash slurm/launch_eval_holdout.sh {servers|clients|all}"
+    exit 1
+    ;;
+esac
