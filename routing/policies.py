@@ -187,7 +187,7 @@ async def always_teacher(
     ep = ctx["endpoints"]["teacher"]
     data = await _query_endpoint_with_status(
         client, ep["base_url"], ep["model"], prompt,
-        ctx.get("max_tokens", 256), ctx.get("temperature", 0.0),
+        int(ctx.get("max_tokens", 512)), ctx.get("temperature", 0.0),
     )
     text, _, _, _ = _extract_choice_fields(data)
     reason = "always_teacher" if not data.get("_error") else "teacher_error"
@@ -552,8 +552,8 @@ async def always_student_tiny(
     ep = ctx["endpoints"]["student_tiny"]
     data = await _query_endpoint_with_status(
         client, ep["base_url"], ep["model"], prompt,
-        ctx.get("max_tokens", 256), ctx.get("temperature", 0.0),
-        logprobs=ctx.get("logprobs_top_k"),
+        int(ctx.get("max_tokens", 512)), ctx.get("temperature", 0.0),
+        logprobs=None,
         timeout=ctx.get("request_timeout_s", 120.0),
     )
     text, _, _, _ = _extract_choice_fields(data)
@@ -636,8 +636,11 @@ async def cascade_five_rung(
     last_model = ""
 
     for stage in rung_order:
+        # Logprobs only for non-teacher stages (post-hoc needs uncertainty). Teacher
+        # is a final accept path: skip logprobs to match always_teacher / reduce load.
+        use_lp = stage != "teacher"
         data, ep, text, out_tokens, top_logprobs = await _generate_at_stage(
-            client, prompt, ctx, stage, with_logprobs=True,
+            client, prompt, ctx, stage, with_logprobs=use_lp,
         )
         total_latency += float(data.get("_latency_ms", 0.0))
         choices = data.get("choices") or []
@@ -719,28 +722,20 @@ async def cascade_five_rung(
     )
 
 
-def _pick_rung_by_routing(
+def _score_rungs_for_routing(
     prompt: str,
     ctx: Dict[str, Any],
-) -> str:
+    candidates: list[str],
+) -> Dict[str, Dict[str, float]]:
+    """Ex-ante quality, predicted cost, and utility for each candidate rung."""
     from routing.predictor_runtime import build_trace
 
-    suite = ctx.get("predictor_suite")
-    if suite is None:
-        return "teacher"
-
+    suite = ctx["predictor_suite"]
     meta = ctx.get("prompt_metadata") or {}
     benchmark = str(meta.get("benchmark", ""))
     example_id = str(meta.get("example_id", ""))
     request_id = str(ctx.get("request_id", ""))
-    candidates = list(ctx.get("candidate_rungs") or [
-        "student_tiny", "student_small", "student_q3b", "student_mid", "teacher",
-    ])
     lam = float(ctx.get("cost_weight_lambda", 0.001))
-    floor = float(ctx.get("min_quality_floor", 0.55))
-
-    best_rung = candidates[-1]
-    best_util = float("-inf")
     scores: Dict[str, Dict[str, float]] = {}
 
     for stage in candidates:
@@ -760,17 +755,61 @@ def _pick_rung_by_routing(
         )
         q = suite.ex_ante_probability(trace)
         cost = suite.predicted_cost(trace)
-        util = q - lam * cost
-        scores[stage] = {"quality": q, "cost": cost, "utility": util}
-        if util > best_util:
-            best_util = util
-            best_rung = stage
+        scores[stage] = {"quality": q, "cost": cost, "utility": q - lam * cost}
+    return scores
 
-    if scores.get(best_rung, {}).get("quality", 0.0) < floor:
-        best_rung = "teacher"
-    ctx.setdefault("routing_scores", scores)
-    ctx["routing_selected_rung"] = best_rung
-    return best_rung
+
+def _pick_rung_by_routing(
+    prompt: str,
+    ctx: Dict[str, Any],
+) -> tuple[str, Dict[str, Dict[str, float]], str]:
+    """Choose entry rung for predictive routing.
+
+    Default ``max_utility``: pick the rung that maximises
+    ``U = ex_ante_quality - cost_weight_lambda * predicted_service_cost``.
+    That is the explicit quality--service trade-off: faster (cheaper) rungs win
+    when their predicted quality is close enough to heavier models. Ties favour
+    the earlier candidate in ``candidates`` (cheaper rungs first in the ladder).
+
+    ``min_rung_meeting_floor``: first rung in ladder order whose ex-ante quality
+    meets ``min_quality_floor``; if none, fall back to the smallest candidate
+    (cascade may escalate). Use when you want a hard quality bar instead of a
+    smooth λ trade-off.
+    """
+    suite = ctx.get("predictor_suite")
+    default_candidates = [
+        "student_tiny", "student_small", "student_q3b", "student_mid", "teacher",
+    ]
+    candidates = list(
+        ctx.get("routing_candidates")
+        or ctx.get("candidate_rungs")
+        or default_candidates
+    )
+    if suite is None:
+        return candidates[0], {}, "no_predictor_fallback"
+
+    floor = float(ctx.get("min_quality_floor", 0.55))
+    mode = str(ctx.get("routing_selection", "max_utility"))
+    scores = _score_rungs_for_routing(prompt, ctx, candidates)
+
+    if mode == "max_utility":
+        # Iterate in ladder order so equal utility prefers cheaper / faster rungs.
+        best_rung = candidates[0]
+        best_util = scores[best_rung]["utility"]
+        for stage in candidates[1:]:
+            util = scores[stage]["utility"]
+            if util > best_util:
+                best_util = util
+                best_rung = stage
+        return best_rung, scores, "max_utility"
+
+    # min_rung_meeting_floor: first (cheapest) rung with predicted quality >= floor.
+    for stage in candidates:
+        if scores[stage]["quality"] >= floor:
+            return stage, scores, "min_rung_meeting_floor"
+
+    # No rung clears the bar: start at the cheapest candidate and let cascade escalate.
+    return candidates[0], scores, "min_rung_fallback_smallest"
 
 
 async def routing_predictive(
@@ -778,9 +817,9 @@ async def routing_predictive(
     prompt: str,
     ctx: Dict[str, Any],
 ) -> RoutingDecision:
-    """Choose a rung with ex-ante quality + service cost, then generate once."""
+    """Pick rung by quality--service trade-off (default: max U), then generate once."""
     request_id = ctx.get("request_id", "")
-    stage = _pick_rung_by_routing(prompt, ctx)
+    stage, routing_scores, routing_mode = _pick_rung_by_routing(prompt, ctx)
     data, ep, text, _, _ = await _generate_at_stage(
         client, prompt, ctx, stage, with_logprobs=False,
     )
@@ -794,7 +833,8 @@ async def routing_predictive(
         reason=reason,
         metadata={
             "selected_rung": stage,
-            "routing_scores": ctx.get("routing_scores"),
+            "routing_scores": routing_scores,
+            "routing_selection": routing_mode,
         },
         attempts=[_build_attempt(stage, ep, data, reason)],
     )
@@ -805,8 +845,8 @@ async def routing_plus_cascade(
     prompt: str,
     ctx: Dict[str, Any],
 ) -> RoutingDecision:
-    """Routing picks entry rung; post-hoc cascade escalates if needed."""
-    entry = _pick_rung_by_routing(prompt, ctx)
+    """Routing picks entry rung (quality--service trade-off); cascade escalates."""
+    entry, routing_scores, routing_mode = _pick_rung_by_routing(prompt, ctx)
     rung_order = list(ctx.get("rung_order") or [
         "student_tiny", "student_small", "student_q3b", "student_mid", "teacher",
     ])
@@ -820,6 +860,8 @@ async def routing_plus_cascade(
     decision = await cascade_five_rung(client, prompt, sub_ctx)
     meta = dict(decision.metadata or {})
     meta["entry_rung"] = entry
+    meta["routing_scores"] = routing_scores
+    meta["routing_selection"] = routing_mode
     decision.metadata = meta
     decision.reason = f"routing_plus_cascade:{decision.reason}"
     return decision

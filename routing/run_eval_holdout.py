@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -42,6 +43,104 @@ from utils.reproducibility import (
 
 logger = get_logger(__name__)
 
+
+def _build_holdout_request_record(
+    *,
+    example: Dict[str, Any],
+    benchmark: str,
+    arrival_rate_rps: float,
+    req_idx: int,
+    ctx: Dict[str, Any],
+    decision: RoutingDecision,
+    wall_ms: float,
+    inflight_at_send: Any,
+    recent_p50: Optional[float],
+    z_metrics: Dict[str, Any],
+    correct: bool,
+    scorable: bool,
+    predicted: Any,
+    ambiguity: Optional[str],
+) -> Dict[str, Any]:
+    """One row for per_request.jsonl / CSV (nested structures in JSON fields for CSV)."""
+    meta = dict(decision.metadata or {})
+    attempts = list(decision.attempts or [])
+    total_out = sum(int(a.get("output_tokens") or 0) for a in attempts)
+    first_stage = str(attempts[0].get("stage", "")) if attempts else ""
+    return {
+        "request_id": example["request_id"],
+        "pool_index": example.get("pool_index"),
+        "benchmark": benchmark,
+        "example_id": example["example_id"],
+        "length_bucket": example.get("length_bucket"),
+        "prompt_char_len": example.get("prompt_char_len"),
+        "arrival_rate_rps": arrival_rate_rps,
+        "req_idx": req_idx,
+        "policy": ctx.get("policy_name"),
+        "system_id": ctx.get("system_id"),
+        "selected_model": decision.selected_model,
+        "reason": decision.reason,
+        "confidence": decision.confidence,
+        "latency_ms": decision.latency_ms,
+        "client_wall_ms": wall_ms,
+        "num_attempts": len(attempts),
+        "correct": bool(correct),
+        "scorable": bool(scorable),
+        "predicted_answer": predicted,
+        "ambiguity_reason": ambiguity,
+        "inflight_at_send": inflight_at_send,
+        "recent_p50_latency_ms": recent_p50,
+        "z_metrics_at_send": dict(z_metrics) if z_metrics else {},
+        "route_path": meta.get("route_path"),
+        "entry_rung": meta.get("entry_rung"),
+        "selected_rung": meta.get("selected_rung"),
+        "routing_scores": meta.get("routing_scores"),
+        "routing_selection": meta.get("routing_selection"),
+        "post_hoc_probability": meta.get("post_hoc_probability"),
+        "first_attempt_stage": first_stage,
+        "total_output_tokens": total_out,
+        "response_char_len": len(decision.response_text or ""),
+        "attempts": attempts,
+        "metadata": meta,
+    }
+
+
+def _flatten_holdout_rows_for_csv(
+    records: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], List[str]]:
+    """JSON-serialize dict/list columns so CSV is rectangular and portable."""
+    flat_rows: List[Dict[str, Any]] = []
+    all_keys: set[str] = set()
+    for r in records:
+        flat: Dict[str, Any] = {}
+        for k, v in r.items():
+            if isinstance(v, (dict, list)):
+                flat[k] = json.dumps(v, ensure_ascii=False, default=str)
+            elif v is None:
+                flat[k] = ""
+            else:
+                flat[k] = v
+            all_keys.add(k)
+        flat_rows.append(flat)
+    keys_sorted = sorted(all_keys)
+    for flat in flat_rows:
+        for k in keys_sorted:
+            flat.setdefault(k, "")
+    ordered = [{k: flat[k] for k in keys_sorted} for flat in flat_rows]
+    return ordered, keys_sorted
+
+
+def _flatten_summary_for_csv(summary: Dict[str, Any]) -> Dict[str, Any]:
+    """Single-row summary: nested aggregates as JSON strings for spreadsheet tools."""
+    row: Dict[str, Any] = {}
+    for k, v in summary.items():
+        if isinstance(v, (dict, list)):
+            row[k] = json.dumps(v, ensure_ascii=False, default=str)
+        elif v is None:
+            row[k] = ""
+        else:
+            row[k] = v
+    return row
+
 _POLICY_NEEDS_PREDICTORS = {
     "routing_predictive",
     "cascade_five_rung",
@@ -66,7 +165,13 @@ def _merge_policy_ctx(
     ctx.update(params)
     if policy_name == "routing_plus_cascade":
         rp = (policy_params or {}).get("routing_predictive") or {}
-        for key in ("cost_weight_lambda", "candidate_rungs", "min_quality_floor"):
+        for key in (
+            "cost_weight_lambda",
+            "candidate_rungs",
+            "routing_candidates",
+            "min_quality_floor",
+            "routing_selection",
+        ):
             ctx.setdefault(key, rp.get(key))
     return ctx
 
@@ -140,30 +245,24 @@ async def _run_poisson_session(
                 answer_extraction_pattern=pattern,
             )
 
-            n_attempts = len(decision.attempts or [])
-            records.append({
-                "request_id": example["request_id"],
-                "pool_index": example.get("pool_index"),
-                "benchmark": benchmark,
-                "example_id": example["example_id"],
-                "length_bucket": example.get("length_bucket"),
-                "prompt_char_len": example.get("prompt_char_len"),
-                "arrival_rate_rps": arrival_rate_rps,
-                "req_idx": req_idx,
-                "policy": ctx.get("policy_name"),
-                "system_id": ctx.get("system_id"),
-                "selected_model": decision.selected_model,
-                "reason": decision.reason,
-                "confidence": decision.confidence,
-                "latency_ms": decision.latency_ms,
-                "client_wall_ms": wall_ms,
-                "num_attempts": n_attempts,
-                "correct": bool(correct),
-                "scorable": bool(scorable),
-                "predicted_answer": predicted,
-                "ambiguity_reason": ambiguity,
-                "metadata": decision.metadata,
-            })
+            records.append(
+                _build_holdout_request_record(
+                    example=example,
+                    benchmark=benchmark,
+                    arrival_rate_rps=arrival_rate_rps,
+                    req_idx=req_idx,
+                    ctx=request_ctx,
+                    decision=decision,
+                    wall_ms=wall_ms,
+                    inflight_at_send=inflight_at_send,
+                    recent_p50=recent_p50,
+                    z_metrics=z_metrics if isinstance(z_metrics, dict) else {},
+                    correct=correct,
+                    scorable=scorable,
+                    predicted=predicted,
+                    ambiguity=ambiguity,
+                ),
+            )
 
         tasks: List[asyncio.Task[None]] = []
         for i, ex_idx in enumerate(order):
@@ -176,6 +275,7 @@ async def _run_poisson_session(
 
 def _build_summary(records: List[Dict[str, Any]], *, system_id: str, policy: str) -> Dict[str, Any]:
     latencies = [float(r["latency_ms"]) for r in records if r.get("latency_ms")]
+    wall_latencies = [float(r["client_wall_ms"]) for r in records if r.get("client_wall_ms")]
     correct = sum(1 for r in records if r.get("correct"))
     scorable = sum(1 for r in records if r.get("scorable"))
     reason_counts = Counter(str(r.get("reason")) for r in records)
@@ -183,6 +283,63 @@ def _build_summary(records: List[Dict[str, Any]], *, system_id: str, policy: str
     for r in records:
         if r.get("scorable"):
             bench_correct.setdefault(str(r["benchmark"]), []).append(bool(r["correct"]))
+
+    selected_model_counts = dict(
+        Counter(str(r["selected_model"]) for r in records if r.get("selected_model")),
+    )
+
+    by_model_lat: Dict[str, List[float]] = defaultdict(list)
+    for r in records:
+        if r.get("latency_ms") and r.get("selected_model"):
+            by_model_lat[str(r["selected_model"])].append(float(r["latency_ms"]))
+    latency_by_selected_model = {
+        m: summarise_latencies(v) for m, v in by_model_lat.items()
+    }
+
+    by_bench_lat: Dict[str, List[float]] = defaultdict(list)
+    for r in records:
+        if r.get("latency_ms"):
+            by_bench_lat[str(r.get("benchmark") or "")].append(float(r["latency_ms"]))
+    latency_by_benchmark = {
+        b: summarise_latencies(v) for b, v in by_bench_lat.items() if b
+    }
+
+    by_len_lat: Dict[str, List[float]] = defaultdict(list)
+    for r in records:
+        if r.get("latency_ms"):
+            lb = str(r.get("length_bucket") or "")
+            by_len_lat[lb].append(float(r["latency_ms"]))
+    latency_by_length_bucket = {
+        k: summarise_latencies(v) for k, v in by_len_lat.items() if k
+    }
+
+    entry_rung_counts = dict(
+        Counter(str(r.get("entry_rung")) for r in records if r.get("entry_rung")),
+    )
+    selected_rung_counts = dict(
+        Counter(str(r.get("selected_rung")) for r in records if r.get("selected_rung")),
+    )
+    first_attempt_stage_counts = dict(
+        Counter(
+            str(r.get("first_attempt_stage"))
+            for r in records
+            if r.get("first_attempt_stage")
+        ),
+    )
+
+    acc_by_model: Dict[str, List[bool]] = defaultdict(list)
+    for r in records:
+        if r.get("scorable") and r.get("selected_model"):
+            acc_by_model[str(r["selected_model"])].append(bool(r.get("correct")))
+    accuracy_scorable_pct_by_selected_model = {
+        m: (sum(v) / len(v) * 100.0) if v else 0.0 for m, v in acc_by_model.items()
+    }
+    scorable_counts_by_selected_model = {m: len(v) for m, v in acc_by_model.items()}
+
+    out_tokens = [int(r.get("total_output_tokens") or 0) for r in records]
+    mean_total_output_tokens = (
+        float(sum(out_tokens) / len(out_tokens)) if out_tokens else 0.0
+    )
 
     return {
         "system_id": system_id,
@@ -197,8 +354,22 @@ def _build_summary(records: List[Dict[str, Any]], *, system_id: str, policy: str
         },
         "length_bucket_counts": dict(Counter(str(r.get("length_bucket")) for r in records)),
         "mean_attempts": float(np.mean([r.get("num_attempts", 1) for r in records])),
+        "mean_total_output_tokens": mean_total_output_tokens,
         "reason_counts": dict(reason_counts),
+        "selected_model_counts": selected_model_counts,
+        "entry_rung_counts": entry_rung_counts,
+        "selected_rung_counts": selected_rung_counts,
+        "first_attempt_stage_counts": first_attempt_stage_counts,
+        "latency_by_selected_model": latency_by_selected_model,
+        "latency_by_benchmark": latency_by_benchmark,
+        "latency_by_length_bucket": latency_by_length_bucket,
+        "accuracy_scorable_pct_by_selected_model": accuracy_scorable_pct_by_selected_model,
+        "scorable_counts_by_selected_model": scorable_counts_by_selected_model,
         **{f"latency_{k}": v for k, v in summarise_latencies(latencies).items()},
+        **{
+            f"client_wall_{k}": v
+            for k, v in summarise_latencies(wall_latencies).items()
+        },
     }
 
 
@@ -325,8 +496,14 @@ def run(
     out_cfg = cfg.get("output") or {}
     save_json(all_records, run_dir / out_cfg.get("per_request_jsonl", "per_request.json"))
     save_json(summary, run_dir / out_cfg.get("summary_json", "summary.json"))
-    save_csv(all_records, run_dir / "per_request.csv")
-    save_csv([summary], run_dir / "summary.csv")
+    csv_rows, csv_fields = _flatten_holdout_rows_for_csv(all_records)
+    save_csv(csv_rows, run_dir / "per_request.csv", fieldnames=csv_fields)
+    summary_csv_row = _flatten_summary_for_csv(summary)
+    save_csv(
+        [summary_csv_row],
+        run_dir / "summary.csv",
+        fieldnames=sorted(summary_csv_row.keys()),
+    )
     logger.info("Holdout eval complete", extra={"run_dir": str(run_dir), "summary": summary})
     return run_dir
 

@@ -124,23 +124,44 @@ predictors:
     quality_ex_ante: 0.632
     quality_post_hoc: 0.716
 
+# ── Trade-off routing (solo YAML; sin tocar código para experimentar) ─────────
+# Objetivo: servir el modelo más pequeño posible que el predictor considere
+# razonablemente acertado, valorando mucho el servicio (coste/latencia previstos
+# con el estado z) sin tirar la calidad: Q̂ sigue en la utilidad.
+#
+#   U(rung) = Q̂_ex_ante(rung) - λ · Ĉ_servicio(rung, z)
+#
+# - Subir λ  → más peso al servicio (antes ganan students / rungs baratos).
+# - Bajar λ  → más peso a la calidad prevista (el teacher entra antes en sysC).
+# - Empates en U: gana el rung más barato en el orden de la escalera (código).
+#
+# sysC (routing_predictive) y sysE (routing_plus_cascade) comparten el mismo λ
+# (ancla &routing_lambda) para que la comparación sea justa; cambia solo el número
+# del ancla y relanza eval. Modos alternativos: routing_selection = max_utility |
+# min_rung_meeting_floor (ver routing/policies.py).
+
 policy_params:
   routing_predictive:
-    cost_weight_lambda: 0.001
-    candidate_rungs: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    routing_selection: max_utility
     min_quality_floor: 0.55
+    candidate_rungs: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    cost_weight_lambda: &routing_lambda 0.025
   cascade_five_rung:
     rung_order: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
     post_hoc_threshold: 0.716
     per_rung_timeout_ms: [3000, 4000, 6000, 8000, 120000]
   routing_plus_cascade:
-    cost_weight_lambda: 0.001
-    candidate_rungs: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    routing_selection: max_utility
     min_quality_floor: 0.55
-    post_hoc_threshold: 0.716
+    routing_candidates: ["student_tiny", "student_small", "student_q3b", "student_mid"]
     rung_order: ["student_tiny", "student_small", "student_q3b", "student_mid", "teacher"]
+    post_hoc_threshold: 0.716
     per_rung_timeout_ms: [3000, 4000, 6000, 8000, 120000]
+    cost_weight_lambda: *routing_lambda
 
 output:
+  # per_request: ver routing/run_eval_holdout._build_holdout_request_record (intentos,
+  # z al envío, routing_scores, route_path, tokens de salida, etc.). summary.json
+  # incluye agregados por modelo / benchmark / bucket de longitud.
   per_request_jsonl: "per_request.jsonl"
   summary_json: "summary.json"
