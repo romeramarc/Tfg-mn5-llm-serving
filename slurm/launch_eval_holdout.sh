@@ -114,8 +114,8 @@ submit_clients() {
       sysB_only_tiny)        tlimit="04:00:00" ;;
       sysA_only_teacher)     tlimit="08:00:00" ;;
       sysC_routing_distilled) tlimit="12:00:00" ;;
-      # v2 (escalera 4 rungs) — runs reales ≤ 15 min; 4 h sobra y desatasca colas.
-      sysC_routing4)         tlimit="04:00:00" ;;
+      # v2 (escalera 4 rungs, sweep λ simétrico C+E) — 9 eval jobs, ~15 min c/u.
+      sysC_l*)               tlimit="04:00:00" ;;
       sysD_cascade4)         tlimit="04:00:00" ;;
       sysE_l*)               tlimit="04:00:00" ;;
       *)                     tlimit="14:00:00" ;;

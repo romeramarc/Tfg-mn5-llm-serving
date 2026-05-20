@@ -1,33 +1,32 @@
 # ─────────────────────────────────────────────────────────────
-# routing_eval_holdout_v2.yaml — Holdout v2: escalera de 4 rungs + sweep de λ
+# routing_eval_holdout_v2.yaml — Holdout v2 (definitivo)
 # ─────────────────────────────────────────────────────────────
-# Objetivo de esta corrida (consume MISMO prompt_pool que v1 para poder
-# comparar prompt-a-prompt con los baselines del 20260520):
+# Diseño factorial simétrico (opción A):
 #
-#   1) Quitar student_tiny (0.5B) de las escaleras de C/D/E. Con sólo 4 rungs
-#      (1.5B distilled → 3B → 7B → 14B), el modelo destilado tiene espacio para
-#      ganar prompts y podemos medir su contribución real frente a su base
-#      pre-distilación.
-#   2) Hacer sweep de λ (cost_weight_lambda) en sysE para encontrar el punto
-#      donde routing + cascading domina a la cascada pura (sysD_cascade4) y a
-#      los baselines existentes (sysA_only_teacher y sysB_only_tiny del v1).
-#   3) Aislar el efecto de λ: mismo post_hoc_threshold (0.716) y mismo λ de
-#      routing entre sysC y sysE para que las dos políticas con routing usen
-#      la misma "regla" y la única variable sea el cascading.
+#   • Escalera 4 rungs (sin 0.5B): 1.5B distilled → 3B → 7B → 14B teacher
+#   • Sweep λ idéntico en routing (C) y routing+cascada (E): 0.010, 0.025, 0.050, 0.100
+#   • Cascada pura (D) sin λ — control fijo de política
+#   • Baselines v1 NO relanzados: sysA_only_teacher, sysB_only_tiny (20260520)
 #
-# Lambda candidates en sysE:
-#   0.010 → quality-leaning (similar al baseline previo bajado un punto)
-#   0.025 → default v1 (control directo, misma λ que sysE original con 4 rungs)
-#   0.050 → balanced
-#   0.100 → service-heavy (debería estresar el routing hacia 1.5B/3B)
+# Comparaciones defendibles en memoria:
+#   1) Mismo λ: sysC_l* vs sysE_l*  → efecto de la cascada
+#   2) Frente Pareto C* vs E* vs D4 vs A/B
+#   3) Mix del 1.5B distilled sin que 0.5B opaque el routing
 #
-# Baselines reutilizados (NO se relanzan): sysA_only_teacher, sysB_only_tiny.
-# Sus per_request.csv del run 20260520 son válidos porque comparten
-# prompt_pool y la lógica del runner no cambió en su camino de ejecución.
+# NO lanzar este template sin reentreno: usar
+#   configs/routing_eval_holdout_v2_retrained.yaml
+# (generado por slurm/retrain_predictors_model_tier.sbatch)
 #
-# Para la corrida final, no lanzar este template directamente: primero ejecutar
-# `slurm/retrain_predictors_model_tier.sbatch`, que reentrena los predictores
-# con `model_tier` y materializa `configs/routing_eval_holdout_v2_retrained.yaml`.
+# BSC — secuencia completa:
+#   git pull
+#   sbatch slurm/retrain_predictors_model_tier.sbatch
+#   # tras OK:
+#   python scripts/preflight_eval_holdout.py --config configs/routing_eval_holdout_v2_retrained.yaml
+#   EVAL_CONFIG=configs/routing_eval_holdout_v2_retrained.yaml \
+#   PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl \
+#   bash slurm/launch_eval_holdout.sh all
+#
+# 9 eval jobs: 4×C + 1×D + 4×E  |  4 servers (small, q3b, mid, teacher)
 # ─────────────────────────────────────────────────────────────
 
 common:
@@ -39,19 +38,43 @@ execution_plan:
   shared_prompt_pool: "results/routing_eval_holdout/prompt_pool.jsonl"
   endpoint_dir: "results/routing/endpoints"
   endpoint_wait_s: 1200
-  # Launch (BSC):  EVAL_CONFIG=configs/routing_eval_holdout_v2.yaml \
-  #                PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl \
-  #                bash slurm/launch_eval_holdout.sh all
 
 systems:
-  - id: "sysC_routing4"
+  # ── Routing only: sweep λ (misma rejilla que E) ───────────────────────────
+  - id: "sysC_l010"
     policy: "routing_predictive"
     roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.010
 
+  - id: "sysC_l025"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.025
+
+  - id: "sysC_l050"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.050
+
+  - id: "sysC_l100"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.100
+
+  # ── Cascade only (sin λ) ──────────────────────────────────────────────────
   - id: "sysD_cascade4"
     policy: "cascade_five_rung"
     roles: ["student_small", "student_q3b", "student_mid", "teacher"]
 
+  # ── Routing + cascade: mismo sweep λ que C ────────────────────────────────
   - id: "sysE_l010"
     policy: "routing_plus_cascade"
     roles: ["student_small", "student_q3b", "student_mid", "teacher"]
@@ -149,14 +172,9 @@ predictors:
     quality_ex_ante: 0.632
     quality_post_hoc: 0.716
 
-# ── Trade-off routing (v2: escalera de 4 rungs, sweep λ por sistema) ──────────
-# Los λ específicos por sistema viven en `policy_overrides` arriba; aquí va el
-# default que se aplica cuando un sistema no especifica override propio (p.ej.
-# sysC_routing4 usa el default 0.025).
-#
 # U(rung) = Q̂_ex_ante(prompt, z, rung) - λ·Ĉ_servicio(prompt, z, rung).
-# Esta configuración debe usar bundles reentrenados con `model_tier` como feature.
-# ─────────────────────────────────────────────────────────────────────────────
+# λ por sistema solo vía policy_overrides (C_* y E_*). Default 0.025 = fallback interno.
+# Bundles finales: routing_eval_holdout_v2_retrained.yaml (model_tier en features).
 
 policy_params:
   routing_predictive:

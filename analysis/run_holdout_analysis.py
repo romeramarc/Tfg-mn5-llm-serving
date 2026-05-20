@@ -26,14 +26,20 @@ RESULTS_DIRS = [
 OUT_DIR = ROOT / "analysis" / "holdout_analysis_outputs"
 FIG_DIR = OUT_DIR / "figures"
 
+LAMBDA_SWEEP = ("l010", "l025", "l050", "l100")
+
 SYSTEM_LABELS = {
     "sysA_only_teacher": "A: teacher",
     "sysB_only_tiny": "B: tiny",
     "sysC_routing_distilled": "C: routing (5 rungs)",
     "sysD_cascade_distilled": "D: cascade (5 rungs)",
     "sysE_routing_cascade_distilled": "E: routing+cascade (5 rungs)",
-    "sysC_routing4": "C4: routing (4 rungs)",
+    "sysC_routing4": "C4: routing (4 rungs, legacy)",
     "sysD_cascade4": "D4: cascade (4 rungs)",
+    "sysC_l010": "C4 λ=0.010",
+    "sysC_l025": "C4 λ=0.025",
+    "sysC_l050": "C4 λ=0.050",
+    "sysC_l100": "C4 λ=0.100",
     "sysE_l010": "E4 λ=0.010",
     "sysE_l025": "E4 λ=0.025",
     "sysE_l050": "E4 λ=0.050",
@@ -48,11 +54,19 @@ SYSTEM_ORDER = [
     "sysE_routing_cascade_distilled",
     "sysC_routing4",
     "sysD_cascade4",
+    "sysC_l010",
+    "sysC_l025",
+    "sysC_l050",
+    "sysC_l100",
     "sysE_l010",
     "sysE_l025",
     "sysE_l050",
     "sysE_l100",
 ]
+
+V2_LAMBDA_SYSTEMS = [f"sysC_{s}" for s in LAMBDA_SWEEP] + [f"sysE_{s}" for s in LAMBDA_SWEEP] + ["sysD_cascade4"]
+
+MATCHED_LAMBDA_PAIRS = [(f"sysC_{s}", f"sysE_{s}") for s in LAMBDA_SWEEP]
 
 MODEL_LABELS = {
     "Qwen/Qwen2.5-0.5B-Instruct": "0.5B tiny",
@@ -283,6 +297,42 @@ def pairwise_against_sys_e(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def pairwise_matched_lambda_c_vs_e(df: pd.DataFrame) -> pd.DataFrame:
+    """Prompt-level C vs E at the same cost_weight_lambda (v2 factorial design)."""
+    rows: list[dict[str, Any]] = []
+    key = ["run_date", "benchmark", "example_id"]
+    cols = key + ["is_correct", "is_scorable", "client_wall_s", "used_teacher", "num_attempts", "model_label"]
+    for run_date, run_df in df.groupby("run_date"):
+        for c_id, e_id in MATCHED_LAMBDA_PAIRS:
+            c = run_df[run_df["system_id"] == c_id][cols].copy()
+            e = run_df[run_df["system_id"] == e_id][cols].copy()
+            if c.empty or e.empty:
+                continue
+            c = c.rename(columns={col: f"c_{col}" for col in cols if col not in key})
+            e = e.rename(columns={col: f"e_{col}" for col in cols if col not in key})
+            merged = c.merge(e, on=key, how="inner")
+            same = merged["c_is_correct"] == merged["e_is_correct"]
+            rows.append(
+                {
+                    "run_date": run_date,
+                    "lambda_pair": c_id.rsplit("_l", 1)[-1],
+                    "sysC": c_id,
+                    "sysE": e_id,
+                    "matched_prompts": len(merged),
+                    "e_more_correct": int((merged["e_is_correct"] & ~merged["c_is_correct"]).sum()),
+                    "c_more_correct": int((~merged["e_is_correct"] & merged["c_is_correct"]).sum()),
+                    "same_correctness": int(same.sum()),
+                    "e_faster_when_same_correctness": int((same & (merged["e_client_wall_s"] < merged["c_client_wall_s"])).sum()),
+                    "e_slower_when_same_correctness": int((same & (merged["e_client_wall_s"] > merged["c_client_wall_s"])).sum()),
+                    "mean_delta_latency_s": float((merged["e_client_wall_s"] - merged["c_client_wall_s"]).mean()),
+                    "p50_delta_latency_s": q(merged["e_client_wall_s"] - merged["c_client_wall_s"], 0.50),
+                    "e_uses_teacher_not_c": int((merged["e_used_teacher"] & ~merged["c_used_teacher"]).sum()),
+                    "c_uses_teacher_not_e": int((~merged["e_used_teacher"] & merged["c_used_teacher"]).sum()),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def prompt_pair_sys_e_vs_sys_d(df: pd.DataFrame, run_date: str) -> pd.DataFrame:
     key = ["benchmark", "example_id", "pool_index", "length_bucket"]
     cols = key + ["is_correct", "is_scorable", "client_wall_s", "used_teacher", "num_attempts", "model_label", "reason", "confidence", "post_hoc_probability", "route_path"]
@@ -299,7 +349,13 @@ def prompt_pair_sys_e_vs_sys_d(df: pd.DataFrame, run_date: str) -> pd.DataFrame:
 
 def routing_score_diagnostics(df: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
-    routing_df = df[df["system_id"].isin(["sysC_routing_distilled", "sysE_routing_cascade_distilled"])].copy()
+    routing_systems = {
+        "sysC_routing_distilled",
+        "sysE_routing_cascade_distilled",
+        "sysC_routing4",
+        *V2_LAMBDA_SYSTEMS,
+    }
+    routing_df = df[df["system_id"].isin(routing_systems)].copy()
     for (run_date, system_id), g in routing_df.groupby(["run_date", "system_id"], sort=True):
         parsed = g["routing_scores"].map(safe_json)
         n_with_scores = int(parsed.notna().sum())
@@ -374,9 +430,29 @@ def is_pareto_efficient(points: pd.DataFrame) -> pd.Series:
     return pd.Series(efficient, index=points.index)
 
 
+def _systems_for_plot(core: pd.DataFrame, latest_run: str) -> list[str]:
+    present = set(core[core["run_date"] == latest_run]["system_id"].unique())
+    if V2_LAMBDA_SYSTEMS[0] in present or "sysD_cascade4" in present:
+        return [
+            "sysA_only_teacher",
+            "sysB_only_tiny",
+            "sysD_cascade4",
+            *[f"sysC_{s}" for s in LAMBDA_SWEEP],
+            *[f"sysE_{s}" for s in LAMBDA_SWEEP],
+        ]
+    return [s for s in SYSTEM_ORDER if s in present]
+
+
 def plot_core(core: pd.DataFrame, latest_run: str) -> None:
     latest = core[core["run_date"] == latest_run].copy()
-    latest["system_label"] = pd.Categorical(latest["system_label"], [SYSTEM_LABELS[s] for s in SYSTEM_ORDER], ordered=True)
+    plot_order = _systems_for_plot(core, latest_run)
+    labels = [SYSTEM_LABELS.get(s, s) for s in plot_order if s in latest["system_id"].values]
+    latest = latest[latest["system_id"].isin(plot_order)].copy()
+    latest["system_label"] = pd.Categorical(
+        latest["system_label"],
+        [SYSTEM_LABELS.get(s, s) for s in plot_order],
+        ordered=True,
+    )
     latest = latest.sort_values("system_label")
 
     fig, ax1 = plt.subplots(figsize=(10, 5))
@@ -530,6 +606,7 @@ def main() -> None:
     segment = summarize_segments(df)
     model_mix = summarize_model_mix(df)
     pairwise = pairwise_against_sys_e(df)
+    pairwise_lambda = pairwise_matched_lambda_c_vs_e(df)
     routing_diag = routing_score_diagnostics(df)
     prompt_consensus_latest = prompt_consensus(df, latest_run)
     pareto_latest = core[core["run_date"] == latest_run].copy()
@@ -539,6 +616,7 @@ def main() -> None:
     segment.to_csv(OUT_DIR / "segment_metrics.csv", index=False)
     model_mix.to_csv(OUT_DIR / "model_mix.csv", index=False)
     pairwise.to_csv(OUT_DIR / "pairwise_sysE_vs_baselines.csv", index=False)
+    pairwise_lambda.to_csv(OUT_DIR / "pairwise_matched_lambda_C_vs_E.csv", index=False)
     routing_diag.to_csv(OUT_DIR / "routing_score_diagnostics.csv", index=False)
     prompt_consensus_latest.to_csv(OUT_DIR / "prompt_consensus_latest.csv", index=False)
     pareto_latest.to_csv(OUT_DIR / "pareto_latest.csv", index=False)

@@ -96,6 +96,19 @@ from utils.config_loader import load_yaml
 cfg = load_yaml("configs/routing_eval_holdout_v2_retrained.yaml")
 print(cfg["predictors"]["bundles"])
 print(cfg["predictors"]["thresholds"])
+systems = [s["id"] for s in cfg.get("systems") or []]
+expected = [
+    "sysC_l010", "sysC_l025", "sysC_l050", "sysC_l100",
+    "sysD_cascade4",
+    "sysE_l010", "sysE_l025", "sysE_l050", "sysE_l100",
+]
+missing = [s for s in expected if s not in systems]
+extra = [s for s in systems if s not in expected]
+if missing or extra:
+    raise SystemExit(f"system list mismatch: missing={missing} extra={extra}")
+print(f"OK {len(systems)} eval systems (4xC + D + 4xE)")
 PY
 
 echo "=== PREDICTOR MODEL_TIER RETRAIN DONE ==="
+echo "Next: python scripts/preflight_eval_holdout.py --config ${OUTPUT_ROUTING_CONFIG}"
+echo "Then:  EVAL_CONFIG=${OUTPUT_ROUTING_CONFIG} PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl bash slurm/launch_eval_holdout.sh all"
