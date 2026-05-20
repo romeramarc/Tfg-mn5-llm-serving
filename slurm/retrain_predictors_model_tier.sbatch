@@ -7,8 +7,10 @@
 #SBATCH --account=bsc98
 #SBATCH --qos=gp_bsccs
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --time=12:00:00
+# RF-only refine: 8 CPUs suffice (sklearn RF uses n_jobs=-1). Walltime 4h is enough
+# vs 12h when we also searched gradient_boosting.
+#SBATCH --cpus-per-task=8
+#SBATCH --time=04:00:00
 
 set -euo pipefail
 
@@ -31,25 +33,31 @@ export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 echo "=== BUILD DATASETS WITH model_tier ==="
 echo "TRACE_PATTERN=${TRACE_PATTERN}"
 
-python -m predictors.builders.build_ex_ante_dataset \
-  --input "${TRACE_PATTERN}" \
-  --output-dir "${DATASET_DIR}" \
-  --dataset-name quality_ex_ante_model_tier \
-  --report "${DATASET_DIR}/quality_ex_ante_model_tier_build_report.json"
+if [[ -f "${TRACE_PATTERN}" ]]; then
+  echo "Source: raw trace JSONL"
+  python -m predictors.builders.build_ex_ante_dataset \
+    --input "${TRACE_PATTERN}" \
+    --output-dir "${DATASET_DIR}" \
+    --dataset-name quality_ex_ante_model_tier \
+    --report "${DATASET_DIR}/quality_ex_ante_model_tier_build_report.json"
 
-python -m predictors.builders.build_post_hoc_dataset \
-  --input "${TRACE_PATTERN}" \
-  --output-dir "${DATASET_DIR}" \
-  --dataset-name quality_post_hoc_model_tier \
-  --report "${DATASET_DIR}/quality_post_hoc_model_tier_build_report.json"
+  python -m predictors.builders.build_post_hoc_dataset \
+    --input "${TRACE_PATTERN}" \
+    --output-dir "${DATASET_DIR}" \
+    --dataset-name quality_post_hoc_model_tier \
+    --report "${DATASET_DIR}/quality_post_hoc_model_tier_build_report.json"
 
-python -m predictors.builders.build_cost_dataset \
-  --input "${TRACE_PATTERN}" \
-  --output-dir "${DATASET_DIR}" \
-  --dataset-name service_cost_model_tier \
-  --feature-policy strict_ex_ante \
-  --cost-mode latency_ms \
-  --report "${DATASET_DIR}/service_cost_model_tier_build_report.json"
+  python -m predictors.builders.build_cost_dataset \
+    --input "${TRACE_PATTERN}" \
+    --output-dir "${DATASET_DIR}" \
+    --dataset-name service_cost_model_tier \
+    --feature-policy strict_ex_ante \
+    --cost-mode latency_ms \
+    --report "${DATASET_DIR}/service_cost_model_tier_build_report.json"
+else
+  echo "Trace not found — using Phase A/B datasets (same source as original RF refine)"
+  python scripts/build_model_tier_datasets_from_phase_ab.py --output-dir "${DATASET_DIR}"
+fi
 
 echo "=== VERIFY model_tier IN ALL DATASET METADATA ==="
 DATASET_DIR="${DATASET_DIR}" python - <<'PY'

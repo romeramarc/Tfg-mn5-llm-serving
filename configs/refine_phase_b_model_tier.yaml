@@ -1,5 +1,5 @@
-# Phase B refinement for quality predictors with `model_tier` as a learnt feature.
-# Datasets are rebuilt by `slurm/retrain_predictors_model_tier.sbatch`.
+# Phase B — quality ex-ante + post-hoc con model_tier (solo Random Forest).
+# Misma decisión que refine_phase_a/b originales: RF únicamente (calidad + latencia inferencia).
 
 output_root: "results/predictors_model_tier/phase_b"
 
@@ -20,7 +20,6 @@ predictors:
     scoring: "roc_auc"
     families:
       - random_forest
-      - gradient_boosting
     threshold:
       criterion: "cost"
       fp_cost: 2.0
@@ -32,12 +31,6 @@ predictors:
         min_samples_leaf: [1, 2, 5, 10]
         max_features: ["sqrt", "log2", 0.5]
         class_weight: ["balanced", "balanced_subsample"]
-      gradient_boosting:
-        learning_rate: [0.03, 0.05, 0.1]
-        max_iter: [200, 400, 800]
-        max_depth: [null, 6, 8, 12]
-        max_leaf_nodes: [15, 31, 63]
-        l2_regularization: [0.0, 1.0e-4, 1.0e-2]
 
   - id: "quality_post_hoc"
     task: "classification"
@@ -52,7 +45,6 @@ predictors:
     scoring: "roc_auc"
     families:
       - random_forest
-      - gradient_boosting
     threshold:
       criterion: "cost"
       fp_cost: 3.0
@@ -64,9 +56,3 @@ predictors:
         min_samples_leaf: [1, 2, 5, 10]
         max_features: ["sqrt", "log2", 0.5]
         class_weight: ["balanced", "balanced_subsample"]
-      gradient_boosting:
-        learning_rate: [0.03, 0.05, 0.1]
-        max_iter: [200, 400, 800]
-        max_depth: [null, 6, 8, 12]
-        max_leaf_nodes: [15, 31, 63]
-        l2_regularization: [0.0, 1.0e-4, 1.0e-2]
