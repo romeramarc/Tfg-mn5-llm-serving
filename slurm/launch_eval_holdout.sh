@@ -3,8 +3,8 @@
 # Queue holdout evaluation on MN5.
 #
 # Usage (from login node, inside tmux/screen):
-#   bash slurm/launch_eval_holdout.sh servers     # 5 vLLM servers (24h)
-#   bash slurm/launch_eval_holdout.sh clients     # 5 eval jobs (after servers)
+#   bash slurm/launch_eval_holdout.sh servers     # vLLM servers for configured roles
+#   bash slurm/launch_eval_holdout.sh clients     # eval jobs for configured systems
 #   bash slurm/launch_eval_holdout.sh all          # servers + evals (afterbegin)
 #
 # Eval jobs use afterbegin (not afterok): they start once servers *begin*,
@@ -65,6 +65,7 @@ PY
 submit_servers() {
   local -a job_ids=()
   for role in "${ALL_ROLES[@]}"; do
+    rm -f "results/routing/endpoints/${role}.url"
     jid=$(sbatch --parsable \
       --job-name="vllm-${role}" \
       --export=ALL,ROLE="${role}",PROJECT_DIR="${PROJECT_DIR}" \
@@ -146,7 +147,8 @@ case "${MODE}" in
     build_prompt_pool >&2
     submit_clients "${dep}"
     echo "Eval jobs start afterbegin server jobs: ${dep}" >&2
-    echo "You can disconnect; check later: squeue -u \$USER  and  ls results/routing_eval_holdout/" >&2
+    echo "You can disconnect; check later: squeue -u \$USER" >&2
+    echo "Config: ${EVAL_CONFIG}" >&2
     ;;
   *)
     echo "Usage: bash slurm/launch_eval_holdout.sh {servers|clients|all}"

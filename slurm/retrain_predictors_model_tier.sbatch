@@ -1,5 +1,5 @@
 #!/bin/bash
-# SLURM — rebuild datasets and refine predictors with model_tier as a feature.
+# SLURM - rebuild datasets and refine predictors with model_tier as a feature.
 #SBATCH --job-name=pred-tier
 #SBATCH --output=logs/predictors-model-tier-%j.out
 #SBATCH --error=logs/predictors-model-tier-%j.err
@@ -55,7 +55,7 @@ if [[ -f "${TRACE_PATTERN}" ]]; then
     --cost-mode latency_ms \
     --report "${DATASET_DIR}/service_cost_model_tier_build_report.json"
 else
-  echo "Trace not found — using Phase A/B datasets (same source as original RF refine)"
+  echo "Trace not found; using Phase A/B datasets (same source as original RF refine)"
   python scripts/build_model_tier_datasets_from_phase_ab.py --output-dir "${DATASET_DIR}"
 fi
 
@@ -93,14 +93,21 @@ python scripts/write_routing_config_from_refinements.py \
 echo "=== RETRAINED ROUTING CONFIG ==="
 python - <<'PY'
 from utils.config_loader import load_yaml
+
 cfg = load_yaml("configs/routing_eval_holdout_v2_retrained.yaml")
 print(cfg["predictors"]["bundles"])
 print(cfg["predictors"]["thresholds"])
 systems = [s["id"] for s in cfg.get("systems") or []]
 expected = [
-    "sysC_l010", "sysC_l025", "sysC_l050", "sysC_l100",
+    "sysC_l010",
+    "sysC_l025",
+    "sysC_l050",
+    "sysC_l100",
     "sysD_cascade4",
-    "sysE_l010", "sysE_l025", "sysE_l050", "sysE_l100",
+    "sysE_l010",
+    "sysE_l025",
+    "sysE_l050",
+    "sysE_l100",
 ]
 missing = [s for s in expected if s not in systems]
 extra = [s for s in systems if s not in expected]
@@ -110,5 +117,6 @@ print(f"OK {len(systems)} eval systems (4xC + D + 4xE)")
 PY
 
 echo "=== PREDICTOR MODEL_TIER RETRAIN DONE ==="
-echo "Next: python scripts/preflight_eval_holdout.py --config ${OUTPUT_ROUTING_CONFIG}"
-echo "Then:  EVAL_CONFIG=${OUTPUT_ROUTING_CONFIG} PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl bash slurm/launch_eval_holdout.sh all"
+echo "Next (manual): python scripts/preflight_eval_holdout.py --config ${OUTPUT_ROUTING_CONFIG}"
+echo "       EVAL_CONFIG=${OUTPUT_ROUTING_CONFIG} PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl bash slurm/launch_eval_holdout.sh all"
+echo "Or chain (auto after retrain): bash slurm/chain_retrain_and_holdout_v2.sh <THIS_JOB_ID>"

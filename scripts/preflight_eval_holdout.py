@@ -65,7 +65,7 @@ def main() -> int:
         if policy in ("routing_predictive", "routing_plus_cascade"):
             block = overrides.get(policy) or {}
             lam = block.get("cost_weight_lambda")
-            if lam is None and sid and sid.endswith("_l010"):
+            if lam is None and sid and "_l" in sid:
                 errors.append(f"{sid}: missing cost_weight_lambda override")
             if lam is not None and sid:
                 suffix = sid.rsplit("_l", 1)[-1] if "_l" in sid else ""
@@ -83,6 +83,20 @@ def main() -> int:
         for c_id, e_id, lam in LAMBDA_PAIRS:
             if c_id not in system_ids or e_id not in system_ids:
                 continue
+            c = next(s for s in systems if s.get("id") == c_id)
+            e = next(s for s in systems if s.get("id") == e_id)
+            c_lam = ((c.get("policy_overrides") or {}).get("routing_predictive") or {}).get(
+                "cost_weight_lambda"
+            )
+            e_lam = ((e.get("policy_overrides") or {}).get("routing_plus_cascade") or {}).get(
+                "cost_weight_lambda"
+            )
+            if c_lam is None or e_lam is None or abs(float(c_lam) - float(e_lam)) > 1e-9:
+                errors.append(f"{c_id} and {e_id}: lambda overrides are not matched")
+            if c_lam is not None and abs(float(c_lam) - lam) > 1e-9:
+                errors.append(f"{c_id}: expected lambda {lam}, got {c_lam}")
+            if e_lam is not None and abs(float(e_lam) - lam) > 1e-9:
+                errors.append(f"{e_id}: expected lambda {lam}, got {e_lam}")
 
     pred = cfg.get("predictors") or {}
     for key, rel in (pred.get("bundles") or {}).items():
