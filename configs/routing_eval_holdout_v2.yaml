@@ -24,6 +24,10 @@
 # Baselines reutilizados (NO se relanzan): sysA_only_teacher, sysB_only_tiny.
 # Sus per_request.csv del run 20260520 son válidos porque comparten
 # prompt_pool y la lógica del runner no cambió en su camino de ejecución.
+#
+# Para la corrida final, no lanzar este template directamente: primero ejecutar
+# `slurm/retrain_predictors_model_tier.sbatch`, que reentrena los predictores
+# con `model_tier` y materializa `configs/routing_eval_holdout_v2_retrained.yaml`.
 # ─────────────────────────────────────────────────────────────
 
 common:
@@ -149,6 +153,9 @@ predictors:
 # Los λ específicos por sistema viven en `policy_overrides` arriba; aquí va el
 # default que se aplica cuando un sistema no especifica override propio (p.ej.
 # sysC_routing4 usa el default 0.025).
+#
+# U(rung) = Q̂_ex_ante(prompt, z, rung) - λ·Ĉ_servicio(prompt, z, rung).
+# Esta configuración debe usar bundles reentrenados con `model_tier` como feature.
 # ─────────────────────────────────────────────────────────────────────────────
 
 policy_params:

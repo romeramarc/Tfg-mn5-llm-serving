@@ -7,14 +7,18 @@
     ],
     "trace_model_field": "model_tier",
     "expected_model_tiers": [
+      "student_tiny",
       "student_small",
+      "student_q3b",
       "student_mid",
       "teacher"
     ],
     "expected_model_registry": {
+      "student_tiny": "Qwen/Qwen2.5-0.5B-Instruct",
       "student_small": "UPDATE_WITH_FINAL_1_5B_MODEL_ID",
-      "student_mid": "UPDATE_WITH_FINAL_MID_MODEL_ID",
-      "teacher": "UPDATE_WITH_FINAL_TEACHER_MODEL_ID"
+      "student_q3b": "Qwen/Qwen2.5-3B-Instruct",
+      "student_mid": "Qwen/Qwen2.5-7B-Instruct",
+      "teacher": "Qwen/Qwen2.5-14B-Instruct"
     },
     "expected_benchmarks": [
       "gsm8k",
@@ -97,6 +101,7 @@
         "system_active_workers_missing",
         "input_tokens",
         "input_tokens_missing",
+        "model_tier",
         "request_hour_utc",
         "request_weekday_utc"
       ]
@@ -122,6 +127,7 @@
         "system_active_workers_missing",
         "input_tokens",
         "input_tokens_missing",
+        "model_tier",
         "request_hour_utc",
         "request_weekday_utc",
         "response_numeric_token_count",
@@ -172,6 +178,7 @@
           "system_active_workers_missing",
           "input_tokens",
           "input_tokens_missing",
+          "model_tier",
           "request_hour_utc",
           "request_weekday_utc",
           "request_max_tokens",
@@ -198,6 +205,7 @@
           "system_active_workers_missing",
           "input_tokens",
           "input_tokens_missing",
+          "model_tier",
           "request_hour_utc",
           "request_weekday_utc",
           "request_max_tokens",

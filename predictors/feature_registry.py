@@ -33,6 +33,7 @@ CORE_RULES: List[FeatureRule] = [
     FeatureRule("system_active_workers", "system_state", "ex_ante", "low", "keep", True, True, True, True),
 
     FeatureRule("input_tokens", "tokenizer/runtime", "ex_ante", "low", "keep", True, True, True, True),
+    FeatureRule("model_tier", "model_registry", "ex_ante", "low", "keep", True, True, True, True),
     FeatureRule("request_hour_utc", "timestamp_utc", "ex_ante", "low", "keep", True, True, True, True),
     FeatureRule("request_weekday_utc", "timestamp_utc", "ex_ante", "low", "keep", True, True, True, True),
 

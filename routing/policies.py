@@ -767,14 +767,13 @@ def _pick_rung_by_routing(
 
     Default ``max_utility``: pick the rung that maximises
     ``U = ex_ante_quality - cost_weight_lambda * predicted_service_cost``.
-    That is the explicit quality--service trade-off: faster (cheaper) rungs win
-    when their predicted quality is close enough to heavier models. Ties favour
-    the earlier candidate in ``candidates`` (cheaper rungs first in the ladder).
+    Candidate-specific predictions require predictor bundles trained with
+    ``model_tier`` as a feature; otherwise utilities tie and the cheapest rung
+    wins by construction.
 
     ``min_rung_meeting_floor``: first rung in ladder order whose ex-ante quality
     meets ``min_quality_floor``; if none, fall back to the smallest candidate
-    (cascade may escalate). Use when you want a hard quality bar instead of a
-    smooth λ trade-off.
+    (cascade may escalate).
     """
     suite = ctx.get("predictor_suite")
     default_candidates = [

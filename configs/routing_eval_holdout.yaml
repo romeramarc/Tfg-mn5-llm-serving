@@ -125,13 +125,15 @@ predictors:
     quality_post_hoc: 0.716
 
 # ── Trade-off routing (solo YAML; sin tocar código para experimentar) ─────────
-# Objetivo: servir el modelo más pequeño posible que el predictor considere
-# razonablemente acertado, valorando mucho el servicio (coste/latencia previstos
-# con el estado z) sin tirar la calidad: Q̂ sigue en la utilidad.
+# Objetivo: servir el modelo más pequeño posible con un trade-off explícito.
 #
-#   U(rung) = Q̂_ex_ante(rung) - λ · Ĉ_servicio(rung, z)
+#   U(rung) = Q̂_ex_ante(prompt, z, rung) - λ · Ĉ_servicio(prompt, z, rung)
 #
-# - Subir λ  → más peso al servicio (antes ganan students / rungs baratos).
+# IMPORTANTE: estos bundles deben estar entrenados con `model_tier` como feature.
+# Si no, Q̂ y Ĉ son idénticos para todos los candidatos del mismo prompt y el
+# routing se degenera al rung más barato por el tie-breaker.
+#
+# - Subir λ  → más peso al servicio (antes ganan rungs baratos).
 # - Bajar λ  → más peso a la calidad prevista (el teacher entra antes en sysC).
 # - Empates en U: gana el rung más barato en el orden de la escalera (código).
 #

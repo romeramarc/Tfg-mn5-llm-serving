@@ -138,8 +138,8 @@ def time_feature_row(timestamp_utc: Optional[str]) -> Dict[str, float]:
     }
 
 
-def ex_ante_feature_row(trace: ModelExecutionTrace) -> Dict[str, float]:
-    row: Dict[str, float] = {}
+def ex_ante_feature_row(trace: ModelExecutionTrace) -> Dict[str, Any]:
+    row: Dict[str, Any] = {}
     row.update(prompt_feature_row(trace.prompt_text))
 
     queue_depth = _safe_float(trace.system_state.queue_depth if trace.system_state else None)
@@ -163,10 +163,18 @@ def ex_ante_feature_row(trace: ModelExecutionTrace) -> Dict[str, float]:
     )
 
     row.update(time_feature_row(trace.timestamp_utc))
+
+    # Model identity for training / inference alignment. ``model_name`` is kept in
+    # META_COLUMNS and excluded from learnt features in ``infer_feature_columns``,
+    # which made ex-ante and cost predictors blind to the candidate rung at routing
+    # time unless we expose tier explicitly as a normal feature column.
+    tier = (trace.model_tier or "").strip()
+    row["model_tier"] = tier if tier else "unknown"
+
     return row
 
 
-def post_hoc_feature_row(trace: ModelExecutionTrace) -> Dict[str, float]:
+def post_hoc_feature_row(trace: ModelExecutionTrace) -> Dict[str, Any]:
     row = ex_ante_feature_row(trace)
     row.update(response_feature_row(trace.response_text))
 
@@ -206,7 +214,7 @@ def post_hoc_feature_row(trace: ModelExecutionTrace) -> Dict[str, float]:
     return row
 
 
-def cost_feature_row(trace: ModelExecutionTrace, *, policy: str = "strict_ex_ante") -> Dict[str, float]:
+def cost_feature_row(trace: ModelExecutionTrace, *, policy: str = "strict_ex_ante") -> Dict[str, Any]:
     row = ex_ante_feature_row(trace)
 
     request_ctx = request_context_from_trace(trace)
