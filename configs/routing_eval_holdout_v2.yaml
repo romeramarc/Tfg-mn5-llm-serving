@@ -1,0 +1,175 @@
+# ─────────────────────────────────────────────────────────────
+# routing_eval_holdout_v2.yaml — Holdout v2: escalera de 4 rungs + sweep de λ
+# ─────────────────────────────────────────────────────────────
+# Objetivo de esta corrida (consume MISMO prompt_pool que v1 para poder
+# comparar prompt-a-prompt con los baselines del 20260520):
+#
+#   1) Quitar student_tiny (0.5B) de las escaleras de C/D/E. Con sólo 4 rungs
+#      (1.5B distilled → 3B → 7B → 14B), el modelo destilado tiene espacio para
+#      ganar prompts y podemos medir su contribución real frente a su base
+#      pre-distilación.
+#   2) Hacer sweep de λ (cost_weight_lambda) en sysE para encontrar el punto
+#      donde routing + cascading domina a la cascada pura (sysD_cascade4) y a
+#      los baselines existentes (sysA_only_teacher y sysB_only_tiny del v1).
+#   3) Aislar el efecto de λ: mismo post_hoc_threshold (0.716) y mismo λ de
+#      routing entre sysC y sysE para que las dos políticas con routing usen
+#      la misma "regla" y la única variable sea el cascading.
+#
+# Lambda candidates en sysE:
+#   0.010 → quality-leaning (similar al baseline previo bajado un punto)
+#   0.025 → default v1 (control directo, misma λ que sysE original con 4 rungs)
+#   0.050 → balanced
+#   0.100 → service-heavy (debería estresar el routing hacia 1.5B/3B)
+#
+# Baselines reutilizados (NO se relanzan): sysA_only_teacher, sysB_only_tiny.
+# Sus per_request.csv del run 20260520 son válidos porque comparten
+# prompt_pool y la lógica del runner no cambió en su camino de ejecución.
+# ─────────────────────────────────────────────────────────────
+
+common:
+  seed: 42
+  results_base_dir: "results/routing_eval_holdout_v2"
+
+execution_plan:
+  one_job_per_system: true
+  shared_prompt_pool: "results/routing_eval_holdout/prompt_pool.jsonl"
+  endpoint_dir: "results/routing/endpoints"
+  endpoint_wait_s: 1200
+  # Launch (BSC):  EVAL_CONFIG=configs/routing_eval_holdout_v2.yaml \
+  #                PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl \
+  #                bash slurm/launch_eval_holdout.sh all
+
+systems:
+  - id: "sysC_routing4"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+
+  - id: "sysD_cascade4"
+    policy: "cascade_five_rung"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+
+  - id: "sysE_l010"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.010
+
+  - id: "sysE_l025"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.025
+
+  - id: "sysE_l050"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.050
+
+  - id: "sysE_l100"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.100
+
+benchmarks:
+  gsm8k_holdout:
+    enabled: true
+    benchmark_label: "gsm8k"
+    dataset_name: "openai/gsm8k"
+    dataset_config: "main"
+    dataset_split: "test"
+    min_example_id: 250
+    subset_size: 300
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+
+  hendrycks_math_holdout:
+    enabled: true
+    benchmark_label: "math"
+    dataset_name: "EleutherAI/hendrycks_math"
+    dataset_subjects:
+      - algebra
+      - counting_and_probability
+      - geometry
+      - intermediate_algebra
+      - number_theory
+      - prealgebra
+      - precalculus
+    dataset_split: "train"
+    subset_size: 300
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+    answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+
+workload:
+  arrival_rates_rps: [5]
+  num_warmup_requests: 15
+  max_inflight: 48
+  shuffle_per_rate: true
+  max_tokens: 512
+  temperature: 0.0
+  request_timeout_s: 180.0
+  logprobs_top_k: 5
+  stream: false
+  samplers:
+    server_metrics:
+      enabled: true
+      interval_s: 0.25
+    gpu_smi:
+      enabled: true
+      interval_s: 0.2
+
+predictors:
+  cost_policy: "strict_ex_ante"
+  bundles:
+    quality_ex_ante: "results/phase_b/predictors_refined/refined-qea-rf-20260515T014429Z/model_bundle.joblib"
+    quality_post_hoc: "results/phase_b/predictors_refined/refined-qph-rf-20260515T014517Z/model_bundle.joblib"
+    service_cost: "results/phase_a/predictors_refined/refined-sc-rf-20260515T014348Z/model_bundle.joblib"
+  thresholds:
+    quality_ex_ante: 0.632
+    quality_post_hoc: 0.716
+
+# ── Trade-off routing (v2: escalera de 4 rungs, sweep λ por sistema) ──────────
+# Los λ específicos por sistema viven en `policy_overrides` arriba; aquí va el
+# default que se aplica cuando un sistema no especifica override propio (p.ej.
+# sysC_routing4 usa el default 0.025).
+# ─────────────────────────────────────────────────────────────────────────────
+
+policy_params:
+  routing_predictive:
+    routing_selection: max_utility
+    min_quality_floor: 0.55
+    candidate_rungs: ["student_small", "student_q3b", "student_mid", "teacher"]
+    cost_weight_lambda: 0.025
+  cascade_five_rung:
+    rung_order: ["student_small", "student_q3b", "student_mid", "teacher"]
+    post_hoc_threshold: 0.716
+    per_rung_timeout_ms: [4000, 6000, 8000, 120000]
+  routing_plus_cascade:
+    routing_selection: max_utility
+    min_quality_floor: 0.55
+    routing_candidates: ["student_small", "student_q3b", "student_mid"]
+    rung_order: ["student_small", "student_q3b", "student_mid", "teacher"]
+    post_hoc_threshold: 0.716
+    per_rung_timeout_ms: [4000, 6000, 8000, 120000]
+    cost_weight_lambda: 0.025
+
+output:
+  per_request_jsonl: "per_request.jsonl"
+  summary_json: "summary.json"

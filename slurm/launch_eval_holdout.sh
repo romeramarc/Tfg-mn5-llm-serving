@@ -24,14 +24,43 @@ EVAL_CONFIG="${EVAL_CONFIG:-configs/routing_eval_holdout.yaml}"
 PROMPT_POOL="${PROMPT_POOL:-results/routing_eval_holdout/prompt_pool.jsonl}"
 SERVER_WAIT_S="${SERVER_WAIT_S:-7200}"
 
-ALL_ROLES=(teacher student_mid student_q3b student_small student_tiny)
-SYSTEMS=(
-  sysB_only_tiny
-  sysA_only_teacher
-  sysD_cascade_distilled
-  sysC_routing_distilled
-  sysE_routing_cascade_distilled
-)
+read_config_roles_and_systems() {
+  python - <<'PY'
+from utils.config_loader import load_yaml
+import json
+import os
+
+cfg = load_yaml(os.environ.get("EVAL_CONFIG", "configs/routing_eval_holdout.yaml"))
+systems = cfg.get("systems", []) or []
+
+all_roles = []
+system_ids = []
+for s in systems:
+    sid = s.get("id")
+    roles = list(s.get("roles") or [])
+    if sid:
+        system_ids.append(str(sid))
+    for r in roles:
+        if r not in all_roles:
+            all_roles.append(r)
+
+print(json.dumps({"roles": all_roles, "systems": system_ids}))
+PY
+}
+
+CFG_JSON="$(read_config_roles_and_systems)"
+ALL_ROLES=($(python - <<PY
+import json
+cfg = json.loads(r'''${CFG_JSON}''')
+print(" ".join(cfg["roles"]))
+PY
+))
+SYSTEMS=($(python - <<PY
+import json
+cfg = json.loads(r'''${CFG_JSON}''')
+print(" ".join(cfg["systems"]))
+PY
+))
 
 submit_servers() {
   local -a job_ids=()
@@ -85,6 +114,10 @@ submit_clients() {
       sysB_only_tiny)        tlimit="04:00:00" ;;
       sysA_only_teacher)     tlimit="08:00:00" ;;
       sysC_routing_distilled) tlimit="12:00:00" ;;
+      # v2 (escalera 4 rungs) — runs reales ≤ 15 min; 4 h sobra y desatasca colas.
+      sysC_routing4)         tlimit="04:00:00" ;;
+      sysD_cascade4)         tlimit="04:00:00" ;;
+      sysE_l*)               tlimit="04:00:00" ;;
       *)                     tlimit="14:00:00" ;;
     esac
     jid=$(sbatch --parsable \

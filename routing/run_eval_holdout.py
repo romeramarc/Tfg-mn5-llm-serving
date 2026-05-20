@@ -159,6 +159,7 @@ def _merge_policy_ctx(
     base: Dict[str, Any],
     policy_name: str,
     policy_params: Dict[str, Any],
+    system_overrides: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     ctx = dict(base)
     params = (policy_params or {}).get(policy_name) or {}
@@ -173,6 +174,22 @@ def _merge_policy_ctx(
             "routing_selection",
         ):
             ctx.setdefault(key, rp.get(key))
+    if system_overrides:
+        override = system_overrides.get(policy_name) or {}
+        if isinstance(override, dict):
+            ctx.update(override)
+        if policy_name == "routing_plus_cascade":
+            rp_override = system_overrides.get("routing_predictive") or {}
+            if isinstance(rp_override, dict):
+                for key in (
+                    "cost_weight_lambda",
+                    "candidate_rungs",
+                    "routing_candidates",
+                    "min_quality_floor",
+                    "routing_selection",
+                ):
+                    if key in rp_override:
+                        ctx[key] = rp_override[key]
     return ctx
 
 
@@ -453,7 +470,10 @@ def run(
         "system_id": system_id,
         "predictor_suite": predictor_suite,
     }
-    ctx = _merge_policy_ctx(base_ctx, policy_name, policy_params)
+    system_overrides = system.get("policy_overrides") or {}
+    if not isinstance(system_overrides, dict):
+        system_overrides = {}
+    ctx = _merge_policy_ctx(base_ctx, policy_name, policy_params, system_overrides)
     policy_fn = POLICIES[policy_name]
 
     rng = np.random.default_rng(seed)
