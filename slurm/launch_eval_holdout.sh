@@ -5,10 +5,11 @@
 # Usage (from login node, inside tmux/screen):
 #   bash slurm/launch_eval_holdout.sh servers     # vLLM servers for configured roles
 #   bash slurm/launch_eval_holdout.sh clients     # eval jobs for configured systems
-#   bash slurm/launch_eval_holdout.sh all          # servers + evals (afterbegin)
+#   bash slurm/launch_eval_holdout.sh all          # servers + evals (no sbatch deps)
 #
-# Eval jobs use afterbegin (not afterok): they start once servers *begin*,
-# while vLLM is still running. afterok would wait 24h until servers exit.
+# Eval jobs do NOT use sbatch --dependency on BSC (afterbegin on server job IDs
+# is rejected: "Job dependency problem"). Each eval job polls endpoint .url files
+# inside slurm/eval_holdout.sbatch (ENDPOINT_WAIT_S, default 7200s).
 #
 # Environment:
 #   PROJECT_DIR, EVAL_CONFIG, PROMPT_POOL, SERVER_WAIT_S (default 7200)
@@ -116,11 +117,6 @@ build_prompt_pool() {
 }
 
 submit_clients() {
-  local dep="$1"
-  local -a dep_flag=()
-  if [[ -n "${dep}" ]]; then
-    dep_flag=(--dependency=afterbegin:"${dep}")
-  fi
   if [[ ${#SYSTEMS[@]} -eq 0 ]]; then
     echo "ERROR: no systems found in ${EVAL_CONFIG}" >&2
     exit 1
@@ -130,17 +126,16 @@ submit_clients() {
       sysB_only_tiny)        tlimit="04:00:00" ;;
       sysA_only_teacher)     tlimit="08:00:00" ;;
       sysC_routing_distilled) tlimit="12:00:00" ;;
-      # v2 (escalera 4 rungs, sweep λ simétrico C+E) — 9 eval jobs, ~15 min c/u.
-      sysC_l*)               tlimit="04:00:00" ;;
-      sysD_cascade4)         tlimit="04:00:00" ;;
-      sysE_l*)               tlimit="04:00:00" ;;
+      # v2 — eval ~15 min; walltime includes wait for vLLM endpoints (no sbatch deps).
+      sysC_l*)               tlimit="24:00:00" ;;
+      sysD_cascade4)         tlimit="24:00:00" ;;
+      sysE_l*)               tlimit="24:00:00" ;;
       *)                     tlimit="14:00:00" ;;
     esac
     jid=$(sbatch --parsable \
-      "${dep_flag[@]}" \
       --job-name="eval-${sys}" \
       --time="${tlimit}" \
-      --export=ALL,SYSTEM_ID="${sys}",PROJECT_DIR="${PROJECT_DIR}",EVAL_CONFIG="${EVAL_CONFIG}",PROMPT_POOL="${PROMPT_POOL}" \
+      --export=ALL,SYSTEM_ID="${sys}",PROJECT_DIR="${PROJECT_DIR}",EVAL_CONFIG="${EVAL_CONFIG}",PROMPT_POOL="${PROMPT_POOL}",ENDPOINT_WAIT_S="${SERVER_WAIT_S:-7200}" \
       slurm/eval_holdout.sbatch)
     echo "Eval ${sys}: job ${jid} (time=${tlimit})" >&2
   done
@@ -153,15 +148,15 @@ case "${MODE}" in
     ;;
   clients)
     build_prompt_pool
-    submit_clients ""
+    submit_clients
     ;;
   all)
     mapfile -t SIDS < <(submit_servers)
     dep=$(IFS=:; echo "${SIDS[*]}")
     echo "Server job IDs: ${dep}" >&2
     build_prompt_pool >&2
-    submit_clients "${dep}"
-    echo "Eval jobs start afterbegin server jobs: ${dep}" >&2
+    submit_clients
+    echo "Eval jobs poll endpoint .url files (ENDPOINT_WAIT_S=${SERVER_WAIT_S:-7200}); no sbatch --dependency on BSC." >&2
     echo "You can disconnect; check later: squeue -u \$USER" >&2
     echo "Config: ${EVAL_CONFIG}" >&2
     ;;

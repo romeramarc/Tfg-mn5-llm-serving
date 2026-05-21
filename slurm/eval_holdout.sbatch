@@ -69,14 +69,17 @@ print("\n".join(roles))
 PY
 )
 
-echo "Waiting for endpoint files: ${ROLES[*]}"
+ENDPOINT_WAIT_S="${ENDPOINT_WAIT_S:-7200}"
+ENDPOINT_POLL_S="${ENDPOINT_POLL_S:-5}"
+max_attempts=$(( ENDPOINT_WAIT_S / ENDPOINT_POLL_S ))
+echo "Waiting for endpoint files: ${ROLES[*]} (up to ${ENDPOINT_WAIT_S}s)"
 for role in "${ROLES[@]}"; do
   file="results/routing/endpoints/${role}.url"
-  for attempt in $(seq 1 240); do
+  for attempt in $(seq 1 "${max_attempts}"); do
     if [[ -s "${file}" ]]; then
       break
     fi
-    sleep 5
+    sleep "${ENDPOINT_POLL_S}"
   done
   if [[ ! -s "${file}" ]]; then
     echo "ERROR: missing ${file}"
