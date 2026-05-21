@@ -32,16 +32,20 @@ PROMPT_POOL="${PROMPT_POOL:-results/routing_eval_holdout/prompt_pool.jsonl}"
 
 cd "${PROJECT_DIR}"
 source env/setup_env.sh
+# setup_env.sh unsets PYTHONPATH on BSC; restore repo root so distill/, predictors/,
+# routing/ and bench/ are importable for python -m and direct scripts.
+export PYTHONPATH="${PROJECT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 mkdir -p logs results/routing_eval_holdout
 
 echo "=========================================="
 echo " Holdout evaluation: ${SYSTEM_ID}"
 echo "=========================================="
 
-python scripts/preflight_eval_holdout.py
+python scripts/preflight_eval_holdout.py --config "${CONFIG}"
 echo "Date:         $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "SLURM_JOB_ID: ${SLURM_JOB_ID}"
 echo "Node:         $(hostname)"
+echo "CONFIG:       ${CONFIG}"
 
 # Shared prompt pool (built once; safe to rebuild if missing).
 if [[ ! -s "${PROMPT_POOL}" ]]; then

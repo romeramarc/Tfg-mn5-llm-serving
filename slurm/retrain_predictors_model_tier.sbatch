@@ -24,11 +24,33 @@ OUTPUT_ROUTING_CONFIG="${OUTPUT_ROUTING_CONFIG:-configs/routing_eval_holdout_v2_
 
 cd "${PROJECT_DIR}"
 source env/setup_env.sh
+# setup_env.sh unsets PYTHONPATH on BSC; repo root must be importable for distill/, predictors/, utils/.
+export PYTHONPATH="${PROJECT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 mkdir -p logs "${DATASET_DIR}" results/predictors_model_tier/phase_a results/predictors_model_tier/phase_b
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+
+echo "=== EARLY SANITY CHECKS (fail fast if env or sources missing) ==="
+python -c "import sys; print('Python', sys.version.split()[0]); print('cwd', __import__('os').getcwd())"
+python -c "from distill.dataset_utils import read_jsonl; from predictors.dataset_common import write_dataset_artifacts; from utils.config_loader import load_yaml; print('imports OK')"
+for src in \
+  results/phase_a/datasets/service_cost_phase_a.jsonl \
+  results/phase_b/datasets/quality_ex_ante_phase_b.jsonl \
+  results/phase_b/datasets/quality_post_hoc_phase_b.jsonl; do
+  if [[ ! -s "${src}" ]]; then
+    echo "ERROR: missing source dataset: ${src}" >&2
+    exit 1
+  fi
+done
+for cfg in "${PHASE_A_CONFIG}" "${PHASE_B_CONFIG}" "${BASE_ROUTING_CONFIG}"; do
+  if [[ ! -f "${cfg}" ]]; then
+    echo "ERROR: missing config: ${cfg}" >&2
+    exit 1
+  fi
+done
+echo "sanity OK"
 
 echo "=== BUILD DATASETS WITH model_tier ==="
 echo "TRACE_PATTERN=${TRACE_PATTERN}"

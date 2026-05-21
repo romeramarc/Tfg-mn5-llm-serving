@@ -19,10 +19,21 @@ PROJECT_DIR="${PROJECT_DIR:-/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving}"
 cd "${PROJECT_DIR}"
 mkdir -p logs results/routing/endpoints results/routing_eval_holdout
 
+# Ensure repo root is importable for the inline Python heredocs below (read_config_*).
+export PYTHONPATH="${PROJECT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+
 MODE="${1:-all}"
 EVAL_CONFIG="${EVAL_CONFIG:-configs/routing_eval_holdout.yaml}"
 PROMPT_POOL="${PROMPT_POOL:-results/routing_eval_holdout/prompt_pool.jsonl}"
 SERVER_WAIT_S="${SERVER_WAIT_S:-7200}"
+
+if [[ ! -f "${EVAL_CONFIG}" ]]; then
+  echo "ERROR: EVAL_CONFIG not found: ${EVAL_CONFIG}" >&2
+  exit 1
+fi
+if [[ ! -s "${PROMPT_POOL}" ]]; then
+  echo "[INFO] Prompt pool missing or empty; will be built from ${EVAL_CONFIG}" >&2
+fi
 
 read_config_roles_and_systems() {
   python - <<'PY'
@@ -109,6 +120,10 @@ submit_clients() {
   local -a dep_flag=()
   if [[ -n "${dep}" ]]; then
     dep_flag=(--dependency=afterbegin:"${dep}")
+  fi
+  if [[ ${#SYSTEMS[@]} -eq 0 ]]; then
+    echo "ERROR: no systems found in ${EVAL_CONFIG}" >&2
+    exit 1
   fi
   for sys in "${SYSTEMS[@]}"; do
     case "${sys}" in

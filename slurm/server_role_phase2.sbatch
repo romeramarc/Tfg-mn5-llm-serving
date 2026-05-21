@@ -41,6 +41,8 @@ esac
 PROJECT_DIR="${PROJECT_DIR:-/gpfs/scratch/bsc98/tbsc381408/Tfg-mn5-llm-serving}"
 cd "${PROJECT_DIR}"
 source env/setup_env.sh
+# setup_env.sh unsets PYTHONPATH on BSC; restore so `python -m serving`, `python -m bench` etc. work.
+export PYTHONPATH="${PROJECT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 
 mkdir -p logs results/routing/endpoints results/phase_a/gpu_samples_by_role
 
