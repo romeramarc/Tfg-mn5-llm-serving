@@ -1,0 +1,29 @@
+# Phase A — service_cost con model_tier (solo Random Forest), variante BASE 1.5B.
+# Mirror de refine_phase_a_model_tier.yaml apuntando a datasets ladder_base
+# (capturas con student_small_base = Qwen2.5-1.5B-Instruct).
+
+output_root: "results/predictors_model_tier_base/phase_a"
+
+primary_metric: "test_mae"
+primary_metric_direction: "min"
+
+predictors:
+  - id: "service_cost"
+    task: "regression"
+    dataset_jsonl: "results/predictors_model_tier_base/datasets/service_cost_model_tier.jsonl"
+    dataset_meta_json: "results/predictors_model_tier_base/datasets/service_cost_model_tier_meta.json"
+    target_column: "target_service_cost"
+    seed: 42
+    train_ratio: 0.70
+    val_ratio: 0.15
+    n_iter: 30
+    n_splits: 3
+    scoring: "neg_mean_absolute_error"
+    families:
+      - random_forest
+    search_space:
+      random_forest:
+        n_estimators: [100, 200, 400, 800]
+        max_depth: [null, 10, 20, 40]
+        min_samples_leaf: [1, 2, 5, 10]
+        max_features: ["sqrt", 0.5, 0.8, 1.0]

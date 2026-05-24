@@ -32,13 +32,17 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 
+PHASE_A_SOURCE="${PHASE_A_SOURCE:-results/phase_a/datasets/service_cost_phase_a.jsonl}"
+PHASE_B_EX_ANTE_SOURCE="${PHASE_B_EX_ANTE_SOURCE:-results/phase_b/datasets/quality_ex_ante_phase_b.jsonl}"
+PHASE_B_POST_HOC_SOURCE="${PHASE_B_POST_HOC_SOURCE:-results/phase_b/datasets/quality_post_hoc_phase_b.jsonl}"
+
 echo "=== EARLY SANITY CHECKS (fail fast if env or sources missing) ==="
 python -c "import sys; print('Python', sys.version.split()[0]); print('cwd', __import__('os').getcwd())"
 python -c "from distill.dataset_utils import read_jsonl; from predictors.dataset_common import write_dataset_artifacts; from utils.config_loader import load_yaml; print('imports OK')"
 for src in \
-  results/phase_a/datasets/service_cost_phase_a.jsonl \
-  results/phase_b/datasets/quality_ex_ante_phase_b.jsonl \
-  results/phase_b/datasets/quality_post_hoc_phase_b.jsonl; do
+  "${PHASE_A_SOURCE}" \
+  "${PHASE_B_EX_ANTE_SOURCE}" \
+  "${PHASE_B_POST_HOC_SOURCE}"; do
   if [[ ! -s "${src}" ]]; then
     echo "ERROR: missing source dataset: ${src}" >&2
     exit 1
@@ -77,8 +81,15 @@ if [[ -f "${TRACE_PATTERN}" ]]; then
     --cost-mode latency_ms \
     --report "${DATASET_DIR}/service_cost_model_tier_build_report.json"
 else
-  echo "Trace not found; using Phase A/B datasets (same source as original RF refine)"
-  python scripts/build_model_tier_datasets_from_phase_ab.py --output-dir "${DATASET_DIR}"
+  echo "Trace not found; using Phase A/B datasets"
+  echo "  PHASE_A_SOURCE=${PHASE_A_SOURCE}"
+  echo "  PHASE_B_EX_ANTE_SOURCE=${PHASE_B_EX_ANTE_SOURCE}"
+  echo "  PHASE_B_POST_HOC_SOURCE=${PHASE_B_POST_HOC_SOURCE}"
+  python scripts/build_model_tier_datasets_from_phase_ab.py \
+    --output-dir "${DATASET_DIR}" \
+    --phase-a-source "${PHASE_A_SOURCE}" \
+    --phase-b-ex-ante-source "${PHASE_B_EX_ANTE_SOURCE}" \
+    --phase-b-post-hoc-source "${PHASE_B_POST_HOC_SOURCE}"
 fi
 
 echo "=== VERIFY model_tier IN ALL DATASET METADATA ==="
@@ -113,29 +124,16 @@ python scripts/write_routing_config_from_refinements.py \
   --project-root .
 
 echo "=== RETRAINED ROUTING CONFIG ==="
-python - <<'PY'
+OUTPUT_ROUTING_CONFIG="${OUTPUT_ROUTING_CONFIG}" python - <<'PY'
+import os
 from utils.config_loader import load_yaml
 
-cfg = load_yaml("configs/routing_eval_holdout_v2_retrained.yaml")
+cfg_path = os.environ["OUTPUT_ROUTING_CONFIG"]
+cfg = load_yaml(cfg_path)
 print(cfg["predictors"]["bundles"])
 print(cfg["predictors"]["thresholds"])
 systems = [s["id"] for s in cfg.get("systems") or []]
-expected = [
-    "sysC_l010",
-    "sysC_l025",
-    "sysC_l050",
-    "sysC_l100",
-    "sysD_cascade4",
-    "sysE_l010",
-    "sysE_l025",
-    "sysE_l050",
-    "sysE_l100",
-]
-missing = [s for s in expected if s not in systems]
-extra = [s for s in systems if s not in expected]
-if missing or extra:
-    raise SystemExit(f"system list mismatch: missing={missing} extra={extra}")
-print(f"OK {len(systems)} eval systems (4xC + D + 4xE)")
+print(f"OK {len(systems)} eval systems: {systems}")
 PY
 
 echo "=== PREDICTOR MODEL_TIER RETRAIN DONE ==="

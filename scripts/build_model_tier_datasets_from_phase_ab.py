@@ -78,15 +78,30 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default="results/predictors_model_tier/datasets")
     parser.add_argument("--models-yaml", default="configs/models.yaml")
+    parser.add_argument(
+        "--phase-a-source",
+        default="results/phase_a/datasets/service_cost_phase_a.jsonl",
+        help="Service-cost dataset JSONL (Phase A).",
+    )
+    parser.add_argument(
+        "--phase-b-ex-ante-source",
+        default="results/phase_b/datasets/quality_ex_ante_phase_b.jsonl",
+        help="Quality ex-ante dataset JSONL (Phase B).",
+    )
+    parser.add_argument(
+        "--phase-b-post-hoc-source",
+        default="results/phase_b/datasets/quality_post_hoc_phase_b.jsonl",
+        help="Quality post-hoc dataset JSONL (Phase B).",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.output_dir)
     name_to_tier = _load_name_to_tier(Path(args.models_yaml))
 
     jobs = [
-        ("service_cost", Path("results/phase_a/datasets/service_cost_phase_a.jsonl"), "target_service_cost"),
-        ("quality_ex_ante", Path("results/phase_b/datasets/quality_ex_ante_phase_b.jsonl"), "target_correct"),
-        ("quality_post_hoc", Path("results/phase_b/datasets/quality_post_hoc_phase_b.jsonl"), "target_correct"),
+        ("service_cost", Path(args.phase_a_source), "target_service_cost"),
+        ("quality_ex_ante", Path(args.phase_b_ex_ante_source), "target_correct"),
+        ("quality_post_hoc", Path(args.phase_b_post_hoc_source), "target_correct"),
     ]
 
     for dataset_name, src, target in jobs:

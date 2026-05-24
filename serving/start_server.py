@@ -64,6 +64,7 @@ def main() -> None:
             "student_mid",
             "student_q3b",
             "student_small",
+            "student_small_base",
             "student_tiny",
             "dev",
         ],

@@ -1,0 +1,58 @@
+# Phase B — quality ex-ante + post-hoc con model_tier (solo RF), variante BASE 1.5B.
+# Mirror de refine_phase_b_model_tier.yaml apuntando a datasets ladder_base.
+
+output_root: "results/predictors_model_tier_base/phase_b"
+
+primary_metric: "test_roc_auc"
+primary_metric_direction: "max"
+
+predictors:
+  - id: "quality_ex_ante"
+    task: "classification"
+    dataset_jsonl: "results/predictors_model_tier_base/datasets/quality_ex_ante_model_tier.jsonl"
+    dataset_meta_json: "results/predictors_model_tier_base/datasets/quality_ex_ante_model_tier_meta.json"
+    target_column: "target_correct"
+    seed: 42
+    train_ratio: 0.70
+    val_ratio: 0.15
+    n_iter: 30
+    n_splits: 3
+    scoring: "roc_auc"
+    families:
+      - random_forest
+    threshold:
+      criterion: "cost"
+      fp_cost: 2.0
+      fn_cost: 1.0
+    search_space:
+      random_forest:
+        n_estimators: [200, 400, 800]
+        max_depth: [null, 10, 20, 40]
+        min_samples_leaf: [1, 2, 5, 10]
+        max_features: ["sqrt", "log2", 0.5]
+        class_weight: ["balanced", "balanced_subsample"]
+
+  - id: "quality_post_hoc"
+    task: "classification"
+    dataset_jsonl: "results/predictors_model_tier_base/datasets/quality_post_hoc_model_tier.jsonl"
+    dataset_meta_json: "results/predictors_model_tier_base/datasets/quality_post_hoc_model_tier_meta.json"
+    target_column: "target_correct"
+    seed: 42
+    train_ratio: 0.70
+    val_ratio: 0.15
+    n_iter: 30
+    n_splits: 3
+    scoring: "roc_auc"
+    families:
+      - random_forest
+    threshold:
+      criterion: "cost"
+      fp_cost: 3.0
+      fn_cost: 1.0
+    search_space:
+      random_forest:
+        n_estimators: [200, 400, 800]
+        max_depth: [null, 10, 20, 40]
+        min_samples_leaf: [1, 2, 5, 10]
+        max_features: ["sqrt", "log2", 0.5]
+        class_weight: ["balanced", "balanced_subsample"]

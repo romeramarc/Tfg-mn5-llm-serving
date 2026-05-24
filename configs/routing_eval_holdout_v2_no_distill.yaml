@@ -1,0 +1,124 @@
+# Holdout v2 — sysE_l100 con student_small = Qwen2.5-1.5B-Instruct (base, sin destilar).
+# Predictores actuales (entrenados sobre student_small=destilado v6).
+# Sirve como (a) eval Opción A directa, y (b) base-config del retrain Opción B
+# (el retrain reescribe bundles + thresholds; el sistema y demás campos se mantienen).
+common:
+  seed: 42
+  results_base_dir: results/routing_eval_holdout_v2_no_distill
+execution_plan:
+  one_job_per_system: true
+  shared_prompt_pool: results/routing_eval_holdout/prompt_pool.jsonl
+  endpoint_dir: results/routing/endpoints
+  endpoint_wait_s: 1200
+systems:
+- id: sysE_l100_no_distill
+  policy: routing_plus_cascade
+  roles:
+  - student_small
+  - student_q3b
+  - student_mid
+  - teacher
+  policy_overrides:
+    routing_plus_cascade:
+      cost_weight_lambda: 0.1
+benchmarks:
+  gsm8k_holdout:
+    enabled: true
+    benchmark_label: gsm8k
+    dataset_name: openai/gsm8k
+    dataset_config: main
+    dataset_split: test
+    min_example_id: 250
+    subset_size: 300
+    prompt_template: 'Solve the following math problem step by step.
+
+      Put your final numeric answer after ####.
+
+
+      Question: {question}
+
+
+      Answer:
+
+      '
+    answer_extraction_pattern: '####\s*([\-\d,\.]+)'
+  hendrycks_math_holdout:
+    enabled: true
+    benchmark_label: math
+    dataset_name: EleutherAI/hendrycks_math
+    dataset_subjects:
+    - algebra
+    - counting_and_probability
+    - geometry
+    - intermediate_algebra
+    - number_theory
+    - prealgebra
+    - precalculus
+    dataset_split: train
+    subset_size: 300
+    prompt_template: 'Solve the following mathematics problem.
+
+      Put your final answer inside \\boxed{{}}.
+
+
+      Problem: {problem}
+
+
+      Solution:
+
+      '
+    answer_extraction_pattern: \\boxed\{([^}]+)\}
+workload:
+  arrival_rates_rps:
+  - 5
+  num_warmup_requests: 15
+  max_inflight: 48
+  shuffle_per_rate: true
+  max_tokens: 512
+  temperature: 0.0
+  request_timeout_s: 180.0
+  logprobs_top_k: 5
+  stream: false
+  samplers:
+    server_metrics:
+      enabled: true
+      interval_s: 0.25
+    gpu_smi:
+      enabled: true
+      interval_s: 0.2
+predictors:
+  cost_policy: strict_ex_ante
+  bundles:
+    quality_ex_ante: results/predictors_model_tier/phase_b/refined-qea-rf-20260521T140929Z/model_bundle.joblib
+    quality_post_hoc: results/predictors_model_tier/phase_b/refined-qph-rf-20260521T141032Z/model_bundle.joblib
+    service_cost: results/predictors_model_tier/phase_a/refined-sc-rf-20260521T140842Z/model_bundle.joblib
+  thresholds:
+    quality_ex_ante: 0.6226785631261728
+    quality_post_hoc: 0.7727837620033459
+  source:
+    phase_a_selection: results/predictors_model_tier/phase_a/REFINEMENT_SELECTION.json
+    phase_b_selection: results/predictors_model_tier/phase_b/REFINEMENT_SELECTION.json
+    requires_model_tier_feature: true
+policy_params:
+  routing_plus_cascade:
+    routing_selection: max_utility
+    min_quality_floor: 0.55
+    routing_candidates:
+    - student_small
+    - student_q3b
+    - student_mid
+    rung_order:
+    - student_small
+    - student_q3b
+    - student_mid
+    - teacher
+    post_hoc_threshold: 0.716
+    per_rung_timeout_ms:
+    - 4000
+    - 6000
+    - 8000
+    - 120000
+    cost_weight_lambda: 0.025
+output:
+  per_request_jsonl: per_request.jsonl
+  summary_json: summary.json
