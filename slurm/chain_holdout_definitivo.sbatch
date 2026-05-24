@@ -19,7 +19,9 @@
 #SBATCH --qos=gp_bsccs
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --time=72:00:00
+# Límite SLURM (no reserva 24h de GPU): job ligero en gpp que solo hace sbatch + wait.
+# Tiempo real típico: unas horas. Los GPUs van en jobs aparte (acc, 24h cada uno).
+#SBATCH --time=12:00:00
 
 set -euo pipefail
 
