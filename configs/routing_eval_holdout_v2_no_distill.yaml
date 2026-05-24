@@ -1,8 +1,5 @@
-# Holdout v2 — sysE_l1e4_no_distill: mismo λ que sysE_l1e4 (barrido realista), pero
-# student_small = Qwen2.5-1.5B-Instruct (base, sin destilar).
-# Predictores actuales (entrenados con trazas del 1.5B destilado v6) — comparación rápida.
-# Para comparación justa (predictores reentrenados en base): Opción B → chain_option_b_base.
-# (el retrain reescribe bundles + thresholds; el sistema y demás campos se mantienen).
+# DEPRECATED: usar configs/routing_eval_holdout_v2_phase2.yaml + slurm/submit_holdout_phase2.sh
+# (incluye sysB_only_1p5b + sysE_l1e4_no_distill en results/routing_eval_holdout_v2_phase2/)
 common:
   seed: 42
   results_base_dir: results/routing_eval_holdout_v2_no_distill

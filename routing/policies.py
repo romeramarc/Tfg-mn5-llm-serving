@@ -540,6 +540,36 @@ async def cascade_three_tier(
     )
 
 
+# ── Policy: Always student_small (1.5B rung) ───────────────
+
+async def always_student_small(
+    client: httpx.AsyncClient,
+    prompt: str,
+    ctx: Dict[str, Any],
+) -> RoutingDecision:
+    """Route every request to student_small (1.5B distilled or base per deployment)."""
+    request_id = ctx.get("request_id", "")
+    ep = ctx["endpoints"]["student_small"]
+    data = await _query_endpoint_with_status(
+        client, ep["base_url"], ep["model"], prompt,
+        int(ctx.get("max_tokens", 512)), ctx.get("temperature", 0.0),
+        logprobs=None,
+        timeout=ctx.get("request_timeout_s", 120.0),
+    )
+    text, _, _, _ = _extract_choice_fields(data)
+    reason = "always_student_small" if not data.get("_error") else "student_small_error"
+    return RoutingDecision(
+        request_id=request_id,
+        selected_model=ep["model"],
+        latency_ms=data.get("_latency_ms", 0.0),
+        response_text=text,
+        confidence=None,
+        reason=reason,
+        metadata={"error": data.get("_error")},
+        attempts=[_build_attempt("student_small", ep, data, reason)],
+    )
+
+
 # ── Policy: Always student_tiny ───────────────────────────
 
 async def always_student_tiny(
@@ -870,6 +900,7 @@ async def routing_plus_cascade(
 
 POLICIES = {
     "always_teacher": always_teacher,
+    "always_student_small": always_student_small,
     "always_student_tiny": always_student_tiny,
     "cascading": cascading,
     "confidence": confidence_routing,

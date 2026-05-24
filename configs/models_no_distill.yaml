@@ -1,0 +1,45 @@
+# Same roster as models.yaml but student_small = Qwen2.5-1.5B-Instruct (pre-KD).
+# Used only in the phase-2 holdout wave (no_distill); do not run in parallel with
+# the distilled student_small server (same endpoint file: student_small.url).
+
+teacher:
+  name: "Qwen/Qwen2.5-14B-Instruct"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+student_mid:
+  name: "Qwen/Qwen2.5-7B-Instruct"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+student_q3b:
+  name: "Qwen/Qwen2.5-3B-Instruct"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+student_small:
+  name: "Qwen/Qwen2.5-1.5B-Instruct"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+student_small_base:
+  name: "Qwen/Qwen2.5-1.5B-Instruct"
+  revision: "main"
+  dtype: "auto"
+  trust_remote_code: false
+  tensor_parallel_size: 1
+
+student_tiny:
+  name: "Qwen/Qwen2.5-0.5B-Instruct"
+  revision: "main"
+  dtype: "float16"
+  trust_remote_code: false
+  tensor_parallel_size: 1

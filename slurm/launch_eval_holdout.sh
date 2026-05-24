@@ -123,7 +123,8 @@ submit_clients() {
   fi
   for sys in "${SYSTEMS[@]}"; do
     case "${sys}" in
-      sysB_only_tiny)        tlimit="04:00:00" ;;
+      sysB_only_tiny|sysB_only_1p5b) tlimit="04:00:00" ;;
+      sysE_*no_distill*)    tlimit="24:00:00" ;;
       sysA_only_teacher)     tlimit="08:00:00" ;;
       sysC_routing_distilled) tlimit="12:00:00" ;;
       # v2 — eval ~15 min; walltime includes wait for vLLM endpoints (no sbatch deps).
