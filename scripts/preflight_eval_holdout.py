@@ -76,7 +76,12 @@ def main() -> int:
                             f"{sid}: lambda override {lam} does not match id suffix (expected {expected})"
                         )
 
-    if "routing_eval_holdout_v2" in str(cfg_path):
+    # Legacy λ={0.01..0.1} grid only — not routing_real / no_distill / definitive runs.
+    _LEGACY_V2_NAMES = {
+        "routing_eval_holdout_v2.yaml",
+        "routing_eval_holdout_v2_retrained.yaml",
+    }
+    if cfg_path.name in _LEGACY_V2_NAMES:
         missing = [s for s in V2_EXPECTED_SYSTEMS if s not in system_ids]
         if missing:
             errors.append(f"v2 config missing systems: {missing}")

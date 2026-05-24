@@ -1,6 +1,7 @@
-# Holdout v2 — sysE_l100 con student_small = Qwen2.5-1.5B-Instruct (base, sin destilar).
-# Predictores actuales (entrenados sobre student_small=destilado v6).
-# Sirve como (a) eval Opción A directa, y (b) base-config del retrain Opción B
+# Holdout v2 — sysE_l1e4_no_distill: mismo λ que sysE_l1e4 (barrido realista), pero
+# student_small = Qwen2.5-1.5B-Instruct (base, sin destilar).
+# Predictores actuales (entrenados con trazas del 1.5B destilado v6) — comparación rápida.
+# Para comparación justa (predictores reentrenados en base): Opción B → chain_option_b_base.
 # (el retrain reescribe bundles + thresholds; el sistema y demás campos se mantienen).
 common:
   seed: 42
@@ -11,7 +12,7 @@ execution_plan:
   endpoint_dir: results/routing/endpoints
   endpoint_wait_s: 1200
 systems:
-- id: sysE_l100_no_distill
+- id: sysE_l1e4_no_distill
   policy: routing_plus_cascade
   roles:
   - student_small
@@ -20,7 +21,7 @@ systems:
   - teacher
   policy_overrides:
     routing_plus_cascade:
-      cost_weight_lambda: 0.1
+      cost_weight_lambda: 0.0001
 benchmarks:
   gsm8k_holdout:
     enabled: true
@@ -112,13 +113,13 @@ policy_params:
     - student_q3b
     - student_mid
     - teacher
-    post_hoc_threshold: 0.716
+    post_hoc_threshold: 0.7727837620033459
     per_rung_timeout_ms:
     - 4000
     - 6000
     - 8000
     - 120000
-    cost_weight_lambda: 0.025
+    cost_weight_lambda: 0.0001
 output:
   per_request_jsonl: per_request.jsonl
   summary_json: summary.json

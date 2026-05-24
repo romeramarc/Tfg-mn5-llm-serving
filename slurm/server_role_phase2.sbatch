@@ -168,7 +168,10 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Launching role server process..."
+MODELS_CONFIG="${MODELS_CONFIG:-configs/models.yaml}"
+echo "MODELS_CONFIG: ${MODELS_CONFIG}"
+
 python -m serving.start_server \
   --config "${RUNTIME_SERVING_CFG}" \
-  --models configs/models.yaml \
+  --models "${MODELS_CONFIG}" \
   --role "${ROLE}"

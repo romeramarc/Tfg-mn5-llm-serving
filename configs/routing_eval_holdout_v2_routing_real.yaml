@@ -1,0 +1,217 @@
+# ─────────────────────────────────────────────────────────────
+# routing_eval_holdout_v2_routing_real.yaml
+# ─────────────────────────────────────────────────────────────
+# Re-lanzamiento del holdout v2 SOLO con sweep de λ realista.
+#
+# Motivación:
+#   En el barrido anterior {0.010, 0.025, 0.050, 0.100} todos los puntos
+#   estaban en la zona saturada del routing: U = Q̂ − λ·Ĉ siempre ganaba
+#   el 1.5B (entry_rung=student_small en 600/600 peticiones, en cualquier
+#   λ probado). Esto es porque Q̂∈[0,1] mientras Ĉ está en cientos de ms,
+#   así que λ ≥ 0.001 ya hace dominar siempre el coste.
+#
+# La λ crítica para que el 3B gane al 1.5B es ~5e-5 a 5e-4 según prompt.
+# Por eso este barrido cubre ese rango y añade dos controles:
+#   - λ = 0     → calidad pura (control "routing por calidad")
+#   - floor=0.55 → política alternativa min_rung_meeting_floor
+#
+# Distribución esperada de entry_rung (simulación offline desde
+# routing_scores ya guardados de holdout v2; ver analysis/_lambda_sweep_sim.py):
+#
+#     λ=0       :  1.5B= 87,  3B=238,  7B=275
+#     λ=5e-5    :  1.5B=230,  3B=343,  7B= 27
+#     λ=1e-4    :  1.5B=292,  3B=307,  7B=  1
+#     λ=5e-4    :  1.5B=574,  3B= 26,  7B=  0
+#     floor=0.55:  1.5B=280,  3B= 64,  7B= 17  (resto cae a 1.5B + cascada)
+#
+# Nota: NO se relanzan sysA/sysB (ya tenemos baselines del 20260520) ni sysD
+# (cascada pura es ortogonal a este sweep). Solo 5 sysE + 4 sysC opcionales.
+#
+# Si tienes presupuesto justo: lanzar SOLO los sysE (5 jobs) y dejar sysC para
+# después. Es donde está la decisión interesante (routing + cascada).
+#
+# BSC:
+#   git pull
+#   python scripts/preflight_eval_holdout.py --config configs/routing_eval_holdout_v2_routing_real.yaml
+#   EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml \
+#   PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl \
+#   bash slurm/launch_eval_holdout.sh all
+# ─────────────────────────────────────────────────────────────
+
+common:
+  seed: 42
+  results_base_dir: "results/routing_eval_holdout_v2_routing_real"
+
+execution_plan:
+  one_job_per_system: true
+  shared_prompt_pool: "results/routing_eval_holdout/prompt_pool.jsonl"
+  endpoint_dir: "results/routing/endpoints"
+  endpoint_wait_s: 1200
+
+systems:
+  # ── sysE: routing + cascada — sweep λ realista (los 4 puntos cubren regímenes distintos)
+  - id: "sysE_l0"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.0
+        # Sin coste: el router elige el rung con mayor Q̂. Se espera mayoría 7B/3B.
+
+  - id: "sysE_l5e5"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.00005
+
+  - id: "sysE_l1e4"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.0001
+
+  - id: "sysE_l5e4"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.0005
+
+  - id: "sysE_floor55"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        routing_selection: "min_rung_meeting_floor"
+        min_quality_floor: 0.55
+        # cost_weight_lambda no se usa en este modo, pero lo dejamos por si
+        # algún log lo lee
+        cost_weight_lambda: 0.0
+
+  # ── sysC: routing puro con la misma rejilla (opcional; lanza si hay tiempo)
+  - id: "sysC_l0"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.0
+
+  - id: "sysC_l5e5"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.00005
+
+  - id: "sysC_l1e4"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.0001
+
+  - id: "sysC_l5e4"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        cost_weight_lambda: 0.0005
+
+benchmarks:
+  gsm8k_holdout:
+    enabled: true
+    benchmark_label: "gsm8k"
+    dataset_name: "openai/gsm8k"
+    dataset_config: "main"
+    dataset_split: "test"
+    min_example_id: 250
+    subset_size: 300
+    prompt_template: |
+      Solve the following math problem step by step.
+      Put your final numeric answer after ####.
+
+      Question: {question}
+
+      Answer:
+    answer_extraction_pattern: "####\\s*([\\-\\d,\\.]+)"
+
+  hendrycks_math_holdout:
+    enabled: true
+    benchmark_label: "math"
+    dataset_name: "EleutherAI/hendrycks_math"
+    dataset_subjects:
+      - algebra
+      - counting_and_probability
+      - geometry
+      - intermediate_algebra
+      - number_theory
+      - prealgebra
+      - precalculus
+    dataset_split: "train"
+    subset_size: 300
+    prompt_template: |
+      Solve the following mathematics problem.
+      Put your final answer inside \\boxed{{}}.
+
+      Problem: {problem}
+
+      Solution:
+    answer_extraction_pattern: "\\\\boxed\\{([^}]+)\\}"
+
+workload:
+  arrival_rates_rps: [5]
+  num_warmup_requests: 15
+  max_inflight: 48
+  shuffle_per_rate: true
+  max_tokens: 512
+  temperature: 0.0
+  request_timeout_s: 180.0
+  logprobs_top_k: 5
+  stream: false
+  samplers:
+    server_metrics:
+      enabled: true
+      interval_s: 0.25
+    gpu_smi:
+      enabled: true
+      interval_s: 0.2
+
+predictors:
+  cost_policy: "strict_ex_ante"
+  bundles:
+    # Predictores reentrenados con model_tier (los del holdout v2 del 20260524).
+    quality_ex_ante: "results/predictors_model_tier/phase_b/refined-qea-rf-20260521T140929Z/model_bundle.joblib"
+    quality_post_hoc: "results/predictors_model_tier/phase_b/refined-qph-rf-20260521T141032Z/model_bundle.joblib"
+    service_cost: "results/predictors_model_tier/phase_a/refined-sc-rf-20260521T140842Z/model_bundle.joblib"
+  thresholds:
+    quality_ex_ante: 0.6226785631261728
+    quality_post_hoc: 0.7727837620033459
+  source:
+    phase_a_selection: "results/predictors_model_tier/phase_a/REFINEMENT_SELECTION.json"
+    phase_b_selection: "results/predictors_model_tier/phase_b/REFINEMENT_SELECTION.json"
+    requires_model_tier_feature: true
+
+policy_params:
+  routing_predictive:
+    routing_selection: max_utility
+    min_quality_floor: 0.55
+    candidate_rungs: ["student_small", "student_q3b", "student_mid", "teacher"]
+    cost_weight_lambda: 0.0001
+  cascade_five_rung:
+    rung_order: ["student_small", "student_q3b", "student_mid", "teacher"]
+    post_hoc_threshold: 0.7727837620033459
+    per_rung_timeout_ms: [4000, 6000, 8000, 120000]
+  routing_plus_cascade:
+    routing_selection: max_utility
+    min_quality_floor: 0.55
+    routing_candidates: ["student_small", "student_q3b", "student_mid"]
+    rung_order: ["student_small", "student_q3b", "student_mid", "teacher"]
+    post_hoc_threshold: 0.7727837620033459
+    per_rung_timeout_ms: [4000, 6000, 8000, 120000]
+    cost_weight_lambda: 0.0001
+
+output:
+  per_request_jsonl: "per_request.jsonl"
+  summary_json: "summary.json"

@@ -152,7 +152,7 @@ p = pathlib.Path("${EVAL_CFG_OUT}")
 cfg = yaml.safe_load(p.read_text())
 cfg["common"]["results_base_dir"] = "results/routing_eval_holdout_v2_retrained_base"
 for s in cfg.get("systems") or []:
-    if s.get("id") == "sysE_l100_no_distill":
+    if s.get("id") in ("sysE_l1e4_no_distill", "sysE_l100_no_distill"):
         s["id"] = "${EVAL_SYSTEM}"
 p.write_text(yaml.safe_dump(cfg, sort_keys=False))
 print("Patched", p, "system=", [x["id"] for x in cfg["systems"]])

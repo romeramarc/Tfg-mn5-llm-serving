@@ -129,7 +129,7 @@ submit_clients() {
       # v2 — eval ~15 min; walltime includes wait for vLLM endpoints (no sbatch deps).
       sysC_l*)               tlimit="24:00:00" ;;
       sysD_cascade4)         tlimit="24:00:00" ;;
-      sysE_l*)               tlimit="24:00:00" ;;
+      sysE_l*|sysE_floor*)   tlimit="24:00:00" ;;
       *)                     tlimit="14:00:00" ;;
     esac
     jid=$(sbatch --parsable \

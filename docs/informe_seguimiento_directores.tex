@@ -1,0 +1,147 @@
+\documentclass[9pt,a4paper]{article}
+
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[
+    a4paper,
+    top=1.6cm,
+    bottom=1.9cm,
+    left=1.55cm,
+    right=1.55cm,
+    footskip=0.7cm
+]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{titlesec}
+
+\titleformat{\section}
+  {\normalfont\large\bfseries}
+  {\thesection}
+  {0.5em}
+  {}
+
+\titlespacing*{\section}{0pt}{0.9em}{0.45em}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue
+}
+
+\setlength{\parskip}{4.8pt}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{2em}
+\setlist[itemize]{leftmargin=*,nosep}
+\setlist[enumerate]{leftmargin=*,nosep}
+\titlespacing*{\section}{0pt}{0.55em}{0.35em}
+
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\sectionline}{\vspace{0.15cm}\hrule\vspace{0.15cm}}
+
+\title{\vspace{-1.4cm}\textbf{Informe de seguimiento del TFG}\\[-0.05cm]
+\large Inferencia eficiente de modelos de lenguaje en supercomputación mediante destilación, cascadas de modelos y decisión predictiva}
+\author{Marc Romera Peral \hspace{0.4em}--\hspace{0.4em} Directores: Pol y Josep Ll.}
+\date{Mayo de 2026}
+
+\begin{document}
+\maketitle
+\vspace{-0.65cm}
+
+\section*{1. Objetivo técnico y contribución}
+
+Este TFG estudia la inferencia eficiente de modelos de lenguaje en un entorno de supercomputación, usando MareNostrum 5 como plataforma de ejecución y vLLM como motor de serving. El problema central es decidir qué modelo debe atender cada petición para mantener una buena calidad de respuesta sin saturar innecesariamente los recursos disponibles. Servir todas las peticiones con el teacher maximiza la calidad, pero introduce mayor latencia y mayor presión sobre el sistema. En cambio, usar siempre un modelo pequeño mejora el tiempo de servicio, pero puede degradar la respuesta en problemas complejos. El trabajo se sitúa precisamente entre estos dos extremos.
+
+El punto de partida es la línea de \textit{routing} y \textit{cascading} entre modelos. En estos enfoques, la decisión suele depender de una estimación de calidad y de un coste asociado al modelo seleccionado. En este TFG se adapta esa formulación a un escenario de serving, donde el coste no se interpreta como una propiedad fija del modelo, sino como una magnitud dependiente de la ejecución. En concreto, el coste se aproxima mediante la latencia esperada, condicionada por el modelo elegido y por la carga del sistema en el momento de recibir la petición.
+
+La contribución técnica consiste entonces en evaluar esta decisión como un problema de calidad--servicio. Esto implica que la política no solo debe estimar si un modelo será capaz de responder correctamente, sino también si conviene usarlo bajo las condiciones actuales del sistema. Así, la decisión deja de ser una comparación estática entre modelos y pasa a ser una decisión dependiente del contexto de ejecución.
+
+Sobre esta base, el trabajo incorpora la destilación como mecanismo para mejorar la utilidad de los modelos pequeños dentro de la escalera. El objetivo de destilar el modelo 1.5B no se basa únicamente en mejorar su calidad de forma aislada, sino en comprobar si esa mejora permite reducir escalados hacia modelos mayores sin empeorar el perfil de servicio. Si el student destilado resuelve más peticiones manteniendo, en términos generales, una latencia similar a la del modelo pequeño original, su efecto se refleja en el sistema completo y no solo en la evaluación individual del modelo.
+
+La hipótesis final es que una arquitectura formada por routing predictivo, cascada de modelos y un rung destilado puede ofrecer un compromiso más favorable que otras opciones más simples o que las alternativas extremas. La evaluación comprobará si esta combinación reduce latencia, número de escalados y uso del teacher, manteniendo una calidad cercana a la obtenida con modelos mayores.
+
+\section*{2. Arquitectura implementada}
+
+La infraestructura está organizada como una pipeline configurable por YAML. La capa de serving levanta servidores vLLM independientes para los roles de la escalera: \code{teacher} 14B, \code{student_mid} 7B, \code{student_q3b} 3B, \code{student_small} 1.5B destilado y, en la configuración actual de cinco rungs, \code{student_tiny} 0.5B. Cada servidor se ejecuta como job SLURM y expone una API compatible con OpenAI. Los launchers publican la URL de cada rol en \code{results/routing/endpoints/<role>.url}. Antes de lanzar clientes, se ejecutan healthchecks contra el endpoint para comprobar que el servidor responde correctamente y evitar medir peticiones contra modelos que todavía no están preparados.
+
+La escalera de cinco modelos está implementada y se está evaluando experimentalmente. En las últimas ejecuciones se ha observado que una parte relevante del tráfico puede ser absorbida por el 0.5B. Esto es positivo desde el punto de vista de servicio, pero dificulta comparar con claridad el papel del 1.5B base y del 1.5B destilado dentro del sistema, porque el rung inferior puede reducir demasiado el número de peticiones que llegan al nivel donde se quiere medir el efecto de la destilación. Por este motivo, se está valorando una variante de cuatro rungs donde el 1.5B destilado sea el suelo de calidad del sistema. Esta opción es coherente con el objetivo del TFG, ya que sitúa el modelo entrenado como primer nivel de decisión y permite medir mejor cuánto aporta la destilación al comportamiento global de la cascada.
+
+Sobre esta capa se apoyan tres bloques experimentales con funciones distintas. El bloque de evaluación de calidad mide el rendimiento en GSM8K y MATH. El bloque de evaluación de servicio mide el comportamiento de los modelos bajo carga mediante throughput, latencia y ejecución online. Finalmente, el bloque de generación de trazas construye los datos necesarios para entrenar los predictores offline: calidad ex-ante, aceptación post-hoc de la respuesta y coste de servicio. Estas trazas combinan información del prompt, de la respuesta generada y del estado operativo del sistema en el momento de enviar cada petición.
+
+La destilación también está implementada. El pipeline genera respuestas del teacher, entrena el student con SFT/LoRA o full fine-tuning y después reevalúa el modelo resultante. La decisión actual de la escalera final es conservar el 7B base como rung intermedio y usar el 1.5B destilado como rung pequeño mejorado, porque los resultados consolidados hasta ahora indican que el 1.5B destilado aporta valor como modelo barato, mientras que el 7B destilado no compensa claramente frente al 7B base.
+
+\section*{3. Evaluación de calidad y reglas de parsing}
+
+La evaluación separa explícitamente ejemplos \textit{scorable} y no \textit{scorable}. Esto es importante porque en tareas matemáticas un modelo puede producir una explicación larga, pero si la respuesta final no aparece en el formato esperado, no se puede comparar de forma determinista con la solución del benchmark. Por tanto, no se mezcla un fallo de formato con un fallo de razonamiento.
+
+En GSM8K, el parser busca la respuesta final después del marcador \code{####}. De esa parte extrae el valor numérico, lo normaliza y lo compara con la respuesta de referencia. Si la salida no contiene el marcador o no permite recuperar una respuesta numérica final, el ejemplo queda marcado como no \textit{scorable}. En MATH, el parser busca estrictamente una respuesta final dentro de \verb|\boxed{...}|. El contenido extraído de \verb|\boxed{...}| se normaliza y se compara con la referencia. Si no aparece ningún \verb|\boxed{...}| válido, o si el contenido extraído no se puede comparar de forma determinista con la solución esperada, el ejemplo se marca como no \textit{scorable}.
+
+Las métricas de calidad que se guardan son el número total de ejemplos, ejemplos \textit{scorable}, ejemplos no \textit{scorable}, respuestas correctas y accuracy sobre ejemplos \textit{scorable}.
+
+\section*{4. Predictores offline}
+
+El sistema de decisión usa tres predictores entrenados offline. No se entrenan durante la evaluación final: se entrenan previamente con trazas capturadas, se guardan como bundles \code{.joblib} y el runner de routing solo los carga para hacer inferencia. Esta separación es importante porque evita que la política aprenda del holdout final y permite evaluar las decisiones online con predictores ya fijados.
+
+El predictor de calidad ex-ante estima si un modelo concreto será capaz de resolver una petición antes de generar la respuesta. Se entrena a partir de las trazas de calidad capturadas en Fase B con \code{bench/run_quality_capture.py}. Cada fila representa una combinación entre benchmark, ejemplo y modelo. La etiqueta supervisada es \code{correct}, es decir, si ese modelo respondió correctamente al ejemplo según el parser del benchmark. Las variables usadas son solo datos disponibles antes de llamar al modelo: \code{benchmark}, \code{model_name} o \code{model_tier}, longitud aproximada del prompt mediante \code{input_tokens}, texto del prompt cuando el vectorizador lo permite, y metadatos de generación como \code{max_tokens} y \code{temperature}. Este predictor no usa la respuesta generada, ni la latencia del intento, ni si el ejemplo acabó siendo \textit{scorable}, porque esa información todavía no existe en el momento de decidir el modelo inicial.
+
+El predictor post-hoc estima si una respuesta ya generada debe aceptarse o si conviene escalar al siguiente rung. También se entrena con trazas de calidad de Fase B, pero aquí la fila ya incluye información posterior a la generación. La etiqueta sigue siendo \code{correct}. A diferencia del predictor ex-ante, este modelo puede usar variables de la salida: \code{response_text}, \code{output_tokens}, \code{latency_ms}, si la respuesta es \code{scorable}, la respuesta extraída como \code{predicted_answer}, el motivo de ambigüedad cuando existe \code{ambiguity_reason}, y señales de incertidumbre cuando se han capturado, como logprobs medias, dispersión de logprobs o entropía aproximada. En la cascada, este predictor actúa como criterio de aceptación: si la probabilidad estimada no supera el umbral configurado, la petición se reenvía al siguiente modelo de la escalera.
+
+El predictor de coste de servicio estima la latencia esperada de servir una petición con un modelo concreto bajo el estado de carga observado. Se entrena con las capturas de servicio de Fase A generadas por \code{bench/run_load_capture.py}. En este caso la tarea no es clasificación, sino regresión. La variable objetivo es \code{latency_ms}. Las variables de entrada incluyen \code{model_name} o \code{model_tier}, \code{input_tokens}, \code{inflight_at_send}, \code{recent_p50_latency_ms} y, cuando están disponibles, métricas de vLLM agrupadas en el estado del sistema: peticiones en ejecución, peticiones en espera, throughput de prompt, throughput de generación y uso de KV cache. Este dataset se construye en modo \code{strict_ex_ante}, por lo que no incluye campos que solo se conocerían después de generar la respuesta, como \code{response_text}, \code{output_tokens} o \code{correct}. Así el coste estimado por el router se basa en información disponible antes de enviar la petición.
+
+Para construir estos datasets se usan builders específicos del repositorio. \code{predictors/builders/build_ex_ante_dataset.py} genera el dataset del predictor de calidad previo a la generación. \code{predictors/builders/build_post_hoc_dataset.py} genera el dataset del predictor de aceptación tras ver la respuesta. \code{predictors/builders/build_cost_dataset.py} genera el dataset de coste de servicio. Después, los scripts \code{predictors/training/train_ex_ante.py}, \code{predictors/training/train_post_hoc.py} y \code{predictors/training/train_cost.py} entrenan los modelos correspondientes y guardan un bundle con el estimador, el vectorizador, las columnas esperadas y, en los clasificadores, el umbral de decisión.
+
+Como familias de modelos se han probado estimadores tabulares de scikit-learn: modelos lineales como baseline simple, Random Forest, Gradient Boosting o HistGradientBoosting, y MLP como alternativa neuronal ligera. La comparación se ha hecho teniendo en cuenta tanto la calidad predictiva como el tiempo de inferencia, porque los predictores forman parte del camino de decisión online del sistema. Si el predictor introduce demasiada sobrecarga, puede perjudicar precisamente el servicio que se intenta optimizar.
+
+Los modelos que dieron mejores resultados fueron Random Forest y Gradient Boosting. Ambos capturan relaciones no lineales y funcionaron mejor que las alternativas lineales y que el MLP en este contexto tabular. La diferencia en métricas predictivas entre Random Forest y Gradient Boosting fue pequeña: Random Forest salía ligeramente por delante en la comparación, pero la ganancia era marginal. 
+
+Entre los dos candidatos finales se eligió Random Forest porque ofrecía una calidad predictiva prácticamente equivalente o ligeramente superior a Gradient Boosting, pero con menor tiempo de predicción. Esta diferencia es importante para el TFG, ya que el objetivo del sistema es mejorar el servicio por lo que el tiempo de inducción es algo crítico. En una política de routing y cascada, cada decisión añade tiempo al flujo de inferencia; por eso, un predictor más rápido y con calidad similar resulta más adecuado.
+
+La elección de Random Forest también es coherente con el tipo de datos disponible. Los datasets combinan variables categóricas, longitudes, señales de carga, métricas de respuesta y métricas de servicio. Random Forest permite capturar interacciones no lineales sin requerir grandes volúmenes de datos ni una fase de ajuste tan delicada como una red neuronal. Una ANN o MLP podría ser razonable con muchas más trazas y una fase específica de optimización, pero en este contexto no aportó una ventaja clara frente a un modelo tabular más estable y barato de ejecutar.
+
+\section*{5. Experimento final de routing y cascada}
+
+La parte de routing no está solo definida a nivel teórico. La evaluación final ya está lanzada en el cluster y se está ejecutando. Ya ha terminado un lanzamiento de todas las políticas, pero una ejecución falló por un error de configuración y se está repitiendo para que la comparación quede limpia.
+
+El experimento final compara cinco sistemas sobre el mismo holdout. \code{sysA_only_teacher} envía todas las peticiones al teacher y sirve como techo de calidad. \code{sysB_only_tiny} envía todas las peticiones al modelo 0.5B y sirve como extremo barato. \code{sysC_routing_distilled} aplica routing predictivo y escoge el modelo antes de generar. \code{sysD_cascade_distilled} empieza por el modelo pequeño y escala si la respuesta no pasa el criterio del predictor post-hoc. \code{sysE_routing_cascade_distilled} combina ambas ideas: primero decide el punto de entrada mediante routing y después continúa con cascada si la respuesta no es suficientemente fiable.
+
+El routing predictivo usa la siguiente utilidad:
+
+\[
+U(rung) = \hat{Q}_{ex\text{-}ante}(rung) - \lambda \cdot \hat{C}_{servicio}(rung, z)
+\]
+
+Aquí, \(\hat{Q}_{ex\text{-}ante}\) es la probabilidad estimada de acierto antes de generar, \(\hat{C}_{servicio}\) es el coste esperado del modelo bajo el estado operativo \(z\), y \(z\) incluye la concurrencia, la latencia reciente y las métricas de servidor disponibles. El valor actual es \(\lambda = 0.025\), compartido por \code{sysC} y \code{sysE} para que la comparación sea coherente. Si \(\lambda\) aumenta, la política da más peso al coste y tiende a elegir modelos pequeños. Si \(\lambda\) disminuye, pesa más la calidad prevista y aparecen antes modelos grandes.
+
+\section*{6. Holdout, carga y métricas finales}
+
+El holdout final se construye para que los cinco sistemas se evalúen sobre las mismas peticiones. Incluye ejemplos de GSM8K test y de Hendrycks MATH, con muestreo por longitud para no evaluar solo prompts cortos o fáciles. La carga se envía con la misma configuración para todos los sistemas: \code{arrival_rates_rps = [5]}, \code{max_inflight = 48}, \code{max_tokens = 512} y \code{temperature = 0.0}. Las llegadas siguen un proceso Poisson, de modo que el runner no envía una lista secuencial fija, sino peticiones con intervalos aleatorios y concurrencia controlada.
+
+Por petición se guardan los campos \code{request_id}, \code{benchmark}, \code{example_id}, \code{length_bucket}, \code{prompt_char_len}, \code{policy}, \code{system_id}, \code{selected_model}, \code{reason}, \code{latency_ms}, \code{client_wall_ms}, \code{inflight_at_send}, \code{recent_p50_latency_ms}, \code{z_metrics_at_send}, \code{correct}, \code{scorable}, \code{predicted_answer}, \code{ambiguity_reason}, \code{num_attempts}, \code{attempts}, \code{route_path}, \code{entry_rung}, \code{selected_rung}, \code{first_attempt_stage}, \code{routing_scores}, \code{routing_selection}, \code{post_hoc_probability}, \code{total_output_tokens} y \code{response_char_len}.
+
+A nivel agregado se compararán accuracy total, accuracy sobre \textit{scorable}, accuracy por benchmark, tasa de no \textit{scorable}, latencia p50/p95/p99, \code{client_wall_ms} p50/p95/p99, uso del teacher, distribución de modelos seleccionados, distribución de rungs, número medio de intentos, tokens de salida y diferencias entre GSM8K y MATH. Esto permite evaluar no solo qué sistema acierta más, sino qué coste de servicio paga para conseguirlo.
+
+\section*{7. Estado actual y próximos pasos}
+
+\begin{center}
+\small
+\begin{tabular}{p{0.22\linewidth}p{0.70\linewidth}}
+\toprule
+\textbf{Bloque} & \textbf{Estado actual} \\
+\midrule
+Serving & Servidores vLLM definidos por rol, launchers SLURM, publicación de endpoints y healthchecks implementados. \\
+Calidad & Evaluación GSM8K y MATH con parsing determinista, separación \textit{scorable}/no \textit{scorable} y resúmenes JSON/CSV. \\
+Servicio & Benchmarks de throughput y carga online, más captura de latencia, concurrencia y métricas de vLLM cuando están disponibles. \\
+Destilación & Teacher generation, entrenamiento SFT/LoRA o full fine-tuning y post-evaluación del 1.5B destilado. \\
+Predictores & Predictores offline de calidad ex-ante, aceptación post-hoc y coste de servicio integrados en el runner. \\
+Routing final & Evaluación de los cinco sistemas lanzada en el cluster. Una ejecución con error de configuración se está repitiendo. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+El trabajo inmediato es consolidar los resultados finales de todos los sistemas, revisar que los logs y los campos por petición estén completos, generar las tablas comparativas y trasladar los resultados a la memoria. El punto central de la defensa será comparar de forma conjunta calidad y coste de servicio, no presentar únicamente accuracy aislada. La validación final debe mostrar qué política ofrece el mejor compromiso entre acierto, latencia, uso del teacher y número de escalados.
+
+\end{document}
