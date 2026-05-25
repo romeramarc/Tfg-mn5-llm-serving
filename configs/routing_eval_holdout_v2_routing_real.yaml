@@ -30,21 +30,40 @@
 # Si tienes presupuesto justo: lanzar SOLO los sysE (5 jobs) y dejar sysC para
 # después. Es donde está la decisión interesante (routing + cascada).
 #
-# BSC (flujo definitivo para sysF):
-#   git pull
-#   python scripts/calibrate_per_rung_thresholds.py \
-#     --dataset results/predictors_model_tier/datasets/quality_post_hoc_model_tier.jsonl \
-#     --bundle  results/predictors_model_tier/phase_b/refined-qph-rf-20260521T141032Z/model_bundle.joblib \
-#     --criterion cost --fp-cost 1.0 --fn-cost 3.0 \
-#     --out results/predictors_model_tier/phase_b/per_rung_thresholds.yaml \
-#     --report-out results/predictors_model_tier/phase_b/per_rung_thresholds_report.json
-#   cat results/predictors_model_tier/phase_b/per_rung_thresholds.yaml
-#   # Copiar los valores al bloque post_hoc_threshold_per_rung de sysF_smart_cascade
-#   # (a continuación) y commit + push si lo haces en BSC.
+# BSC (réplica no-destilada de sysF; el sysF distilled ya está en 20260525T112354Z):
+#   Pre-requisito: los servers 3B / 7B / teacher (student_q3b, student_mid, teacher)
+#   siguen vivos.  Solo se reemplaza el server student_small por la versión base.
 #
-#   sbatch --job-name="eval-sysF_smart_cascade" --time=24:00:00 \
-#     --export=ALL,SYSTEM_ID=sysF_smart_cascade,PROJECT_DIR="$PWD",EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml,PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl,ENDPOINT_WAIT_S=7200 \
-#     slurm/eval_holdout.sbatch
+#   Paso 1 — git pull
+#     git pull
+#
+#   Paso 2 — Reemplazar student_small por la versión base (Qwen2.5-1.5B-Instruct).
+#     # Identifica el JOBID del server student_small actual (PORT 8200-8299).
+#     squeue -u $USER --name=vllm-role-p2 --states=R -h -o '%i %j %B %M'
+#     # Cancela ese job (sustituye <JOBID_SMALL>).
+#     scancel <JOBID_SMALL>
+#     # Limpia el .url por si el trap del job no lo borró.
+#     rm -f results/routing/endpoints/student_small.url
+#     # Relanza student_small con MODELS_CONFIG=configs/models_no_distill.yaml.
+#     sbatch --time=02:30:00 \
+#       --export=ALL,ROLE=student_small,PROJECT_DIR="$PWD",MODELS_CONFIG=configs/models_no_distill.yaml \
+#       slurm/server_role_phase2.sbatch
+#     # Espera publicación.
+#     while [ ! -s results/routing/endpoints/student_small.url ]; do sleep 5; done
+#     URL=$(cat results/routing/endpoints/student_small.url); echo "$URL"
+#     # Sanity: el server debe declarar Qwen/Qwen2.5-1.5B-Instruct.
+#     curl -s "$URL/v1/models" | python -c "import sys,json; print([m['id'] for m in json.load(sys.stdin)['data']])"
+#     # Debe imprimir: ['Qwen/Qwen2.5-1.5B-Instruct']
+#
+#   Paso 3 — Lanzar sysF_no_distill (mismos hiperparámetros que sysF, base 1.5B)
+#     sbatch --job-name="eval-sysF_no_distill" --time=02:00:00 \
+#       --export=ALL,SYSTEM_ID=sysF_no_distill,PROJECT_DIR="$PWD",EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml,PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl,ENDPOINT_WAIT_S=900 \
+#       slurm/eval_holdout.sbatch
+#
+#   Validación post-eval:
+#     # En logs del cliente, "selected_models[student_small]" debe ser
+#     # 'Qwen/Qwen2.5-1.5B-Instruct'.  Se compara contra sysF_smart_cascade
+#     # (distilled, holdout 20260525T112354Z).
 # ─────────────────────────────────────────────────────────────
 
 common:
@@ -158,6 +177,32 @@ systems:
           student_small: 0.500
           student_q3b:   0.300
           student_mid:   0.250
+          teacher:       1.000
+
+  # ── Réplica no-destilada de sysF para aislar el aporte del KD en el 1.5B.
+  # MISMOS hiperparámetros que sysF_smart_cascade (λ=1e-4, thresholds calibrados a
+  # precision 0.85, max_attempts=4, accept_if_parseable=true, parseable_min_conf=0.40).
+  # Único cambio: models_config apunta a models_no_distill.yaml, de modo que el
+  # cliente pide Qwen2.5-1.5B-Instruct en lugar del checkpoint distilled.
+  #
+  # En sysF (distilled) entran 288/600 (48%) prompts por el 1.5B y 147 (24.5%)
+  # se resuelven allí: máxima señal para medir Δacc(distill − base) del 1.5B.
+  # Se compara directamente con el sysF ya ejecutado el 20260525T112354Z
+  # (no relanzamos el distilled, ya tenemos los resultados).
+  - id: "sysF_no_distill"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    models_config: "configs/models_no_distill.yaml"
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.0001
+        max_attempts: 4
+        accept_if_parseable: true
+        parseable_min_confidence: 0.40
+        post_hoc_threshold_per_rung:
+          student_small: 0.357
+          student_q3b:   0.160
+          student_mid:   0.139
           teacher:       1.000
 
   # ── sysC: routing puro con la misma rejilla (opcional; lanza si hay tiempo)
