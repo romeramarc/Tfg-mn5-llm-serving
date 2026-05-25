@@ -2,9 +2,19 @@
 
 For each ``model_tier`` (rung) the post-hoc predictor uses, we sweep the
 acceptance threshold over its Phase B validation traces and pick the
-smallest threshold that meets a per-rung precision target (default 0.80).
-That threshold is the minimum confidence at which we are willing to stop
-the cascade at that rung without escalating.
+threshold that minimises a per-rung cost function
+
+    cost(thr) = fp_cost * FP(thr) + fn_cost * FN(thr)
+
+where FP = "accept an incorrect answer at this rung" (under-escalate),
+FN = "escalate a correct answer at this rung" (over-escalate). The default
+``fp_cost=1, fn_cost=3`` mirrors the original Phase B selection logic but
+**flipped**: the existing global threshold (0.7728) was calibrated with
+``fp_cost=3, fn_cost=1`` to be paranoid about accepting wrong answers,
+which is exactly why the cascade escalates >70% of traffic on holdout.
+
+The (still-supported) ``--criterion precision_target`` mode finds the
+smallest threshold meeting a per-rung precision target.
 
 Why this exists:
     The single global threshold (0.7728) was calibrated on the aggregated
@@ -13,17 +23,17 @@ Why this exists:
     even when they are correct. Applying the same threshold across rungs
     pushes >70% of traffic into the cascade unnecessarily.
 
-Usage::
+Usage (recommended, cost-aware)::
 
     python scripts/calibrate_per_rung_thresholds.py \
         --dataset results/predictors_model_tier/datasets/quality_post_hoc_model_tier.jsonl \
         --bundle  results/predictors_model_tier/phase_b/refined-qph-rf-20260521T141032Z/model_bundle.joblib \
-        --target-precision 0.80 \
-        --min-recall 0.05 \
-        --out configs/per_rung_thresholds.yaml
+        --criterion cost --fp-cost 1.0 --fn-cost 3.0 \
+        --out results/predictors_model_tier/phase_b/per_rung_thresholds.yaml \
+        --report-out results/predictors_model_tier/phase_b/per_rung_thresholds_report.json
 
-The output YAML can be ``include``-d or copied into the policy_overrides
-block of ``routing_eval_holdout_v2_routing_real.yaml``.
+The output YAML can be copied into the ``post_hoc_threshold_per_rung``
+block of the relevant system in ``routing_eval_holdout_v2_routing_real.yaml``.
 """
 
 from __future__ import annotations
@@ -72,60 +82,82 @@ def _score(bundle: PredictorBundle, records: List[Dict[str, Any]]) -> np.ndarray
     return predict_probability(bundle.estimator, xt)
 
 
-def _calibrate(
+def _metrics(probs: np.ndarray, labels: np.ndarray, thr: float) -> Dict[str, float]:
+    accept = probs >= thr
+    tp = int(((labels == 1) & accept).sum())
+    fp = int(((labels == 0) & accept).sum())
+    fn = int(((labels == 1) & ~accept).sum())
+    tn = int(((labels == 0) & ~accept).sum())
+    n_accept = tp + fp
+    precision = tp / max(n_accept, 1) if n_accept else 0.0
+    recall = tp / max(tp + fn, 1) if (tp + fn) else 0.0
+    return {
+        "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+        "n_accept": n_accept,
+        "fraction_accept": n_accept / max(len(labels), 1),
+        "precision": precision,
+        "recall": recall,
+    }
+
+
+def _calibrate_cost(
+    probs: np.ndarray,
+    labels: np.ndarray,
+    fp_cost: float,
+    fn_cost: float,
+) -> Dict[str, Any]:
+    """Minimise fp_cost * FP + fn_cost * FN over the probability grid."""
+    grid = np.linspace(0.0, 1.0, 1001)
+    best = None
+    best_cost = float("inf")
+    for thr in grid:
+        m = _metrics(probs, labels, float(thr))
+        cost = fp_cost * m["fp"] + fn_cost * m["fn"]
+        if cost < best_cost:
+            best_cost = cost
+            best = {
+                "threshold": float(thr),
+                "method": "cost",
+                "fp_cost": fp_cost,
+                "fn_cost": fn_cost,
+                "cost_at_threshold": float(cost),
+                **{k: (float(v) if isinstance(v, float) else int(v)) for k, v in m.items()},
+            }
+    return best or {"threshold": 0.5, "method": "cost", "cost_at_threshold": float("inf")}
+
+
+def _calibrate_precision_target(
     probs: np.ndarray,
     labels: np.ndarray,
     target_precision: float,
     min_recall: float,
 ) -> Dict[str, Any]:
-    """Return the smallest threshold meeting precision >= target with
-    recall >= min_recall. Falls back to the threshold maximising F1 if
-    no value satisfies the constraint."""
+    """Smallest threshold meeting precision >= target with recall >= min_recall."""
     grid = np.linspace(0.0, 1.0, 1001)
-    best = None
     for thr in grid:
-        accept = probs >= thr
-        n_accept = int(accept.sum())
-        if n_accept == 0:
+        m = _metrics(probs, labels, float(thr))
+        if m["n_accept"] == 0:
             continue
-        prec = float((labels[accept] == 1).mean())
-        rec = float((labels[accept] == 1).sum() / max(int((labels == 1).sum()), 1))
-        if prec >= target_precision and rec >= min_recall:
-            best = {
+        if m["precision"] >= target_precision and m["recall"] >= min_recall:
+            return {
                 "threshold": float(thr),
-                "n_accept": n_accept,
-                "fraction_accept": float(n_accept / len(labels)),
-                "precision_at_threshold": prec,
-                "recall_at_threshold": rec,
                 "method": "precision_target",
+                "target_precision": target_precision,
+                "min_recall": min_recall,
+                **{k: (float(v) if isinstance(v, float) else int(v)) for k, v in m.items()},
             }
-            break
-    if best is not None:
-        return best
-
-    f1_best = {"f1": -1.0}
+    # Fallback to best F1.
+    f1_best: Dict[str, Any] = {"f1": -1.0, "threshold": 0.5, "method": "f1_fallback"}
     for thr in grid:
-        accept = probs >= thr
-        n_accept = int(accept.sum())
-        if n_accept == 0:
+        m = _metrics(probs, labels, float(thr))
+        if m["n_accept"] == 0:
             continue
-        tp = int(((labels == 1) & accept).sum())
-        fp = int(((labels == 0) & accept).sum())
-        fn = int(((labels == 1) & ~accept).sum())
-        if tp + fp == 0 or tp + fn == 0:
-            continue
-        prec = tp / (tp + fp)
-        rec = tp / (tp + fn)
-        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+        f1 = (2 * m["precision"] * m["recall"] /
+              (m["precision"] + m["recall"])) if (m["precision"] + m["recall"]) else 0.0
         if f1 > f1_best["f1"]:
             f1_best = {
-                "threshold": float(thr),
-                "n_accept": n_accept,
-                "fraction_accept": float(n_accept / len(labels)),
-                "precision_at_threshold": prec,
-                "recall_at_threshold": rec,
-                "f1": f1,
-                "method": "f1_fallback",
+                "threshold": float(thr), "method": "f1_fallback", "f1": f1,
+                **{k: (float(v) if isinstance(v, float) else int(v)) for k, v in m.items()},
             }
     f1_best.pop("f1", None)
     return f1_best
@@ -135,6 +167,24 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True, help="Phase B post-hoc jsonl dataset")
     parser.add_argument("--bundle", required=True, help="Phase B post-hoc model bundle (.joblib)")
+    parser.add_argument(
+        "--criterion",
+        choices=["cost", "precision_target"],
+        default="cost",
+        help="Calibration criterion. Default 'cost' minimises fp_cost*FP + fn_cost*FN.",
+    )
+    parser.add_argument(
+        "--fp-cost",
+        type=float,
+        default=1.0,
+        help="Cost of accepting an incorrect answer (under-escalation). Default 1.0.",
+    )
+    parser.add_argument(
+        "--fn-cost",
+        type=float,
+        default=3.0,
+        help="Cost of escalating a correct answer (over-escalation). Default 3.0.",
+    )
     parser.add_argument("--target-precision", type=float, default=0.80)
     parser.add_argument("--min-recall", type=float, default=0.05)
     parser.add_argument(
@@ -161,6 +211,9 @@ def main() -> int:
 
     per_rung: Dict[str, float] = {}
     report: Dict[str, Any] = {
+        "criterion": args.criterion,
+        "fp_cost": args.fp_cost,
+        "fn_cost": args.fn_cost,
         "target_precision": args.target_precision,
         "min_recall": args.min_recall,
         "bundle": args.bundle,
@@ -180,7 +233,12 @@ def main() -> int:
             [int(r.get("target_correct", r.get("correct", 0)) or 0) for r in recs]
         )
         probs = _score(bundle, recs)
-        info = _calibrate(probs, labels, args.target_precision, args.min_recall)
+        if args.criterion == "cost":
+            info = _calibrate_cost(probs, labels, args.fp_cost, args.fn_cost)
+        else:
+            info = _calibrate_precision_target(
+                probs, labels, args.target_precision, args.min_recall
+            )
         per_rung[tier] = float(info["threshold"])
         info["n_samples"] = len(recs)
         info["base_rate_correct"] = float(labels.mean()) if len(labels) else 0.0
@@ -188,8 +246,9 @@ def main() -> int:
         print(
             f"[calibrate] {tier}: n={len(recs)} base_rate={info['base_rate_correct']:.3f} "
             f"-> threshold={info['threshold']:.4f} "
-            f"prec={info['precision_at_threshold']:.3f} "
-            f"rec={info['recall_at_threshold']:.3f} "
+            f"prec={info.get('precision', 0.0):.3f} "
+            f"rec={info.get('recall', 0.0):.3f} "
+            f"frac_accept={info.get('fraction_accept', 0.0):.3f} "
             f"({info['method']})"
         )
 

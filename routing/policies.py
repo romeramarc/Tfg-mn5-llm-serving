@@ -679,9 +679,11 @@ async def cascade_five_rung(
 
     * ``post_hoc_threshold_per_rung`` (dict): rung-specific acceptance threshold.
       Falls back to ``post_hoc_threshold`` (single float) when a rung is missing.
-    * ``max_attempts`` (int): cap the number of intermediate rungs probed before
-      jumping directly to the teacher. ``max_attempts=2`` means "one student
-      attempt at most, then teacher".
+    * ``max_attempts`` (int): cap the cascade to at most this many rungs from
+      ``rung_order``, in their declared order. Does **not** jump to the teacher
+      unless ``teacher`` is part of those first ``max_attempts`` entries. If
+      the cascade exhausts without an acceptance, the last attempt's response
+      is kept (``reason='cascade_exhausted'``).
     * ``accept_if_parseable`` (bool) + ``parseable_min_confidence`` (float):
       bypass the strict threshold when the rung's response already carries a
       parseable final answer (``####`` for gsm8k, ``\\boxed{...}`` otherwise)
@@ -708,13 +710,11 @@ async def cascade_five_rung(
     accept_if_parseable = bool(ctx.get("accept_if_parseable", False))
     parseable_min_conf = float(ctx.get("parseable_min_confidence", 0.40))
 
-    teacher_in_order = "teacher" in rung_order
-    student_rungs = [s for s in rung_order if s != "teacher"]
-    if max_attempts is not None and max_attempts < 1:
-        max_attempts = 1
-    if max_attempts is not None and max_attempts <= len(student_rungs):
-        capped_students = student_rungs[: max(max_attempts - 1, 0)] if teacher_in_order else student_rungs[:max_attempts]
-        rung_order = capped_students + (["teacher"] if teacher_in_order else [])
+    if max_attempts is not None:
+        if max_attempts < 1:
+            max_attempts = 1
+        if max_attempts < len(rung_order):
+            rung_order = rung_order[:max_attempts]
 
     total_latency = 0.0
     attempts: list[Dict[str, Any]] = []

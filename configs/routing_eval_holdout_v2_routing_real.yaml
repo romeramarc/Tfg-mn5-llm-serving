@@ -30,30 +30,21 @@
 # Si tienes presupuesto justo: lanzar SOLO los sysE (5 jobs) y dejar sysC para
 # después. Es donde está la decisión interesante (routing + cascada).
 #
-# BSC:
+# BSC (flujo definitivo para sysF):
 #   git pull
-#   # (Opcional) recalibrar thresholds por rung con datos Phase B reales:
 #   python scripts/calibrate_per_rung_thresholds.py \
 #     --dataset results/predictors_model_tier/datasets/quality_post_hoc_model_tier.jsonl \
 #     --bundle  results/predictors_model_tier/phase_b/refined-qph-rf-20260521T141032Z/model_bundle.joblib \
-#     --target-precision 0.80 --min-recall 0.05 \
+#     --criterion cost --fp-cost 1.0 --fn-cost 3.0 \
 #     --out results/predictors_model_tier/phase_b/per_rung_thresholds.yaml \
 #     --report-out results/predictors_model_tier/phase_b/per_rung_thresholds_report.json
-#   # luego copiar el bloque post_hoc_threshold_per_rung al policy_overrides
-#   # de sysF_* en este archivo (o usar los valores heurísticos por defecto).
-#   python scripts/preflight_eval_holdout.py --config configs/routing_eval_holdout_v2_routing_real.yaml
-#   EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml \
-#   PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl \
-#   bash slurm/launch_eval_holdout.sh all
+#   cat results/predictors_model_tier/phase_b/per_rung_thresholds.yaml
+#   # Copiar los valores al bloque post_hoc_threshold_per_rung de sysF_smart_cascade
+#   # (a continuación) y commit + push si lo haces en BSC.
 #
-# Si solo quieres los nuevos sysF_* (calibrado + ablaciones):
-#   for s in sysF_smart_cascade sysF_per_rung_only sysF_cap2_only; do
-#     SYSTEM_ID="$s" EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml \
-#     PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl \
-#     sbatch --job-name="eval-$s" --time=24:00:00 \
-#       --export=ALL,SYSTEM_ID="$s",PROJECT_DIR="$PWD",EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml,PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl,ENDPOINT_WAIT_S=7200 \
-#       slurm/eval_holdout.sbatch
-#   done
+#   sbatch --job-name="eval-sysF_smart_cascade" --time=24:00:00 \
+#     --export=ALL,SYSTEM_ID=sysF_smart_cascade,PROJECT_DIR="$PWD",EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml,PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl,ENDPOINT_WAIT_S=7200 \
+#     slurm/eval_holdout.sbatch
 # ─────────────────────────────────────────────────────────────
 
 common:
@@ -109,46 +100,36 @@ systems:
         cost_weight_lambda: 0.0
 
   # ── sysF: cascada profunda controlada (las tres palancas: threshold-por-rung
-  #          + max_attempts=2 + bypass-parseable). λ=1e-4 como punto operativo
+  #          + max_attempts + bypass-parseable). λ=1e-4 como punto operativo
   #          inicial (replica el ganador de sysE).
+  #
+  # max_attempts=4 mantiene el teacher como red de seguridad, pero NUNCA hay
+  # salto directo: la cascada recorre el rung_order en orden y se queda con la
+  # última respuesta si ningún rung supera su umbral (reason=cascade_exhausted).
+  #
+  # post_hoc_threshold_per_rung: rellenar tras correr en BSC
+  #   python scripts/calibrate_per_rung_thresholds.py \
+  #     --dataset results/predictors_model_tier/datasets/quality_post_hoc_model_tier.jsonl \
+  #     --bundle  results/predictors_model_tier/phase_b/refined-qph-rf-20260521T141032Z/model_bundle.joblib \
+  #     --criterion cost --fp-cost 1.0 --fn-cost 3.0 \
+  #     --out results/predictors_model_tier/phase_b/per_rung_thresholds.yaml \
+  #     --report-out results/predictors_model_tier/phase_b/per_rung_thresholds_report.json
   - id: "sysF_smart_cascade"
     policy: "routing_plus_cascade"
     roles: ["student_small", "student_q3b", "student_mid", "teacher"]
     policy_overrides:
       routing_plus_cascade:
         cost_weight_lambda: 0.0001
-        max_attempts: 2
+        max_attempts: 4
         accept_if_parseable: true
         parseable_min_confidence: 0.40
-        # Inicial heurístico. Se sobreescribe en SLURM tras calibrar Phase B
-        # con scripts/calibrate_per_rung_thresholds.py
+        # Sustituir por la salida de calibrate_per_rung_thresholds.py.
+        # Valores placeholder coherentes con un perfil cost-aware (fp=1, fn=3):
         post_hoc_threshold_per_rung:
           student_small: 0.50
-          student_q3b:   0.60
-          student_mid:   0.70
+          student_q3b:   0.55
+          student_mid:   0.60
           teacher:       1.00
-
-  # ── Ablación: solo threshold-por-rung (sin cap, sin parseable)
-  - id: "sysF_per_rung_only"
-    policy: "routing_plus_cascade"
-    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
-    policy_overrides:
-      routing_plus_cascade:
-        cost_weight_lambda: 0.0001
-        post_hoc_threshold_per_rung:
-          student_small: 0.50
-          student_q3b:   0.60
-          student_mid:   0.70
-          teacher:       1.00
-
-  # ── Ablación: solo cap profundidad (threshold global, sin parseable)
-  - id: "sysF_cap2_only"
-    policy: "routing_plus_cascade"
-    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
-    policy_overrides:
-      routing_plus_cascade:
-        cost_weight_lambda: 0.0001
-        max_attempts: 2
 
   # ── sysC: routing puro con la misma rejilla (opcional; lanza si hay tiempo)
   - id: "sysC_l0"

@@ -114,20 +114,62 @@ async def case_per_rung_threshold():
 
 
 async def case_max_attempts_cap():
-    print("\n== Case 2: max_attempts=2 forces teacher after one student fail ==")
-    suite = _MockSuite({"student_small": 0.1, "student_q3b": 0.9, "student_mid": 0.9})
+    print("\n== Case 2: max_attempts=2 keeps order [small, q3b] (no teacher jump) ==")
+    suite = _MockSuite({"student_small": 0.1, "student_q3b": 0.1, "student_mid": 0.9})
     P._generate_at_stage = _mock_generate_factory(
         {
-            "student_small": {"text": "garbage", "latency_ms": 100},
-            "student_q3b": {"text": "x", "latency_ms": 200},
-            "student_mid": {"text": "x", "latency_ms": 300},
-            "teacher": {"text": "teacher answer #### 42", "latency_ms": 800},
+            "student_small": {"text": "garbage1", "latency_ms": 100},
+            "student_q3b": {"text": "garbage2 #### 7", "latency_ms": 200},
+            "student_mid": {"text": "good", "latency_ms": 300},
+            "teacher": {"text": "teacher", "latency_ms": 800},
         }
     )
     ctx = _build_ctx(suite, max_attempts=2)
     dec = await cascade_five_rung(None, "p?", ctx)
     stages = [a["stage"] for a in dec.attempts]
-    assert stages == ["student_small", "teacher"], f"expected [small, teacher], got {stages}"
+    assert stages == ["student_small", "student_q3b"], f"expected [small, q3b], got {stages}"
+    assert dec.reason == "cascade_exhausted", f"expected exhausted, got {dec.reason}"
+    print(f"  OK -> {dec.reason} path={'->'.join(stages)}")
+
+
+async def case_max_attempts_with_teacher():
+    print("\n== Case 2b: max_attempts=4 with teacher at end works as before ==")
+    suite = _MockSuite({"student_small": 0.1, "student_q3b": 0.1, "student_mid": 0.1})
+    P._generate_at_stage = _mock_generate_factory(
+        {
+            "student_small": {"text": "x", "latency_ms": 100},
+            "student_q3b": {"text": "x", "latency_ms": 200},
+            "student_mid": {"text": "x", "latency_ms": 300},
+            "teacher": {"text": "teacher answer #### 42", "latency_ms": 800},
+        }
+    )
+    ctx = _build_ctx(suite, max_attempts=4)
+    dec = await cascade_five_rung(None, "p?", ctx)
+    stages = [a["stage"] for a in dec.attempts]
+    assert stages == ["student_small", "student_q3b", "student_mid", "teacher"], (
+        f"expected full path, got {stages}"
+    )
+    print(f"  OK -> {dec.reason} path={'->'.join(stages)}")
+
+
+async def case_max_attempts_3_no_teacher():
+    print("\n== Case 2c: max_attempts=3 stops at student_mid (NO teacher) ==")
+    suite = _MockSuite({"student_small": 0.1, "student_q3b": 0.1, "student_mid": 0.1})
+    P._generate_at_stage = _mock_generate_factory(
+        {
+            "student_small": {"text": "x", "latency_ms": 100},
+            "student_q3b": {"text": "x", "latency_ms": 200},
+            "student_mid": {"text": "x", "latency_ms": 300},
+            "teacher": {"text": "teacher", "latency_ms": 800},
+        }
+    )
+    ctx = _build_ctx(suite, max_attempts=3)
+    dec = await cascade_five_rung(None, "p?", ctx)
+    stages = [a["stage"] for a in dec.attempts]
+    assert stages == ["student_small", "student_q3b", "student_mid"], (
+        f"expected [small,q3b,mid] (no teacher), got {stages}"
+    )
+    assert "teacher" not in stages, "teacher must not be probed with max_attempts=3"
     print(f"  OK -> {dec.reason} path={'->'.join(stages)}")
 
 
@@ -181,6 +223,8 @@ async def case_legacy_threshold():
 async def main():
     await case_per_rung_threshold()
     await case_max_attempts_cap()
+    await case_max_attempts_with_teacher()
+    await case_max_attempts_3_no_teacher()
     await case_parseable_bypass()
     await case_legacy_threshold()
     print("\nALL OK")
