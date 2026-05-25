@@ -124,20 +124,40 @@ systems:
         accept_if_parseable: true
         parseable_min_confidence: 0.40
         # Thresholds calibrados con scripts/calibrate_per_rung_thresholds.py
-        # (--criterion precision_target --target-precision 0.85 --min-recall 0.30)
-        # sobre el dataset Phase B post-hoc (n=3000 por rung):
-        #   rung           thr     prec   rec    %aceptado
-        #   student_small  0.357   0.850  0.980  51.2%
-        #   student_q3b    0.160   0.850  1.000  61.6%
-        #   student_mid    0.139   0.852  1.000  69.7%
-        # Resultado esperado: cada rung acepta ~50-70% del tráfico con
-        # precisión >= 0.85 sobre los aceptados (similar al acc_scorable
-        # agregado de la cascada actual ~0.86), reduciendo escaladas del
-        # 72% al ~35-45% sin perder calidad.
+        # (--criterion precision_target --target-precision 0.85 --min-recall 0.30).
         post_hoc_threshold_per_rung:
           student_small: 0.357
           student_q3b:   0.160
           student_mid:   0.139
+          teacher:       1.000
+
+  # ── sysF2: igual que sysF pero con thresholds calibrados a precision 0.90
+  #          (más estrictos → más calidad esperada) y lambda más alto
+  #          (5e-5 → routing entra por rungs más caros, no satura al 1.5B).
+  #
+  # Los valores post_hoc_threshold_per_rung de abajo son PLACEHOLDERS.
+  # En BSC se recalculan con:
+  #   python scripts/calibrate_per_rung_thresholds.py \
+  #     --dataset results/predictors_model_tier/datasets/quality_post_hoc_model_tier.jsonl \
+  #     --bundle  results/predictors_model_tier/phase_b/refined-qph-rf-20260521T141032Z/model_bundle.joblib \
+  #     --criterion precision_target --target-precision 0.90 --min-recall 0.20 \
+  #     --out results/predictors_model_tier/phase_b/per_rung_thresholds_v2.yaml \
+  #     --report-out results/predictors_model_tier/phase_b/per_rung_thresholds_report_v2.json \
+  #     --apply-to-config configs/routing_eval_holdout_v2_routing_real.yaml \
+  #     --apply-to-system sysF2_smart_cascade
+  - id: "sysF2_smart_cascade"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.00005
+        max_attempts: 4
+        accept_if_parseable: true
+        parseable_min_confidence: 0.45
+        post_hoc_threshold_per_rung:
+          student_small: 0.500
+          student_q3b:   0.300
+          student_mid:   0.250
           teacher:       1.000
 
   # ── sysC: routing puro con la misma rejilla (opcional; lanza si hay tiempo)

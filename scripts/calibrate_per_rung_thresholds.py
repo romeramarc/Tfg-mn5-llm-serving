@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -47,6 +48,42 @@ from typing import Any, Dict, List
 
 import numpy as np
 import yaml
+
+
+def _apply_to_config(
+    config_path: Path,
+    system_id: str,
+    thresholds: Dict[str, float],
+) -> bool:
+    """Rewrite the ``post_hoc_threshold_per_rung`` block of *system_id* in
+    *config_path*, preserving comments and other formatting.
+
+    Returns True on success. Uses a regex-based replace because PyYAML does
+    not preserve comments/anchors on round-trip.
+    """
+    text = config_path.read_text(encoding="utf-8")
+    # Capture from the system id line up to its post_hoc_threshold_per_rung block.
+    block_re = re.compile(
+        r'(- id: "?'
+        + re.escape(system_id)
+        + r'"?[\s\S]*?post_hoc_threshold_per_rung:\n)'
+        r'((?:[ \t]+\S[^\n]*\n)+)',
+        re.MULTILINE,
+    )
+    m = block_re.search(text)
+    if not m:
+        return False
+    header, body = m.group(1), m.group(2)
+    indent_match = re.match(r'(\s+)', body)
+    indent = indent_match.group(1) if indent_match else "          "
+    new_lines = []
+    for k in ("student_tiny", "student_small", "student_q3b", "student_mid", "teacher"):
+        if k in thresholds:
+            new_lines.append(f"{indent}{k}: {float(thresholds[k]):.4f}\n")
+    new_body = "".join(new_lines)
+    new_text = text[: m.start()] + header + new_body + text[m.end():]
+    config_path.write_text(new_text, encoding="utf-8")
+    return True
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -199,6 +236,17 @@ def main() -> int:
         default=None,
         help="Optional JSON report with per-rung diagnostics",
     )
+    parser.add_argument(
+        "--apply-to-config",
+        default=None,
+        help="If set, also rewrite the post_hoc_threshold_per_rung block "
+             "of --apply-to-system in this YAML config file.",
+    )
+    parser.add_argument(
+        "--apply-to-system",
+        default=None,
+        help="System id whose post_hoc_threshold_per_rung block should be updated.",
+    )
     args = parser.parse_args()
 
     bundle = PredictorBundle(args.bundle)
@@ -265,6 +313,24 @@ def main() -> int:
         rp.parent.mkdir(parents=True, exist_ok=True)
         rp.write_text(json.dumps(report, indent=2), encoding="utf-8")
         print(f"[calibrate] wrote {rp}")
+
+    if args.apply_to_config and args.apply_to_system:
+        ok = _apply_to_config(
+            Path(args.apply_to_config), args.apply_to_system, per_rung
+        )
+        if ok:
+            print(
+                f"[calibrate] applied thresholds to system "
+                f"'{args.apply_to_system}' in {args.apply_to_config}"
+            )
+        else:
+            print(
+                f"[calibrate] WARNING: could not find system "
+                f"'{args.apply_to_system}' or its post_hoc_threshold_per_rung "
+                f"block in {args.apply_to_config}",
+                file=sys.stderr,
+            )
+            return 3
     return 0
 
 
