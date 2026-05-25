@@ -31,15 +31,20 @@ execution_plan:
   shared_prompt_pool: "results/routing_eval_holdout/prompt_pool.jsonl"
   endpoint_dir: "results/routing/endpoints"
   endpoint_wait_s: 1200
+  # Cliente debe pedir 1.5B base en student_small, no el destilado.
+  # routing/endpoints.resolve_endpoints lee este fichero para el nombre del modelo.
+  models_config: "configs/models_no_distill.yaml"
 
 systems:
   - id: "sysB_only_1p5b"
     policy: "always_student_small"
     roles: ["student_small"]
+    models_config: "configs/models_no_distill.yaml"
 
   - id: "sysE_l1e4_no_distill"
     policy: "routing_plus_cascade"
     roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    models_config: "configs/models_no_distill.yaml"
     policy_overrides:
       routing_plus_cascade:
         cost_weight_lambda: 0.0001

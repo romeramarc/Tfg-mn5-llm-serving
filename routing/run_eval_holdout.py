@@ -425,7 +425,24 @@ def run(
             require_gpu_publish=False,
             timeout_s=float(exec_cfg.get("endpoint_wait_s", 900.0)),
         )
-    endpoints = resolve_endpoints(roles, endpoint_dir=endpoint_dir)
+    models_config = str(
+        system.get("models_config")
+        or exec_cfg.get("models_config")
+        or "configs/models.yaml"
+    )
+    endpoints = resolve_endpoints(
+        roles,
+        endpoint_dir=endpoint_dir,
+        models_config=models_config,
+    )
+    logger.info(
+        "Resolved endpoints",
+        extra={
+            "models_config": models_config,
+            "roles": roles,
+            "selected_models": {r: endpoints[r]["model"] for r in roles},
+        },
+    )
 
     workload = cfg.get("workload") or {}
     policy_params = cfg.get("policy_params") or {}
