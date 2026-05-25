@@ -123,13 +123,22 @@ systems:
         max_attempts: 4
         accept_if_parseable: true
         parseable_min_confidence: 0.40
-        # Sustituir por la salida de calibrate_per_rung_thresholds.py.
-        # Valores placeholder coherentes con un perfil cost-aware (fp=1, fn=3):
+        # Thresholds calibrados con scripts/calibrate_per_rung_thresholds.py
+        # (--criterion precision_target --target-precision 0.85 --min-recall 0.30)
+        # sobre el dataset Phase B post-hoc (n=3000 por rung):
+        #   rung           thr     prec   rec    %aceptado
+        #   student_small  0.357   0.850  0.980  51.2%
+        #   student_q3b    0.160   0.850  1.000  61.6%
+        #   student_mid    0.139   0.852  1.000  69.7%
+        # Resultado esperado: cada rung acepta ~50-70% del tráfico con
+        # precisión >= 0.85 sobre los aceptados (similar al acc_scorable
+        # agregado de la cascada actual ~0.86), reduciendo escaladas del
+        # 72% al ~35-45% sin perder calidad.
         post_hoc_threshold_per_rung:
-          student_small: 0.50
-          student_q3b:   0.55
-          student_mid:   0.60
-          teacher:       1.00
+          student_small: 0.357
+          student_q3b:   0.160
+          student_mid:   0.139
+          teacher:       1.000
 
   # ── sysC: routing puro con la misma rejilla (opcional; lanza si hay tiempo)
   - id: "sysC_l0"
