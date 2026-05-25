@@ -131,6 +131,7 @@ submit_clients() {
       sysC_l*)               tlimit="24:00:00" ;;
       sysD_cascade4)         tlimit="24:00:00" ;;
       sysE_l*|sysE_floor*)   tlimit="24:00:00" ;;
+      sysF_*)                tlimit="24:00:00" ;;
       *)                     tlimit="14:00:00" ;;
     esac
     jid=$(sbatch --parsable \

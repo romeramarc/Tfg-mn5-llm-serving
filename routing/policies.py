@@ -640,12 +640,53 @@ async def _generate_at_stage(
 
 # ── Policy: 5-rung cascade (post-hoc predictor) ───────────
 
+def _is_parseable_response(text: str, benchmark: str) -> bool:
+    """Lightweight check: does the rung's response carry a parseable final answer?
+
+    Used by the ``accept_if_parseable`` shortcut to avoid escalating when the
+    intermediate rung already produced an answer in the expected format and the
+    post-hoc predictor is borderline-positive.
+    """
+    if not text:
+        return False
+    bm = (benchmark or "").lower()
+    if "gsm8k" in bm:
+        return "####" in text
+    return ("\\boxed{" in text) or ("boxed{" in text)
+
+
+def _threshold_for_stage(
+    stage: str,
+    per_rung: Optional[Dict[str, float]],
+    fallback: float,
+) -> float:
+    """Resolve the post-hoc threshold to apply at this cascade stage."""
+    if per_rung:
+        val = per_rung.get(stage)
+        if val is not None:
+            return float(val)
+    return float(fallback)
+
+
 async def cascade_five_rung(
     client: httpx.AsyncClient,
     prompt: str,
     ctx: Dict[str, Any],
 ) -> RoutingDecision:
-    """Start at the smallest rung; escalate while post-hoc quality is below threshold."""
+    """Start at the smallest rung; escalate while post-hoc quality is below threshold.
+
+    Three optional knobs allow shrinking cascade depth without hurting quality:
+
+    * ``post_hoc_threshold_per_rung`` (dict): rung-specific acceptance threshold.
+      Falls back to ``post_hoc_threshold`` (single float) when a rung is missing.
+    * ``max_attempts`` (int): cap the number of intermediate rungs probed before
+      jumping directly to the teacher. ``max_attempts=2`` means "one student
+      attempt at most, then teacher".
+    * ``accept_if_parseable`` (bool) + ``parseable_min_confidence`` (float):
+      bypass the strict threshold when the rung's response already carries a
+      parseable final answer (``####`` for gsm8k, ``\\boxed{...}`` otherwise)
+      and the post-hoc probability clears a softer floor.
+    """
     from bench.run_quality_capture import _uncertainty_from_logprobs
     from routing.predictor_runtime import build_trace
 
@@ -658,6 +699,22 @@ async def cascade_five_rung(
         "student_tiny", "student_small", "student_q3b", "student_mid", "teacher",
     ])
     post_hoc_threshold = float(ctx.get("post_hoc_threshold", 0.716))
+    per_rung_thresholds: Optional[Dict[str, float]] = ctx.get("post_hoc_threshold_per_rung")
+    max_attempts = ctx.get("max_attempts")
+    try:
+        max_attempts = int(max_attempts) if max_attempts is not None else None
+    except (TypeError, ValueError):
+        max_attempts = None
+    accept_if_parseable = bool(ctx.get("accept_if_parseable", False))
+    parseable_min_conf = float(ctx.get("parseable_min_confidence", 0.40))
+
+    teacher_in_order = "teacher" in rung_order
+    student_rungs = [s for s in rung_order if s != "teacher"]
+    if max_attempts is not None and max_attempts < 1:
+        max_attempts = 1
+    if max_attempts is not None and max_attempts <= len(student_rungs):
+        capped_students = student_rungs[: max(max_attempts - 1, 0)] if teacher_in_order else student_rungs[:max_attempts]
+        rung_order = capped_students + (["teacher"] if teacher_in_order else [])
 
     total_latency = 0.0
     attempts: list[Dict[str, Any]] = []
@@ -718,9 +775,16 @@ async def cascade_five_rung(
         )
         prob = suite.post_hoc_probability(trace)
         last_conf = prob
-        if prob >= post_hoc_threshold:
+        stage_threshold = _threshold_for_stage(stage, per_rung_thresholds, post_hoc_threshold)
+        accept = prob >= stage_threshold
+        accept_reason = "accepted_post_hoc"
+        if not accept and accept_if_parseable and prob >= parseable_min_conf:
+            if _is_parseable_response(text, benchmark):
+                accept = True
+                accept_reason = "accepted_parseable_bypass"
+        if accept:
             attempts.append(_build_attempt(
-                stage, ep, data, "accepted_post_hoc", prob, post_hoc_threshold,
+                stage, ep, data, accept_reason, prob, stage_threshold,
             ))
             return RoutingDecision(
                 request_id=request_id,
@@ -728,7 +792,7 @@ async def cascade_five_rung(
                 latency_ms=total_latency,
                 response_text=text,
                 confidence=prob,
-                reason="accepted_post_hoc",
+                reason=accept_reason,
                 metadata={
                     "route_path": "->".join(a["stage"] for a in attempts),
                     "post_hoc_probability": prob,
@@ -737,7 +801,7 @@ async def cascade_five_rung(
             )
 
         attempts.append(_build_attempt(
-            stage, ep, data, "escalate_post_hoc", prob, post_hoc_threshold,
+            stage, ep, data, "escalate_post_hoc", prob, stage_threshold,
         ))
 
     return RoutingDecision(
