@@ -234,6 +234,29 @@ systems:
           student_mid:   0.250
           teacher:       1.000
 
+  # ── sysG_lite_open: identico a sysG_lite, pero el router SI puede elegir al
+  # teacher como entry_rung. La version restringida (sysG_lite) saca al teacher
+  # del conjunto de candidatos ex-ante; eso era un sesgo metodologico porque
+  # sysC (routing puro) si lo permite, asi que la comparacion era desigual.
+  # Esta variante elimina el sesgo: el router decide ex-ante sobre los 4 rungs
+  # y la cascada sigue limitada a max_attempts=2. Si el router elige teacher,
+  # la peticion se resuelve en un unico intento (no hay rung por encima).
+  - id: "sysG_lite_open"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.00005
+        max_attempts: 2
+        accept_if_parseable: true
+        parseable_min_confidence: 0.45
+        routing_candidates: ["student_small", "student_q3b", "student_mid", "teacher"]
+        post_hoc_threshold_per_rung:
+          student_small: 0.500
+          student_q3b:   0.300
+          student_mid:   0.250
+          teacher:       1.000
+
   # ── sysG_mid: variante intermedia, max_attempts=3 (corta antes del teacher).
   # Mantiene la cascada hasta el 7B pero nunca escala al 14B. Esperado:
   # ~346 aciertos, coste/p95 entre sysG_lite y sysF2.
