@@ -205,6 +205,53 @@ systems:
           student_mid:   0.139
           teacher:       1.000
 
+  # ── sysG_lite: RouteCascade "lite" — el experimento clave de cierre.
+  #
+  # La auditoria de sysF2 sobre los 600 prompts del holdout revela que las
+  # cascadas profundas (3 y 4 saltos) son el 22% del trafico pero solo
+  # recuperan 18 aciertos absolutos (~3% del total). Pagamos el 7B y el 14B
+  # en 132 prompts para resolver 18; eso dispara el coste agregado a ~5 PFLOPs
+  # y el p95 a ~24 s. La cascada profunda confunde "threshold no superado" con
+  # "el problema se va a resolver con mas capacidad", cuando en muchos casos
+  # el problema esta fuera del alcance del sistema.
+  #
+  # Hipotesis: limitando max_attempts=2 conservamos los 305 aciertos de 1
+  # intento + 29 de 2 intentos = 334 aciertos (vs 352 de sysF2, 323 de
+  # sysC l5e5), eliminando casi todas las llamadas al 7B y 14B. El coste y el
+  # p95 deberian acercarse a sysC manteniendo +11 aciertos absolutos.
+  - id: "sysG_lite"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.00005
+        max_attempts: 2
+        accept_if_parseable: true
+        parseable_min_confidence: 0.45
+        post_hoc_threshold_per_rung:
+          student_small: 0.500
+          student_q3b:   0.300
+          student_mid:   0.250
+          teacher:       1.000
+
+  # ── sysG_mid: variante intermedia, max_attempts=3 (corta antes del teacher).
+  # Mantiene la cascada hasta el 7B pero nunca escala al 14B. Esperado:
+  # ~346 aciertos, coste/p95 entre sysG_lite y sysF2.
+  - id: "sysG_mid"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.00005
+        max_attempts: 3
+        accept_if_parseable: true
+        parseable_min_confidence: 0.45
+        post_hoc_threshold_per_rung:
+          student_small: 0.500
+          student_q3b:   0.300
+          student_mid:   0.250
+          teacher:       1.000
+
   # ── sysC: routing puro con la misma rejilla (opcional; lanza si hay tiempo)
   - id: "sysC_l0"
     policy: "routing_predictive"
