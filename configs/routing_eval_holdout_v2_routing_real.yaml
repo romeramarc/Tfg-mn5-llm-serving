@@ -257,6 +257,51 @@ systems:
           student_mid:   0.250
           teacher:       1.000
 
+  # ── sysG_lite_open_l0 / _l5e4: misma calibración lite (umbrales por rung,
+  # max_attempts=2, teacher en candidatos) pero extremos del router ex-ante:
+  #   λ=0     → U = Q̂ (calidad pura; compara con sysG_lite_open @ 5e-5)
+  #   λ=5e-4  → máximo sesgo servicio en el rango realista (~95% entry 1.5B)
+  #
+  # BSC (solo estos dos jobs; ver docs/run_sysG_lite_open_lambda_extremes.md):
+  #   for sid in sysG_lite_open_l0 sysG_lite_open_l5e4; do
+  #     sbatch --job-name="eval-${sid}" --time=14:00:00 \
+  #       --export=ALL,SYSTEM_ID=${sid},PROJECT_DIR="$PWD",\
+  # EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml,\
+  # PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl,ENDPOINT_WAIT_S=900 \
+  #       slurm/eval_holdout.sbatch
+  #   done
+  - id: "sysG_lite_open_l0"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.0
+        max_attempts: 2
+        accept_if_parseable: true
+        parseable_min_confidence: 0.45
+        routing_candidates: ["student_small", "student_q3b", "student_mid", "teacher"]
+        post_hoc_threshold_per_rung:
+          student_small: 0.500
+          student_q3b:   0.300
+          student_mid:   0.250
+          teacher:       1.000
+
+  - id: "sysG_lite_open_l5e4"
+    policy: "routing_plus_cascade"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_plus_cascade:
+        cost_weight_lambda: 0.0005
+        max_attempts: 2
+        accept_if_parseable: true
+        parseable_min_confidence: 0.45
+        routing_candidates: ["student_small", "student_q3b", "student_mid", "teacher"]
+        post_hoc_threshold_per_rung:
+          student_small: 0.500
+          student_q3b:   0.300
+          student_mid:   0.250
+          teacher:       1.000
+
   # ── sysG_mid: variante intermedia, max_attempts=3 (corta antes del teacher).
   # Mantiene la cascada hasta el 7B pero nunca escala al 14B. Esperado:
   # ~346 aciertos, coste/p95 entre sysG_lite y sysF2.
@@ -274,6 +319,30 @@ systems:
           student_q3b:   0.300
           student_mid:   0.250
           teacher:       1.000
+
+  # ── sysC_quality_only: router clásico solo por calidad (baseline de referencia).
+  #
+  # Elige el rung con mayor Q̂ ex-ante, sin penalizar coste de servicio.
+  # Candidatos = escalera completa (1.5B KD, 3B, 7B, 14B teacher). Una sola inferencia,
+  # sin cascada. Sirve para comparar de forma limpia contra sysC λ=1e-4 (trade-off)
+  # y contra RouteCascade lite (routing + corrección post-hoc).
+  #
+  # Nota: sysC_l0 (λ=0 con max_utility) es casi equivalente pero en empates favorece
+  # el rung más barato en el orden de la escalera; max_quality favorece mayor capacidad.
+  #
+  # BSC (proceso completo: docs/run_sysC_quality_only.md):
+  #   sbatch --job-name="eval-sysC-quality-only" --time=02:00:00 \
+  #     --export=ALL,SYSTEM_ID=sysC_quality_only,PROJECT_DIR="$PWD",\
+  # EVAL_CONFIG=configs/routing_eval_holdout_v2_routing_real.yaml,\
+  # PROMPT_POOL=results/routing_eval_holdout/prompt_pool.jsonl,ENDPOINT_WAIT_S=900 \
+  #     slurm/eval_holdout.sbatch
+  - id: "sysC_quality_only"
+    policy: "routing_predictive"
+    roles: ["student_small", "student_q3b", "student_mid", "teacher"]
+    policy_overrides:
+      routing_predictive:
+        routing_selection: max_quality
+        candidate_rungs: ["student_small", "student_q3b", "student_mid", "teacher"]
 
   # ── sysC: routing puro con la misma rejilla (opcional; lanza si hay tiempo)
   - id: "sysC_l0"
@@ -384,6 +453,7 @@ policy_params:
     min_quality_floor: 0.55
     candidate_rungs: ["student_small", "student_q3b", "student_mid", "teacher"]
     cost_weight_lambda: 0.0001
+    # max_quality: routing_selection max_quality (sin usar cost_weight_lambda)
   cascade_five_rung:
     rung_order: ["student_small", "student_q3b", "student_mid", "teacher"]
     post_hoc_threshold: 0.7727837620033459
