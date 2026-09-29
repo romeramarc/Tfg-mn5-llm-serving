@@ -6,7 +6,16 @@ This repository contains the experimental framework developed for the Bachelor T
 
 The framework is organised into four self-contained but interoperable layers — serving, benchmarking, distillation, and routing — each driven entirely by YAML configuration files and producing timestamped, structured experiment artefacts. Every decision in this repository favours reproducibility, modularity, and transparency over convenience.
 
-> **Phase-1 (current):** Teacher serving + efficiency benchmarks + quality evaluation (GSM8K, MATH, RouterBench).  Knowledge distillation training and student evaluation are planned for Phase-2.
+> **Thesis completed in June 2026 · FIB–UPC.** This is academic experiment code for efficient LLM inference on MareNostrum 5, not a claim of production ML ownership. The Phase-1 and Phase-2 labels below describe the original development milestones.
+
+### What this project demonstrates
+
+- Data preparation and quality filtering for teacher–student fine-tuning with PyTorch, Hugging Face Transformers and LoRA/PEFT.
+- Experimental model serving with vLLM, GPU execution and SLURM scheduling on MareNostrum 5.
+- Model selection, predictive routing and cascades, with reproducible quality and serving-efficiency evaluation.
+- YAML-driven configurations and recorded experiment artefacts for inspecting methods and failures.
+
+The completed thesis is the evidence for the research work. Public repository contents and individual run instructions should be checked when reproducing a particular experiment; development-stage labels do not mean the thesis is still unfinished.
 
 ## 2. Research Objective
 
